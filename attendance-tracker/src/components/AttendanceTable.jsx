@@ -7,13 +7,13 @@ export default function AttendanceTable({ members, showCheckOut = false, compact
 
   return (
     <div className={compact ? 'table-scroll-sm' : 'table-scroll'}>
-      <table className="data-table">
+      <table className="data-table attendance-table">
         <thead>
           <tr>
             <th>Name</th>
             <th>Role</th>
-            <th>{showCheckOut ? 'Check Out' : 'Check In'}</th>
-            <th></th>
+            <th>{showCheckOut ? 'Check Out Time' : 'Check In Time'}</th>
+            <th aria-label="Status"></th>
           </tr>
         </thead>
         <tbody>
@@ -25,7 +25,7 @@ export default function AttendanceTable({ members, showCheckOut = false, compact
                   <div className="member-info">
                     <span className="member-name">{member.name}</span>
                     <span className="member-meta">
-                      {member.grade} • CAPID {member.capid}
+                      {member.grade} <span aria-hidden="true">&bull;</span> CAPID: {member.capid}
                     </span>
                   </div>
                 </div>
@@ -39,7 +39,7 @@ export default function AttendanceTable({ members, showCheckOut = false, compact
                   {member.role}
                 </span>
               </td>
-              <td className="time-cell">
+              <td className={`time-cell ${showCheckOut ? 'out' : 'in'}`}>
                 {formatTime(showCheckOut ? member.checkOutTime : member.checkInTime)}
               </td>
               <td>

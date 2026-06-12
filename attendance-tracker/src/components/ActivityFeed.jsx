@@ -2,12 +2,12 @@ import { Link } from 'react-router-dom';
 import { formatTime } from '../data/mockData';
 
 const ICON_MAP = {
-  'check-in': '✓',
-  'check-out': '✗',
-  'guest-in': '★',
-  'guest-out': '★',
-  'force-in': '⚡',
-  'force-out': '⚡',
+  'check-in': '+',
+  'check-out': '-',
+  'guest-in': 'G',
+  'guest-out': 'G',
+  'force-in': '!',
+  'force-out': '!',
 };
 
 export default function ActivityFeed({ activities, limit, showFooter = false }) {
@@ -23,7 +23,7 @@ export default function ActivityFeed({ activities, limit, showFooter = false }) 
         {items.map((item) => (
           <li key={item.id} className="activity-item">
             <div className={`activity-icon ${item.type}`}>
-              {ICON_MAP[item.type] || '•'}
+              {ICON_MAP[item.type] || '-'}
             </div>
             <div className="activity-text">
               <div className="activity-message">{item.message}</div>
@@ -35,7 +35,7 @@ export default function ActivityFeed({ activities, limit, showFooter = false }) 
       {showFooter && (
         <div className="panel-footer">
           <Link to="/attendance" className="panel-footer-link">
-            View All Activity →
+            View All Activity <span aria-hidden="true">&rarr;</span>
           </Link>
         </div>
       )}

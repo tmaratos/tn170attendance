@@ -22,7 +22,7 @@ export default function PinPad({ pin, onDigit, onBackspace, onClear, maxLength =
             className={`pin-key ${key === 'clear' || key === 'back' ? 'action' : ''}`}
             onClick={() => handleKey(key)}
           >
-            {key === 'back' ? '⌫' : key === 'clear' ? 'CLR' : key}
+            {key === 'back' ? 'DEL' : key === 'clear' ? 'CLR' : key}
           </button>
         ))}
       </div>

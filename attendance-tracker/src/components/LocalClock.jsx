@@ -5,7 +5,7 @@ export default function LocalClock({ showSeconds = false }) {
 
   return (
     <span>
-      {showSeconds ? `${dateStr} • ${timeStr}` : `${shortDateStr} • ${shortTimeStr}`}
+      {showSeconds ? `${dateStr} - ${timeStr}` : `${shortDateStr} - ${shortTimeStr}`}
     </span>
   );
 }

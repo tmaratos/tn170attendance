@@ -14,7 +14,12 @@ export default function SearchMember({
   return (
     <div>
       <div className="search-box">
-        <span className="search-icon">🔍</span>
+        <span className="search-icon" aria-hidden="true">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" />
+          </svg>
+        </span>
         <input
           type="text"
           className="search-input"
@@ -45,7 +50,7 @@ export default function SearchMember({
 
       {showScanCard && (
         <button type="button" className="scan-card-btn">
-          <span>▮▮</span> SCAN CARD
+          <span aria-hidden="true">|||</span> SCAN CARD
         </button>
       )}
 
@@ -64,10 +69,10 @@ export default function SearchMember({
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="member-result-name">{member.name}</div>
                 <div className="member-result-meta">
-                  {member.grade} • CAPID {member.capid}
+                  {member.grade} <span aria-hidden="true">&bull;</span> CAPID: {member.capid}
                 </div>
               </div>
-              {selectedId === member.id && <span>✓</span>}
+              {selectedId === member.id && <span aria-hidden="true">OK</span>}
             </div>
           ))}
         </div>

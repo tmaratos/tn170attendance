@@ -7,7 +7,7 @@ export default function Header({ title, subtitle }) {
     <header className="dashboard-header">
       <h1 className="dashboard-welcome">{title || 'Welcome!'}</h1>
       <p className="dashboard-datetime">
-        {subtitle || `${shortDateStr} • ${shortTimeStr}`}
+        {subtitle || `${shortDateStr} - ${shortTimeStr}`}
       </p>
     </header>
   );

@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import Header from '../components/Header';
 import StatCard from '../components/StatCard';
@@ -9,6 +8,29 @@ import CheckInWizard from '../components/CheckInWizard';
 import LocalClock from '../components/LocalClock';
 import { isMeetingInProgress, formatMeetingTime } from '../data/mockData';
 import { useLocalTime } from '../hooks/useLocalTime';
+
+function ActionIcon({ type }) {
+  const common = {
+    width: 23,
+    height: 23,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': true,
+  };
+
+  const icons = {
+    in: <><path d="M3 12h11" /><path d="m11 8 4 4-4 4" /><path d="M20 4v16" /></>,
+    out: <><path d="M21 12H10" /><path d="m13 8-4 4 4 4" /><path d="M4 4v16" /></>,
+    list: <><path d="M8 6h13" /><path d="M8 12h13" /><path d="M8 18h13" /><path d="M3 6h.01" /><path d="M3 12h.01" /><path d="M3 18h.01" /></>,
+    print: <><path d="M6 9V3h12v6" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><path d="M6 14h12v7H6z" /></>,
+  };
+
+  return <svg {...common}>{icons[type]}</svg>;
+}
 
 export default function Dashboard({ attendance }) {
   const {
@@ -27,7 +49,6 @@ export default function Dashboard({ attendance }) {
     createMemberPin,
   } = attendance;
   const stats = getStats();
-  const [wizardMode, setWizardMode] = useState('check-in');
   const { shortDateStr } = useLocalTime();
 
   const checkedInMembers = members.filter((m) => m.status === 'checked-in');
@@ -73,18 +94,22 @@ export default function Dashboard({ attendance }) {
           label="Tonight's Meeting"
           variant="meeting-card"
         >
-          <div className="meeting-date">{shortDateStr}</div>
-          <div className="meeting-time">
-            {formatMeetingTime(settings.meetingStart)} – {formatMeetingTime(settings.meetingEnd)}
+          <div className="meeting-card-content">
+            <div className="meeting-date">{shortDateStr}</div>
+            <div className="meeting-row">
+              <div className="meeting-time">
+                {formatMeetingTime(settings.meetingStart)} - {formatMeetingTime(settings.meetingEnd)}
+              </div>
+              <span className={`badge ${meetingActive ? 'badge-green' : 'badge-blue'}`}>
+                {meetingActive ? 'IN PROGRESS' : 'SCHEDULED'}
+              </span>
+            </div>
           </div>
-          <span className={`badge ${meetingActive ? 'badge-green' : 'badge-blue'}`} style={{ marginTop: 8, display: 'inline-block' }}>
-            {meetingActive ? 'IN PROGRESS' : 'SCHEDULED'}
-          </span>
         </StatCard>
       </div>
 
       <div className="dashboard-panels">
-        <div className="panel">
+        <div className="panel checked-in-panel">
           <div className="panel-header panel-header-blue">
             <h3 className="panel-title panel-title-white">
               Checked In ({checkedInMembers.length})
@@ -95,12 +120,12 @@ export default function Dashboard({ attendance }) {
           </div>
           <div className="panel-footer">
             <Link to="/attendance?filter=checked-in" className="panel-footer-link">
-              View All Checked In →
+              View All Checked In <span aria-hidden="true">&rarr;</span>
             </Link>
           </div>
         </div>
 
-        <div className="panel">
+        <div className="panel checked-out-panel">
           <div className="panel-header panel-header-red">
             <h3 className="panel-title panel-title-white">
               Checked Out ({checkedOutMembers.length})
@@ -111,13 +136,13 @@ export default function Dashboard({ attendance }) {
           </div>
           <div className="panel-footer">
             <Link to="/attendance?filter=checked-out" className="panel-footer-link">
-              View All Checked Out →
+              View All Checked Out <span aria-hidden="true">&rarr;</span>
             </Link>
           </div>
         </div>
 
         <div className="dashboard-col-stack">
-          <div className="panel">
+          <div className="panel guests-panel">
             <div className="panel-header panel-header-gold">
               <h3 className="panel-title">
                 Guests Present ({presentGuests.length})
@@ -128,12 +153,12 @@ export default function Dashboard({ attendance }) {
             </div>
             <div className="panel-footer">
               <Link to="/guests" className="panel-footer-link">
-                View All Guests →
+                View All Guests <span aria-hidden="true">&rarr;</span>
               </Link>
             </div>
           </div>
 
-          <div className="panel">
+          <div className="panel activity-panel">
             <div className="panel-header panel-header-dark">
               <h3 className="panel-title panel-title-white">Recent Activity</h3>
             </div>
@@ -146,30 +171,13 @@ export default function Dashboard({ attendance }) {
 
       <div className="dashboard-bottom">
         <div className="dashboard-wizard-wrap">
-          <div className="wizard-mode-toggle no-print">
-            <button
-              type="button"
-              className={`btn ${wizardMode === 'check-in' ? 'btn-green' : 'btn-outline'}`}
-              onClick={() => setWizardMode('check-in')}
-            >
-              Check In
-            </button>
-            <button
-              type="button"
-              className={`btn ${wizardMode === 'check-out' ? 'btn-red' : 'btn-outline'}`}
-              onClick={() => setWizardMode('check-out')}
-            >
-              Check Out
-            </button>
-          </div>
           <CheckInWizard
-            key={wizardMode}
             members={members}
             searchMembers={searchMembers}
             verifyPin={verifyPin}
             onCheckIn={checkInMember}
             onCheckOut={checkOutMember}
-            mode={wizardMode}
+            mode="check-in"
             compact
             isFirebase={isFirebase}
             memberHasPin={memberHasPin}
@@ -181,16 +189,20 @@ export default function Dashboard({ attendance }) {
         <div className="quick-actions no-print">
           <h3 className="quick-actions-title">Quick Actions</h3>
           <Link to="/admin?action=check-in" className="btn btn-green">
-            Force Check In
+            <ActionIcon type="in" />
+            <span><strong>Force Check In</strong><small>Check in a member</small></span>
           </Link>
           <Link to="/admin?action=check-out" className="btn btn-red">
-            Force Check Out
+            <ActionIcon type="out" />
+            <span><strong>Force Check Out</strong><small>Check out a member</small></span>
           </Link>
           <Link to="/attendance" className="btn btn-blue">
-            View Full List
+            <ActionIcon type="list" />
+            <span><strong>View Full List</strong><small>All members and guests</small></span>
           </Link>
           <button type="button" className="btn btn-gray" onClick={handlePrint}>
-            Print Sign In Sheet
+            <ActionIcon type="print" />
+            <span><strong>Print Sign In Sheet</strong><small>Print attendance sheet</small></span>
           </button>
         </div>
       </div>
