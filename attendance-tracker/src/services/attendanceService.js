@@ -66,33 +66,25 @@ export function subscribeActivityLog(meetingId, callback, maxItems = 50) {
   const db = getDb();
   if (!db) return () => {};
 
-  let q;
-  if (meetingId) {
-    q = query(
-      collection(db, 'activityLog'),
-      where('meetingId', '==', meetingId),
-      orderBy('timestamp', 'desc'),
-      limit(maxItems)
-    );
-  } else {
-    q = query(
-      collection(db, 'activityLog'),
-      orderBy('timestamp', 'desc'),
-      limit(maxItems)
-    );
-  }
+  const q = query(
+    collection(db, 'activityLog'),
+    orderBy('timestamp', 'desc'),
+    limit(maxItems)
+  );
 
   return onSnapshot(q, (snap) => {
-    const items = snap.docs.map((d) => {
-      const data = d.data();
-      return {
-        id: d.id,
-        type: mapActivityType(data.type),
-        message: buildActivityMessage(data),
-        timestamp: timestampToIso(data.timestamp),
-        rawType: data.type,
-      };
-    });
+    const items = snap.docs
+      .filter((d) => !meetingId || d.data().meetingId === meetingId)
+      .map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          type: mapActivityType(data.type),
+          message: buildActivityMessage(data),
+          timestamp: timestampToIso(data.timestamp),
+          rawType: data.type,
+        };
+      });
     callback(items);
   }, () => {
     callback([]);
@@ -190,10 +182,18 @@ export async function forceCheckOut(actorCapid, actorPin, targetCapid, notes) {
   return result.data;
 }
 
+function isCheckedIn(status) {
+  return status === 'checked_in' || status === 'checked-in';
+}
+
+function isCheckedOut(status) {
+  return status === 'checked_out' || status === 'checked-out';
+}
+
 export function getStats(members, guests) {
-  const checkedIn = members.filter((m) => m.status === 'checked_in').length;
-  const checkedOut = members.filter((m) => m.status === 'checked_out').length;
-  const guestsPresent = guests.filter((g) => g.status === 'checked_in').length;
+  const checkedIn = members.filter((m) => isCheckedIn(m.status)).length;
+  const checkedOut = members.filter((m) => isCheckedOut(m.status)).length;
+  const guestsPresent = guests.filter((g) => isCheckedIn(g.status)).length;
   const totalPresent = checkedIn + guestsPresent;
   const totalMembers = members.length;
   return { checkedIn, checkedOut, guestsPresent, totalPresent, totalMembers };

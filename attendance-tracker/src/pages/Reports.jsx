@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { formatTime, formatDuration } from '../data/mockData';
+import { exportAndDownload } from '../services/reportService';
 
 function exportCSV(members, guests) {
   const headers = ['Name', 'Grade', 'CAPID', 'Role', 'Status', 'Check-In', 'Check-Out', 'Duration'];
@@ -8,7 +9,7 @@ function exportCSV(members, guests) {
     m.grade,
     m.capid,
     m.role,
-    m.status === 'checked-in' ? 'Checked In' : 'Checked Out',
+    m.status === 'checked-in' ? 'Checked In' : m.status === 'checked-out' ? 'Checked Out' : 'Not Present',
     formatTime(m.checkInTime),
     formatTime(m.checkOutTime),
     formatDuration(m.checkInTime, m.checkOutTime),
@@ -36,8 +37,12 @@ function exportCSV(members, guests) {
 }
 
 export default function Reports({ attendance }) {
-  const { members, guests, getStats } = attendance;
+  const { members, guests, getStats, isFirebase, meeting, seniorSession } = attendance;
   const stats = getStats();
+  const [exportCapid, setExportCapid] = useState(seniorSession?.capid || '');
+  const [exportPin, setExportPin] = useState('');
+  const [exportError, setExportError] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   const cadetStats = useMemo(() => {
     const cadets = members.filter((m) => m.role === 'Cadet');
@@ -50,6 +55,27 @@ export default function Reports({ attendance }) {
     const present = seniors.filter((m) => m.status === 'checked-in').length;
     return { total: seniors.length, present };
   }, [members]);
+
+  const handleFirebaseExport = async (format) => {
+    if (!exportCapid.trim() || exportPin.length !== 4) {
+      setExportError('Enter your CAPID and 4-digit PIN to export.');
+      return;
+    }
+    setExporting(true);
+    setExportError('');
+    try {
+      await exportAndDownload({
+        actorCapid: exportCapid.trim(),
+        actorPin: exportPin,
+        meetingId: meeting?.id,
+        format,
+      });
+    } catch (err) {
+      setExportError(err.message || 'Export failed.');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   return (
     <div>
@@ -93,23 +119,73 @@ export default function Reports({ attendance }) {
       <div className="panel">
         <h3 className="panel-title" style={{ marginBottom: 16 }}>Export & Reports</h3>
 
+        {isFirebase && (
+          <div className="report-card" style={{ marginBottom: 16 }}>
+            <div className="report-card-title">Senior Member Authorization</div>
+            <div className="report-card-desc">
+              Enter your CAPID and PIN to export tonight&apos;s attendance report.
+            </div>
+            <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="CAPID"
+                value={exportCapid}
+                onChange={(e) => setExportCapid(e.target.value.replace(/\D/g, ''))}
+                style={{ maxWidth: 160 }}
+              />
+              <input
+                type="password"
+                className="form-input"
+                placeholder="4-digit PIN"
+                maxLength={4}
+                value={exportPin}
+                onChange={(e) => setExportPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                style={{ maxWidth: 160 }}
+              />
+            </div>
+            {exportError && <p style={{ color: 'var(--red)', marginBottom: 12 }}>{exportError}</p>}
+          </div>
+        )}
+
         <div className="report-card">
           <div className="report-card-title">Full Attendance CSV</div>
           <div className="report-card-desc">
             Export all member and guest attendance records for tonight&apos;s meeting.
           </div>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <button className="btn btn-blue" onClick={() => exportCSV(members, guests)}>
-              Export CSV
-            </button>
-            <button
-              className="btn btn-gray"
-              onClick={() => window.alert('PDF export will be available when the backend is connected. Use Export CSV for now.')}
-            >
-              Download PDF
-            </button>
-          </div>
+          <button
+            className="btn btn-blue"
+            disabled={exporting}
+            onClick={() =>
+              isFirebase
+                ? handleFirebaseExport('csv')
+                : exportCSV(members, guests)
+            }
+          >
+            {exporting ? 'Exporting...' : 'Download CSV'}
+          </button>
         </div>
+
+        {isFirebase && (
+          <div className="report-card">
+            <div className="report-card-title">PDF / DOCX / Excel (Scaffold)</div>
+            <div className="report-card-desc">
+              Additional export formats return structured JSON until full document generation is added.
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {['pdf', 'docx', 'xlsx'].map((fmt) => (
+                <button
+                  key={fmt}
+                  className="btn btn-outline"
+                  disabled={exporting}
+                  onClick={() => handleFirebaseExport(fmt)}
+                >
+                  {fmt.toUpperCase()}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="report-card">
           <div className="report-card-title">Checked-In Roster</div>

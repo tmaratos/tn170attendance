@@ -8,8 +8,14 @@ import {
 } from 'firebase/firestore';
 import { getDb, callFunction } from './firebase';
 
+function normalizeStatus(status) {
+  if (status === 'checked_in') return 'checked-in';
+  if (status === 'checked_out') return 'checked-out';
+  return status || 'absent';
+}
+
 export function toUiMember(memberDoc, attendanceRecord = null) {
-  const status = attendanceRecord?.status || 'absent';
+  const status = normalizeStatus(attendanceRecord?.status);
   return {
     id: memberDoc.capid,
     capid: memberDoc.capid,

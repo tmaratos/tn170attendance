@@ -2,7 +2,17 @@ import { useState } from 'react';
 import CheckInWizard from '../components/CheckInWizard';
 
 export default function CheckIn({ attendance }) {
-  const { members, searchMembers, verifyPin, checkInMember, checkOutMember } = attendance;
+  const {
+    members,
+    searchMembers,
+    verifyPin,
+    checkInMember,
+    checkOutMember,
+    isFirebase,
+    memberHasPin,
+    needsPinSetup,
+    createMemberPin,
+  } = attendance;
   const [mode, setMode] = useState('check-in');
 
   return (
@@ -31,6 +41,10 @@ export default function CheckIn({ attendance }) {
         onCheckIn={checkInMember}
         onCheckOut={checkOutMember}
         mode={mode}
+        isFirebase={isFirebase}
+        memberHasPin={memberHasPin}
+        needsPinSetup={needsPinSetup}
+        createMemberPin={createMemberPin}
       />
     </div>
   );

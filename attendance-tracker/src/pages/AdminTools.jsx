@@ -10,52 +10,108 @@ export default function AdminTools({ attendance }) {
     verifyAdminPin,
     checkInMember,
     checkOutMember,
+    isFirebase,
+    authenticateSenior,
+    forceCheckInMember,
+    forceCheckOutMember,
+    resetMemberPin,
+    seniorSession,
   } = attendance;
 
   const [searchParams] = useSearchParams();
   const initialAction = searchParams.get('action') || 'check-in';
 
-  const [authenticated, setAuthenticated] = useState(false);
+  const [authenticated, setAuthenticated] = useState(!!seniorSession);
+  const [adminCapid, setAdminCapid] = useState('');
   const [adminPin, setAdminPin] = useState('');
   const [pinError, setPinError] = useState('');
   const [query, setQuery] = useState('');
   const [action, setAction] = useState(initialAction);
   const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [resetTarget, setResetTarget] = useState('');
 
   const results = useMemo(() => searchMembers(query), [query, searchMembers]);
 
-  const handleAdminAuth = () => {
-    if (adminPin.length === 4) {
-      if (verifyAdminPin(adminPin)) {
+  const handleAdminAuth = async () => {
+    if (adminPin.length !== 4) return;
+    setLoading(true);
+    setPinError('');
+    try {
+      if (isFirebase) {
+        if (!adminCapid.trim()) {
+          setPinError('Enter your CAPID.');
+          return;
+        }
+        await authenticateSenior(adminCapid.trim(), adminPin);
         setAuthenticated(true);
-        setPinError('');
+      } else if (verifyAdminPin(adminPin)) {
+        setAuthenticated(true);
       } else {
         setPinError('Incorrect admin PIN.');
         setAdminPin('');
       }
+    } catch (err) {
+      setPinError(err.message || 'Authentication failed.');
+      setAdminPin('');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleForce = (memberId) => {
-    if (action === 'check-in') {
-      checkInMember(memberId, true);
-      setMessage('Member force checked in.');
-    } else {
-      checkOutMember(memberId, true);
-      setMessage('Member force checked out.');
+  const handleForce = async (memberId) => {
+    setLoading(true);
+    setMessage('');
+    try {
+      if (isFirebase) {
+        if (action === 'check-in') {
+          await forceCheckInMember(memberId, adminPin);
+          setMessage('Member force checked in.');
+        } else {
+          await forceCheckOutMember(memberId, adminPin);
+          setMessage('Member force checked out.');
+        }
+      } else if (action === 'check-in') {
+        checkInMember(memberId, true);
+        setMessage('Member force checked in.');
+      } else {
+        checkOutMember(memberId, true);
+        setMessage('Member force checked out.');
+      }
+      setTimeout(() => setMessage(''), 3000);
+    } catch (err) {
+      setMessage(err.message || 'Force action failed.');
+    } finally {
+      setLoading(false);
     }
-    setTimeout(() => setMessage(''), 3000);
   };
 
   if (!authenticated) {
     return (
       <div>
         <h1 className="page-title">Admin Tools</h1>
-        <p className="page-subtitle">Enter admin PIN to access administrative functions</p>
+        <p className="page-subtitle">
+          {isFirebase
+            ? 'Senior members: enter your CAPID and PIN to access administrative functions'
+            : 'Enter admin PIN to access administrative functions'}
+        </p>
 
         <div className="kiosk-panel" style={{ maxWidth: 480, margin: '0 auto' }}>
-          <h2 className="kiosk-title">Admin Authentication</h2>
-          <p className="kiosk-subtitle">Enter the 4-digit admin PIN</p>
+          <h2 className="kiosk-title">Senior Member Authentication</h2>
+          <p className="kiosk-subtitle">
+            {isFirebase ? 'Enter your CAPID and 4-digit PIN' : 'Enter the 4-digit admin PIN'}
+          </p>
+          {isFirebase && (
+            <div className="form-group" style={{ marginBottom: 16 }}>
+              <input
+                type="text"
+                className="form-input form-input-lg"
+                placeholder="Your CAPID"
+                value={adminCapid}
+                onChange={(e) => setAdminCapid(e.target.value.replace(/\D/g, ''))}
+              />
+            </div>
+          )}
           {pinError && <div className="pin-error">{pinError}</div>}
           <PinPad
             pin={adminPin}
@@ -67,9 +123,9 @@ export default function AdminTools({ attendance }) {
             <button
               className="btn btn-gold btn-lg"
               onClick={handleAdminAuth}
-              disabled={adminPin.length !== 4}
+              disabled={adminPin.length !== 4 || loading}
             >
-              Authenticate
+              {loading ? 'Authenticating...' : 'Authenticate'}
             </button>
           </div>
         </div>
@@ -80,7 +136,10 @@ export default function AdminTools({ attendance }) {
   return (
     <div>
       <h1 className="page-title">Admin Tools</h1>
-      <p className="page-subtitle">Force check-in/out and administrative overrides</p>
+      <p className="page-subtitle">
+        Force check-in/out and administrative overrides
+        {seniorSession?.displayName ? ` — ${seniorSession.displayName}` : ''}
+      </p>
 
       {message && (
         <div className="panel" style={{ marginBottom: 16, background: 'var(--green-bg)' }}>
@@ -125,7 +184,7 @@ export default function AdminTools({ attendance }) {
                   <span className="member-meta">
                     {member.grade} • CAPID {member.capid} •{' '}
                     <span className={`status-label ${member.status === 'checked-in' ? 'in' : 'out'}`}>
-                      {member.status === 'checked-in' ? 'Checked In' : 'Checked Out'}
+                      {member.status === 'checked-in' ? 'Checked In' : member.status === 'checked-out' ? 'Checked Out' : 'Not Present'}
                     </span>
                   </span>
                 </div>
@@ -134,6 +193,7 @@ export default function AdminTools({ attendance }) {
                 className={`btn ${action === 'check-in' ? 'btn-green' : 'btn-red'}`}
                 style={{ minHeight: 'auto', padding: '8px 16px', fontSize: '0.85rem' }}
                 onClick={() => handleForce(member.id)}
+                disabled={loading}
               >
                 {action === 'check-in' ? 'Force In' : 'Force Out'}
               </button>
@@ -141,6 +201,44 @@ export default function AdminTools({ attendance }) {
           ))}
         </div>
       </div>
+
+      {isFirebase && seniorSession?.canResetPins && (
+        <div className="panel" style={{ marginTop: 24 }}>
+          <h3 className="panel-title" style={{ marginBottom: 12 }}>PIN Reset</h3>
+          <p className="report-card-desc" style={{ marginBottom: 16 }}>
+            Reset a member&apos;s PIN. They will create a new PIN at next check-in.
+          </p>
+          <div className="form-group">
+            <label className="form-label">Member CAPID to reset</label>
+            <input
+              type="text"
+              className="form-input"
+              placeholder="CAPID"
+              value={resetTarget}
+              onChange={(e) => setResetTarget(e.target.value.replace(/\D/g, ''))}
+            />
+          </div>
+          <button
+            className="btn btn-gold"
+            disabled={!resetTarget || loading}
+            onClick={async () => {
+              setLoading(true);
+              try {
+                await resetMemberPin(resetTarget, adminPin);
+                setMessage(`PIN reset for CAPID ${resetTarget}.`);
+                setResetTarget('');
+                setTimeout(() => setMessage(''), 3000);
+              } catch (err) {
+                setMessage(err.message || 'PIN reset failed.');
+              } finally {
+                setLoading(false);
+              }
+            }}
+          >
+            Reset PIN
+          </button>
+        </div>
+      )}
     </div>
   );
 }

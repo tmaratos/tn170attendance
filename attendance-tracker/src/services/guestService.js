@@ -3,7 +3,6 @@ import {
   onSnapshot,
   query,
   where,
-  orderBy,
 } from 'firebase/firestore';
 import { getDb, callFunction } from './firebase';
 
@@ -48,11 +47,7 @@ export function subscribeRecurringGuests(callback) {
   const db = getDb();
   if (!db) return () => {};
 
-  const q = query(
-    collection(db, 'guests'),
-    where('active', '==', true),
-    orderBy('lastVisitDate', 'desc')
-  );
+  const q = query(collection(db, 'guests'), where('active', '==', true));
 
   return onSnapshot(q, (snap) => {
     const guests = snap.docs.map((d) => {
@@ -68,7 +63,7 @@ export function subscribeRecurringGuests(callback) {
         totalVisits: data.totalVisits || 0,
         status: data.active ? 'active' : 'inactive',
       };
-    });
+    }).sort((a, b) => (b.lastVisit || '').localeCompare(a.lastVisit || ''));
     callback(guests);
   }, () => {
     callback([]);

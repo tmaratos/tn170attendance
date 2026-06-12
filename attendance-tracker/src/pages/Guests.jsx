@@ -12,6 +12,7 @@ export default function Guests({ attendance }) {
     checkInGuest,
     checkOutGuest,
     verifyPin,
+    isFirebase,
   } = attendance;
 
   const [step, setStep] = useState(0);
@@ -46,21 +47,41 @@ export default function Guests({ attendance }) {
     setMode('sign-in');
   };
 
-  const handleSignIn = () => {
-    checkInGuest({
-      name: guestName.trim(),
-      hostId: selectedHost.id,
-      hostName: selectedHost.name,
-    });
-    setTimestamp(new Date().toISOString());
-    setStep(4);
+  const handleSignIn = async () => {
+    try {
+      if (attendance.isFirebase) {
+        await checkInGuest({
+          name: guestName.trim(),
+          hostId: selectedHost.id,
+          hostCapid: selectedHost.capid || selectedHost.id,
+          hostName: selectedHost.name,
+          hostPin: pin,
+          guestId: matchingRecurring.find((g) => g.name.toLowerCase() === guestName.trim().toLowerCase())?.guestId,
+        });
+      } else {
+        checkInGuest({
+          name: guestName.trim(),
+          hostId: selectedHost.id,
+          hostName: selectedHost.name,
+        });
+      }
+      setTimestamp(new Date().toISOString());
+      setStep(4);
+    } catch (err) {
+      setPinError(err.message || 'Guest sign-in failed.');
+      setStep(2);
+    }
   };
 
-  const handleSignOut = (guest) => {
-    checkOutGuest(guest.id);
-    setSelectedGuest(guest);
-    setTimestamp(new Date().toISOString());
-    setMode('sign-out-done');
+  const handleSignOut = async (guest) => {
+    try {
+      await checkOutGuest(guest.id);
+      setSelectedGuest(guest);
+      setTimestamp(new Date().toISOString());
+      setMode('sign-out-done');
+    } catch (err) {
+      setPinError(err.message || 'Guest sign-out failed.');
+    }
   };
 
   return (
@@ -243,7 +264,8 @@ export default function Guests({ attendance }) {
                     className="btn btn-blue"
                     onClick={() => {
                       if (pin.length === 4) {
-                        if (verifyPin(selectedHost.id, pin)) setStep(3);
+                        if (isFirebase) setStep(3);
+                        else if (verifyPin(selectedHost.id, pin)) setStep(3);
                         else { setPinError('Incorrect PIN.'); setPin(''); }
                       }
                     }}

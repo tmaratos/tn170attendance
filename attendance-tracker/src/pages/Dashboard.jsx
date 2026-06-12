@@ -10,7 +10,21 @@ import LocalClock from '../components/LocalClock';
 import { isMeetingInProgress, formatMeetingTime } from '../data/mockData';
 
 export default function Dashboard({ attendance }) {
-  const { members, guests, activity, settings, getStats, checkInMember, checkOutMember, searchMembers, verifyPin } = attendance;
+  const {
+    members,
+    guests,
+    activity,
+    settings,
+    getStats,
+    checkInMember,
+    checkOutMember,
+    searchMembers,
+    verifyPin,
+    isFirebase,
+    memberHasPin,
+    needsPinSetup,
+    createMemberPin,
+  } = attendance;
   const stats = getStats();
   const [wizardMode, setWizardMode] = useState('check-in');
 
@@ -128,6 +142,10 @@ export default function Dashboard({ attendance }) {
               onCheckOut={checkOutMember}
               mode={wizardMode}
               compact
+              isFirebase={isFirebase}
+              memberHasPin={memberHasPin}
+              needsPinSetup={needsPinSetup}
+              createMemberPin={createMemberPin}
             />
           </div>
         </div>
