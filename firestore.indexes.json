@@ -1,0 +1,52 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "attendanceRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "meetingId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "attendanceRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "meetingId", "order": "ASCENDING" },
+        { "fieldPath": "capid", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "guestAttendanceRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "meetingId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "meetings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "meetingDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "activityLog",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "meetingId", "order": "ASCENDING" },
+        { "fieldPath": "timestamp", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "guests",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "normalizedName", "order": "ASCENDING" },
+        { "fieldPath": "active", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

@@ -1,0 +1,56 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isActiveMember(capid) {
+      return exists(/databases/$(database)/documents/members/$(capid))
+        && get(/databases/$(database)/documents/members/$(capid)).data.active == true;
+    }
+
+    // Member roster — readable for kiosk search; writes only via Admin SDK (seed/functions).
+    match /members/{capid} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // PIN hashes — never exposed to clients.
+    match /memberPins/{capid} {
+      allow read, write: if false;
+    }
+
+    match /meetings/{meetingId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /attendanceRecords/{recordId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /guests/{guestId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /guestAttendanceRecords/{recordId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /activityLog/{logId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /reportExports/{exportId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}

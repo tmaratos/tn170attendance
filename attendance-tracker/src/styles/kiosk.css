@@ -1,0 +1,367 @@
+.kiosk-page {
+  min-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+}
+
+.kiosk-mode-toggle {
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.kiosk-panel {
+  background: var(--navy-panel);
+  border-radius: var(--radius);
+  padding: 32px;
+  flex: 1;
+  color: var(--white);
+}
+
+.kiosk-title {
+  font-size: 1.75rem;
+  font-weight: 800;
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.kiosk-subtitle {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 32px;
+}
+
+.wizard-steps {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 32px;
+  flex-wrap: wrap;
+}
+
+.wizard-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.wizard-step.active {
+  color: var(--white);
+  background: var(--navy-light);
+  border: 1px solid var(--gold);
+}
+
+.wizard-step.done {
+  color: var(--green);
+  background: rgba(34, 197, 94, 0.15);
+}
+
+.wizard-step-num {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+}
+
+.wizard-step.active .wizard-step-num {
+  background: var(--gold);
+  color: var(--navy-dark);
+}
+
+.wizard-content {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.search-box {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.search-input {
+  width: 100%;
+  padding: 16px 20px 16px 48px;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--white);
+  font-size: 1.1rem;
+}
+
+.search-input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.search-icon {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 1.2rem;
+}
+
+.popular-searches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.popular-tag {
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.popular-tag:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--white);
+}
+
+.member-results {
+  max-height: 300px;
+  overflow-y: auto;
+  margin-top: 16px;
+}
+
+.member-result {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  margin-bottom: 4px;
+}
+
+.member-result:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.member-result.selected {
+  background: var(--blue);
+  border: 2px solid var(--blue);
+}
+
+.member-result-name {
+  font-weight: 600;
+  color: var(--white);
+}
+
+.member-result-meta {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.pin-display {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.pin-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  transition: all 0.15s ease;
+}
+
+.pin-dot.filled {
+  background: var(--gold);
+  border-color: var(--gold);
+}
+
+.pin-pad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  max-width: 320px;
+  margin: 0 auto;
+}
+
+.pin-key {
+  aspect-ratio: 1.5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-sm);
+  color: var(--white);
+  font-size: 1.5rem;
+  font-weight: 600;
+  transition: all 0.15s ease;
+  min-height: 64px;
+}
+
+.pin-key:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.pin-key:active {
+  transform: scale(0.95);
+  background: var(--gold);
+  color: var(--navy-dark);
+}
+
+.pin-key.action {
+  font-size: 0.9rem;
+}
+
+.confirm-member {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.confirm-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: var(--navy-light);
+  color: var(--white);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 auto 16px;
+  border: 3px solid var(--gold);
+}
+
+.confirm-name {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.confirm-meta {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 1rem;
+}
+
+.confirm-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.success-screen {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.success-icon {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3rem;
+  margin: 0 auto 24px;
+}
+
+.success-icon.in {
+  background: var(--green-bg);
+  color: var(--green);
+}
+
+.success-icon.out {
+  background: var(--red-bg);
+  color: var(--red);
+}
+
+.success-title {
+  font-size: 2rem;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.success-title.in {
+  color: var(--green);
+}
+
+.success-title.out {
+  color: var(--red);
+}
+
+.success-time {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 1.1rem;
+  margin-bottom: 32px;
+}
+
+.wizard-nav {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 24px;
+  gap: 12px;
+}
+
+.wizard-nav .btn {
+  min-width: 120px;
+}
+
+.kiosk-panel .btn-outline {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.kiosk-panel .btn-outline:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.5);
+  color: var(--white);
+}
+
+.pin-error {
+  text-align: center;
+  color: var(--red);
+  font-size: 0.9rem;
+  margin-bottom: 12px;
+}
+
+@media (max-width: 640px) {
+  .kiosk-panel {
+    padding: 20px;
+  }
+
+  .wizard-steps {
+    gap: 4px;
+  }
+
+  .wizard-step {
+    padding: 6px 10px;
+    font-size: 0.7rem;
+  }
+
+  .pin-key {
+    min-height: 56px;
+    font-size: 1.25rem;
+  }
+}

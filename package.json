@@ -1,0 +1,11 @@
+{
+  "name": "tn170-attendance",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "seed:members": "node scripts/seed-members.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0"
+  }
+}
