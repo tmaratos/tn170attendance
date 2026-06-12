@@ -5,18 +5,19 @@
 
 .data-table thead th {
   text-align: left;
-  padding: 10px 12px;
-  font-size: 0.75rem;
-  font-weight: 600;
+  padding: 8px 14px;
+  font-size: 0.68rem;
+  font-weight: 700;
   color: var(--gray-500);
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  border-bottom: 2px solid var(--gray-100);
+  border-bottom: 1px solid var(--gray-100);
+  background: var(--gray-50);
 }
 
 .data-table tbody td {
-  padding: 12px;
-  font-size: 0.9rem;
+  padding: 10px 14px;
+  font-size: 0.82rem;
   border-bottom: 1px solid var(--gray-100);
   vertical-align: middle;
 }
@@ -32,21 +33,23 @@
 .member-cell {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .member-info {
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .member-name {
-  font-weight: 600;
+  font-weight: 700;
   color: var(--gray-800);
+  font-size: 0.82rem;
 }
 
 .member-meta {
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   color: var(--gray-500);
 }
 
@@ -54,13 +57,13 @@
   display: inline-block;
   padding: 2px 8px;
   border-radius: 4px;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 600;
 }
 
 .role-badge.senior {
   background: #dbeafe;
-  color: var(--blue-dark);
+  color: var(--cap-blue);
 }
 
 .role-badge.cadet {
@@ -74,7 +77,12 @@
 }
 
 .table-scroll {
-  max-height: 320px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.table-scroll-sm {
+  max-height: 180px;
   overflow-y: auto;
 }
 
@@ -105,7 +113,7 @@
 }
 
 .filter-btn.active {
-  background: var(--navy);
+  background: var(--cap-blue);
   color: var(--white);
 }
 
@@ -127,13 +135,14 @@
 
 .activity-feed {
   list-style: none;
+  padding: 0 14px;
 }
 
 .activity-item {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  padding: 10px 0;
+  gap: 10px;
+  padding: 9px 0;
   border-bottom: 1px solid var(--gray-100);
 }
 
@@ -142,13 +151,13 @@
 }
 
 .activity-icon {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   flex-shrink: 0;
 }
 
@@ -180,22 +189,29 @@
 
 .activity-text {
   flex: 1;
+  min-width: 0;
 }
 
 .activity-message {
-  font-size: 0.9rem;
-  font-weight: 500;
+  font-size: 0.8rem;
+  font-weight: 600;
   color: var(--gray-800);
 }
 
 .activity-time {
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   color: var(--gray-500);
 }
 
 .empty-state {
   text-align: center;
-  padding: 32px;
+  padding: 24px 16px;
   color: var(--gray-400);
-  font-size: 0.95rem;
+  font-size: 0.85rem;
+}
+
+.time-cell {
+  font-size: 0.8rem;
+  color: var(--gray-600);
+  white-space: nowrap;
 }

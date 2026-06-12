@@ -1,18 +1,18 @@
 import { formatTime, getInitials } from '../data/mockData';
 
-export default function AttendanceTable({ members, showCheckOut = false }) {
+export default function AttendanceTable({ members, showCheckOut = false, compact = false }) {
   if (!members.length) {
     return <div className="empty-state">No members to display</div>;
   }
 
   return (
-    <div className="table-scroll">
+    <div className={compact ? 'table-scroll-sm' : 'table-scroll'}>
       <table className="data-table">
         <thead>
           <tr>
             <th>Name</th>
             <th>Role</th>
-            <th>{showCheckOut ? 'Check Out Time' : 'Check In Time'}</th>
+            <th>{showCheckOut ? 'Check Out' : 'Check In'}</th>
             <th></th>
           </tr>
         </thead>
@@ -39,7 +39,7 @@ export default function AttendanceTable({ members, showCheckOut = false }) {
                   {member.role}
                 </span>
               </td>
-              <td>
+              <td className="time-cell">
                 {formatTime(showCheckOut ? member.checkOutTime : member.checkInTime)}
               </td>
               <td>

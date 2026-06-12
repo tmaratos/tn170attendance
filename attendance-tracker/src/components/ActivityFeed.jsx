@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { formatTime } from '../data/mockData';
 
 const ICON_MAP = {
@@ -9,7 +10,7 @@ const ICON_MAP = {
   'force-out': '⚡',
 };
 
-export default function ActivityFeed({ activities, limit }) {
+export default function ActivityFeed({ activities, limit, showFooter = false }) {
   const items = limit ? activities.slice(0, limit) : activities;
 
   if (!items.length) {
@@ -17,18 +18,27 @@ export default function ActivityFeed({ activities, limit }) {
   }
 
   return (
-    <ul className="activity-feed">
-      {items.map((item) => (
-        <li key={item.id} className="activity-item">
-          <div className={`activity-icon ${item.type}`}>
-            {ICON_MAP[item.type] || '•'}
-          </div>
-          <div className="activity-text">
-            <div className="activity-message">{item.message}</div>
-            <div className="activity-time">{formatTime(item.timestamp)}</div>
-          </div>
-        </li>
-      ))}
-    </ul>
+    <>
+      <ul className="activity-feed">
+        {items.map((item) => (
+          <li key={item.id} className="activity-item">
+            <div className={`activity-icon ${item.type}`}>
+              {ICON_MAP[item.type] || '•'}
+            </div>
+            <div className="activity-text">
+              <div className="activity-message">{item.message}</div>
+              <div className="activity-time">{formatTime(item.timestamp)}</div>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {showFooter && (
+        <div className="panel-footer">
+          <Link to="/attendance" className="panel-footer-link">
+            View All Activity →
+          </Link>
+        </div>
+      )}
+    </>
   );
 }

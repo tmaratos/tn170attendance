@@ -8,6 +8,7 @@ import ActivityFeed from '../components/ActivityFeed';
 import CheckInWizard from '../components/CheckInWizard';
 import LocalClock from '../components/LocalClock';
 import { isMeetingInProgress, formatMeetingTime } from '../data/mockData';
+import { useLocalTime } from '../hooks/useLocalTime';
 
 export default function Dashboard({ attendance }) {
   const {
@@ -27,6 +28,7 @@ export default function Dashboard({ attendance }) {
   } = attendance;
   const stats = getStats();
   const [wizardMode, setWizardMode] = useState('check-in');
+  const { shortDateStr } = useLocalTime();
 
   const checkedInMembers = members.filter((m) => m.status === 'checked-in');
   const checkedOutMembers = members.filter((m) => m.status === 'checked-out');
@@ -36,7 +38,7 @@ export default function Dashboard({ attendance }) {
   const handlePrint = () => window.print();
 
   return (
-    <div>
+    <div className="dashboard-page">
       <Header
         title="Welcome!"
         subtitle={<LocalClock />}
@@ -44,116 +46,140 @@ export default function Dashboard({ attendance }) {
 
       <div className="stats-grid">
         <StatCard
-          icon="✓"
           label="Checked In"
           value={stats.checkedIn}
           color="green"
           linkTo="/attendance?filter=checked-in"
         />
         <StatCard
-          icon="✗"
           label="Checked Out"
           value={stats.checkedOut}
           color="red"
           linkTo="/attendance?filter=checked-out"
         />
         <StatCard
-          icon="★"
           label="Guests Present"
           value={stats.guestsPresent}
           color="gold"
           linkTo="/guests"
         />
         <StatCard
-          icon="👥"
           label="Total Present"
-          value={`${stats.totalPresent} of ${stats.totalMembers}`}
+          value={stats.totalPresent}
+          subtext={`of ${stats.totalMembers} Members`}
           color="blue"
         />
         <StatCard
-          icon="📅"
           label="Tonight's Meeting"
           variant="meeting-card"
         >
-          <div style={{ marginTop: 8 }}>
-            <div>{settings.meetingDay}s • {formatMeetingTime(settings.meetingStart)} – {formatMeetingTime(settings.meetingEnd)}</div>
-            <span className={`badge ${meetingActive ? 'badge-green' : 'badge-blue'}`} style={{ marginTop: 8, display: 'inline-block' }}>
-              {meetingActive ? 'In Progress' : 'Scheduled'}
-            </span>
+          <div className="meeting-date">{shortDateStr}</div>
+          <div className="meeting-time">
+            {formatMeetingTime(settings.meetingStart)} – {formatMeetingTime(settings.meetingEnd)}
           </div>
+          <span className={`badge ${meetingActive ? 'badge-green' : 'badge-blue'}`} style={{ marginTop: 8, display: 'inline-block' }}>
+            {meetingActive ? 'IN PROGRESS' : 'SCHEDULED'}
+          </span>
         </StatCard>
       </div>
 
       <div className="dashboard-panels">
         <div className="panel">
-          <div className="panel-header">
-            <h3 className="panel-title text-green">Checked In ({checkedInMembers.length})</h3>
-            <Link to="/attendance?filter=checked-in" className="panel-link">View All →</Link>
+          <div className="panel-header panel-header-blue">
+            <h3 className="panel-title panel-title-white">
+              Checked In ({checkedInMembers.length})
+            </h3>
           </div>
-          <AttendanceTable members={checkedInMembers.slice(0, 8)} />
+          <div className="panel-body">
+            <AttendanceTable members={checkedInMembers.slice(0, 8)} compact />
+          </div>
+          <div className="panel-footer">
+            <Link to="/attendance?filter=checked-in" className="panel-footer-link">
+              View All Checked In →
+            </Link>
+          </div>
         </div>
 
         <div className="panel">
-          <div className="panel-header">
-            <h3 className="panel-title text-red">Checked Out ({checkedOutMembers.length})</h3>
-            <Link to="/attendance?filter=checked-out" className="panel-link">View All →</Link>
+          <div className="panel-header panel-header-red">
+            <h3 className="panel-title panel-title-white">
+              Checked Out ({checkedOutMembers.length})
+            </h3>
           </div>
-          <AttendanceTable members={checkedOutMembers.slice(0, 8)} showCheckOut />
+          <div className="panel-body">
+            <AttendanceTable members={checkedOutMembers.slice(0, 8)} showCheckOut compact />
+          </div>
+          <div className="panel-footer">
+            <Link to="/attendance?filter=checked-out" className="panel-footer-link">
+              View All Checked Out →
+            </Link>
+          </div>
         </div>
 
-        <div className="panel">
-          <div className="panel-header">
-            <h3 className="panel-title text-gold">Guests Present ({presentGuests.length})</h3>
-            <Link to="/guests" className="panel-link">View All →</Link>
+        <div className="dashboard-col-stack">
+          <div className="panel">
+            <div className="panel-header panel-header-gold">
+              <h3 className="panel-title">
+                Guests Present ({presentGuests.length})
+              </h3>
+            </div>
+            <div className="panel-body">
+              <GuestTable guests={presentGuests} compact />
+            </div>
+            <div className="panel-footer">
+              <Link to="/guests" className="panel-footer-link">
+                View All Guests →
+              </Link>
+            </div>
           </div>
-          <GuestTable guests={presentGuests} />
-        </div>
 
-        <div className="panel">
-          <div className="panel-header">
-            <h3 className="panel-title">Recent Activity</h3>
+          <div className="panel">
+            <div className="panel-header panel-header-dark">
+              <h3 className="panel-title panel-title-white">Recent Activity</h3>
+            </div>
+            <div className="panel-body">
+              <ActivityFeed activities={activity} limit={6} showFooter />
+            </div>
           </div>
-          <ActivityFeed activities={activity} limit={8} />
         </div>
       </div>
 
       <div className="dashboard-bottom">
-        <div>
-          <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+        <div className="dashboard-wizard-wrap">
+          <div className="wizard-mode-toggle no-print">
             <button
+              type="button"
               className={`btn ${wizardMode === 'check-in' ? 'btn-green' : 'btn-outline'}`}
               onClick={() => setWizardMode('check-in')}
             >
               Check In
             </button>
             <button
+              type="button"
               className={`btn ${wizardMode === 'check-out' ? 'btn-red' : 'btn-outline'}`}
               onClick={() => setWizardMode('check-out')}
             >
               Check Out
             </button>
           </div>
-          <div className="kiosk-panel">
-            <CheckInWizard
-              members={members}
-              searchMembers={searchMembers}
-              verifyPin={verifyPin}
-              onCheckIn={checkInMember}
-              onCheckOut={checkOutMember}
-              mode={wizardMode}
-              compact
-              isFirebase={isFirebase}
-              memberHasPin={memberHasPin}
-              needsPinSetup={needsPinSetup}
-              createMemberPin={createMemberPin}
-            />
-          </div>
+          <CheckInWizard
+            key={wizardMode}
+            members={members}
+            searchMembers={searchMembers}
+            verifyPin={verifyPin}
+            onCheckIn={checkInMember}
+            onCheckOut={checkOutMember}
+            mode={wizardMode}
+            compact
+            isFirebase={isFirebase}
+            memberHasPin={memberHasPin}
+            needsPinSetup={needsPinSetup}
+            createMemberPin={createMemberPin}
+          />
         </div>
 
         <div className="quick-actions no-print">
-          <h3 className="panel-title" style={{ color: 'var(--white)', marginBottom: 12 }}>
-            Quick Actions
-          </h3>
+          <h3 className="quick-actions-title">Quick Actions</h3>
           <Link to="/admin?action=check-in" className="btn btn-green">
             Force Check In
           </Link>
@@ -163,7 +189,7 @@ export default function Dashboard({ attendance }) {
           <Link to="/attendance" className="btn btn-blue">
             View Full List
           </Link>
-          <button className="btn btn-gray" onClick={handlePrint}>
+          <button type="button" className="btn btn-gray" onClick={handlePrint}>
             Print Sign In Sheet
           </button>
         </div>

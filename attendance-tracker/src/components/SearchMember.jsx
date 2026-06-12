@@ -7,6 +7,9 @@ export default function SearchMember({
   onSelect,
   selectedId,
   popularSearches = [],
+  hideResults = false,
+  showScanCard = true,
+  compact = false,
 }) {
   return (
     <div>
@@ -15,43 +18,53 @@ export default function SearchMember({
         <input
           type="text"
           className="search-input"
-          placeholder="Search name, CAPID, or grade..."
+          placeholder="Search name or CAPID..."
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
-          autoFocus
+          autoFocus={!compact}
         />
       </div>
 
       {popularSearches.length > 0 && (
         <div className="popular-searches">
-          <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem', marginRight: 8 }}>
-            Popular:
-          </span>
-          {popularSearches.map((term) => (
-            <button
-              key={term}
-              className="popular-tag"
-              onClick={() => onQueryChange(term)}
-            >
-              {term}
-            </button>
-          ))}
+          <div className="popular-searches-label">Popular Searches</div>
+          <div className="popular-tags">
+            {popularSearches.map((term) => (
+              <button
+                key={term}
+                type="button"
+                className="popular-tag"
+                onClick={() => onQueryChange(term)}
+              >
+                {term}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
-      {results.length > 0 && (
+      {showScanCard && (
+        <button type="button" className="scan-card-btn">
+          <span>▮▮</span> SCAN CARD
+        </button>
+      )}
+
+      {!hideResults && results.length > 0 && (
         <div className="member-results">
           {results.map((member) => (
             <div
               key={member.id}
               className={`member-result ${selectedId === member.id ? 'selected' : ''}`}
               onClick={() => onSelect(member)}
+              onKeyDown={(e) => e.key === 'Enter' && onSelect(member)}
+              role="button"
+              tabIndex={0}
             >
               <div className="avatar">{getInitials(member.name)}</div>
-              <div>
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <div className="member-result-name">{member.name}</div>
                 <div className="member-result-meta">
-                  {member.grade} • CAPID {member.capid} • {member.role}
+                  {member.grade} • CAPID {member.capid}
                 </div>
               </div>
               {selectedId === member.id && <span>✓</span>}
@@ -60,9 +73,9 @@ export default function SearchMember({
         </div>
       )}
 
-      {query && results.length === 0 && (
-        <div className="empty-state" style={{ color: 'rgba(255,255,255,0.5)' }}>
-          No members found matching &ldquo;{query}&rdquo;
+      {query && !hideResults && results.length === 0 && (
+        <div className="empty-state" style={{ color: 'rgba(255,255,255,0.5)', padding: '12px 0' }}>
+          No members found
         </div>
       )}
     </div>

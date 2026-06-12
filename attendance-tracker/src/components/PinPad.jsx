@@ -1,4 +1,4 @@
-export default function PinPad({ pin, onDigit, onBackspace, onClear, maxLength = 4 }) {
+export default function PinPad({ pin, onDigit, onBackspace, onClear, maxLength = 4, compact = false }) {
   const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'clear', '0', 'back'];
 
   const handleKey = (key) => {
@@ -14,14 +14,15 @@ export default function PinPad({ pin, onDigit, onBackspace, onClear, maxLength =
           <div key={i} className={`pin-dot ${i < pin.length ? 'filled' : ''}`} />
         ))}
       </div>
-      <div className="pin-pad">
+      <div className={`pin-pad ${compact ? 'pin-pad-compact' : ''}`}>
         {keys.map((key) => (
           <button
             key={key}
+            type="button"
             className={`pin-key ${key === 'clear' || key === 'back' ? 'action' : ''}`}
             onClick={() => handleKey(key)}
           >
-            {key === 'back' ? '⌫' : key === 'clear' ? 'Clear' : key}
+            {key === 'back' ? '⌫' : key === 'clear' ? 'CLR' : key}
           </button>
         ))}
       </div>

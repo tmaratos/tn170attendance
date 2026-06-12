@@ -2,13 +2,13 @@ import { NavLink } from 'react-router-dom';
 import { useState } from 'react';
 
 const NAV_ITEMS = [
-  { to: '/', label: 'Dashboard', icon: '📊' },
-  { to: '/check-in', label: 'Check In / Out', icon: '✅' },
-  { to: '/guests', label: 'Guests', icon: '👥' },
-  { to: '/attendance', label: 'Attendance List', icon: '📋' },
-  { to: '/reports', label: 'Reports', icon: '📈' },
-  { to: '/admin', label: 'Admin Tools', icon: '🔧' },
-  { to: '/settings', label: 'Settings', icon: '⚙️' },
+  { to: '/', label: 'Dashboard', icon: '▦' },
+  { to: '/check-in', label: 'Check In / Out', icon: '✓' },
+  { to: '/guests', label: 'Guests', icon: '★' },
+  { to: '/attendance', label: 'Attendance List', icon: '☰' },
+  { to: '/reports', label: 'Reports', icon: '▤' },
+  { to: '/admin', label: 'Admin Tools', icon: '⚙' },
+  { to: '/settings', label: 'Settings', icon: '⚙' },
 ];
 
 export default function Sidebar({ settings }) {
@@ -38,7 +38,11 @@ export default function Sidebar({ settings }) {
             {settings.squadronName.toUpperCase()}
           </div>
           <div className="sidebar-designator">{settings.squadronDesignator}</div>
-          <div className="sidebar-motto">{settings.motto.toUpperCase()}</div>
+          <div className="sidebar-motto-wrap">
+            <div className="sidebar-motto-line" />
+            <div className="sidebar-motto">{settings.motto.toUpperCase()}</div>
+            <div className="sidebar-motto-line" />
+          </div>
         </div>
 
         <nav className="sidebar-nav">

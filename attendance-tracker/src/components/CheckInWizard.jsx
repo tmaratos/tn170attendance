@@ -4,7 +4,13 @@ import PinPad from './PinPad';
 import { getInitials, formatTime } from '../data/mockData';
 import { getCallableError } from '../services/errors';
 
-const STEPS = ['Search', 'Select', 'PIN', 'Confirm', 'Done'];
+const STEPS = [
+  { num: 1, label: 'Search Member' },
+  { num: 2, label: 'Select Member' },
+  { num: 3, label: 'Enter PIN' },
+  { num: 4, label: 'Confirm Action' },
+  { num: 5, label: 'Success' },
+];
 
 export default function CheckInWizard({
   members,
@@ -32,8 +38,7 @@ export default function CheckInWizard({
   const results = useMemo(() => searchMembers(query), [query, searchMembers]);
 
   const popularSearches = useMemo(() => {
-    const names = members.slice(0, 4).map((m) => m.name.split(' ')[0]);
-    return names;
+    return members.slice(0, 4).map((m) => m.name.split(' ')[0]);
   }, [members]);
 
   const reset = () => {
@@ -90,7 +95,7 @@ export default function CheckInWizard({
         return;
       }
       if (pin !== confirmPin) {
-        setPinError('PINs do not match. Please try again.');
+        setPinError('PINs do not match.');
         setPin('');
         setConfirmPin('');
         return;
@@ -102,7 +107,7 @@ export default function CheckInWizard({
           await createMemberPin(selected.id, pin, confirmPin);
           setStep(3);
         } catch (err) {
-          setPinError(getCallableError(err) || 'Could not create PIN. Please try again.');
+          setPinError(getCallableError(err) || 'Could not create PIN.');
           setPin('');
           setConfirmPin('');
         } finally {
@@ -122,7 +127,7 @@ export default function CheckInWizard({
     if (verifyPin(selected.id, pin)) {
       setStep(3);
     } else {
-      setPinError('Incorrect PIN. Please try again.');
+      setPinError('Incorrect PIN.');
       setPin('');
     }
   };
@@ -150,7 +155,7 @@ export default function CheckInWizard({
       }
       setStep(4);
     } catch (err) {
-      setPinError(getCallableError(err) || 'Action failed. Please try again.');
+      setPinError(getCallableError(err) || 'Action failed.');
       setStep(2);
       setPin('');
     } finally {
@@ -162,27 +167,220 @@ export default function CheckInWizard({
   const successLabel = mode === 'check-in' ? 'CHECKED IN!' : 'CHECKED OUT!';
   const btnClass = mode === 'check-in' ? 'btn-green' : 'btn-red';
 
+  const getPanelClass = (index) => {
+    if (index === step) return 'active';
+    if (index < step) return 'done';
+    return 'upcoming';
+  };
+
+  if (compact) {
+    return (
+      <div className="kiosk-panel compact">
+        <h2 className="kiosk-title">Check In / Out Process</h2>
+
+        <div className="wizard-horizontal">
+          {/* Step 1: Search */}
+          <div className={`wizard-step-panel ${getPanelClass(0)}`}>
+            <div className="wizard-step-label">
+              <span className="wizard-step-num">1</span>
+              Search Member
+            </div>
+            <div className="wizard-step-content">
+              <SearchMember
+                query={query}
+                onQueryChange={setQuery}
+                results={results}
+                onSelect={handleSelect}
+                selectedId={selected?.id}
+                popularSearches={popularSearches}
+                hideResults
+                compact
+              />
+            </div>
+          </div>
+
+          {/* Step 2: Select */}
+          <div className={`wizard-step-panel ${getPanelClass(1)}`}>
+            <div className="wizard-step-label">
+              <span className="wizard-step-num">2</span>
+              Select Member
+            </div>
+            <div className="wizard-step-content">
+              {results.length > 0 ? (
+                <div className="member-results member-results-compact">
+                  {results.map((member) => (
+                    <div
+                      key={member.id}
+                      className={`member-result ${selected?.id === member.id ? 'selected' : ''}`}
+                      onClick={() => handleSelect(member)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSelect(member)}
+                      role="button"
+                      tabIndex={0}
+                    >
+                      <span className="member-result-radio" />
+                      <div className="avatar">{getInitials(member.name)}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="member-result-name">{member.name}</div>
+                        <div className="member-result-meta">
+                          {member.grade} • {member.capid}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="wizard-step-placeholder">
+                  {query ? 'No members found' : 'Search for a member'}
+                </div>
+              )}
+              {selected && step === 1 && (
+                <button type="button" className="btn btn-blue pin-continue-btn" onClick={goToPin}>
+                  Continue →
+                </button>
+              )}
+              <button type="button" className="cant-find-btn">
+                Can&apos;t Find Member?
+              </button>
+            </div>
+          </div>
+
+          {/* Step 3: PIN */}
+          <div className={`wizard-step-panel ${getPanelClass(2)}`}>
+            <div className="wizard-step-label">
+              <span className="wizard-step-num">3</span>
+              Enter PIN
+            </div>
+            <div className="wizard-step-content">
+              {selected && step >= 2 ? (
+                <>
+                  {pinError && <div className="pin-error">{pinError}</div>}
+                  <PinPad
+                    pin={pin}
+                    onDigit={handlePinDigit}
+                    onBackspace={() => setPin((p) => p.slice(0, -1))}
+                    onClear={() => { setPin(''); setPinError(''); }}
+                    compact
+                  />
+                  {pinMode === 'create' && pin.length === 4 && (
+                    <>
+                      <p style={{ textAlign: 'center', margin: '6px 0', color: 'rgba(255,255,255,0.5)', fontSize: '0.65rem' }}>
+                        Confirm PIN
+                      </p>
+                      <PinPad
+                        pin={confirmPin}
+                        onDigit={handleConfirmPinDigit}
+                        onBackspace={() => setConfirmPin((p) => p.slice(0, -1))}
+                        onClear={() => setConfirmPin('')}
+                        compact
+                      />
+                    </>
+                  )}
+                  {step === 2 && (
+                    <button
+                      type="button"
+                      className="btn btn-blue pin-continue-btn"
+                      onClick={handlePinStepContinue}
+                      disabled={
+                        loading ||
+                        pin.length !== 4 ||
+                        (pinMode === 'create' && confirmPin.length !== 4)
+                      }
+                    >
+                      {loading ? 'Wait...' : 'Continue →'}
+                    </button>
+                  )}
+                </>
+              ) : (
+                <div className="wizard-step-placeholder">Select a member first</div>
+              )}
+            </div>
+          </div>
+
+          {/* Step 4: Confirm */}
+          <div className={`wizard-step-panel ${getPanelClass(3)}`}>
+            <div className="wizard-step-label">
+              <span className="wizard-step-num">4</span>
+              Confirm Action
+            </div>
+            <div className="wizard-step-content">
+              {selected && step >= 3 ? (
+                <>
+                  <div className="confirm-member">
+                    <div className="confirm-avatar">{getInitials(selected.name)}</div>
+                    <div className="confirm-name">{selected.name}</div>
+                    <div className="confirm-meta">
+                      {selected.grade} • CAPID {selected.capid}
+                    </div>
+                  </div>
+                  {pinError && <div className="pin-error">{pinError}</div>}
+                  <div className="confirm-actions">
+                    <button
+                      type="button"
+                      className={`btn ${btnClass}`}
+                      onClick={handleConfirm}
+                      disabled={loading || step !== 3}
+                    >
+                      {loading ? 'Processing...' : actionLabel}
+                    </button>
+                    <button type="button" className="btn btn-outline" onClick={reset}>
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="wizard-step-placeholder">Awaiting PIN entry</div>
+              )}
+            </div>
+          </div>
+
+          {/* Step 5: Success */}
+          <div className={`wizard-step-panel ${getPanelClass(4)}`}>
+            <div className="wizard-step-label">
+              <span className="wizard-step-num">5</span>
+              Success
+            </div>
+            <div className="wizard-step-content">
+              {step === 4 ? (
+                <div className="success-screen success-screen-compact">
+                  <div className={`success-icon ${mode === 'check-in' ? 'in' : 'out'}`}>✓</div>
+                  <div className={`success-title ${mode === 'check-in' ? 'in' : 'out'}`}>
+                    {successLabel}
+                  </div>
+                  <div className="success-time">
+                    {timestamp && formatTime(timestamp)}
+                  </div>
+                  <button type="button" className="btn btn-blue" onClick={reset}>
+                    DONE
+                  </button>
+                </div>
+              ) : (
+                <div className="wizard-step-placeholder">Complete check-in/out</div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* Full-page vertical wizard */
   return (
-    <div className={compact ? '' : 'kiosk-panel'}>
-      {!compact && (
-        <>
-          <h2 className="kiosk-title">Check In / Out Process</h2>
-          <p className="kiosk-subtitle">
-            {mode === 'check-in'
-              ? 'Search for your name to check in to tonight\'s meeting'
-              : 'Search for your name to check out'}
-          </p>
-        </>
-      )}
+    <div className="kiosk-panel">
+      <h2 className="kiosk-title">Check In / Out Process</h2>
+      <p className="kiosk-subtitle">
+        {mode === 'check-in'
+          ? "Search for your name to check in to tonight's meeting"
+          : 'Search for your name to check out'}
+      </p>
 
       <div className="wizard-steps">
-        {STEPS.map((label, i) => (
+        {STEPS.map((s, i) => (
           <div
-            key={label}
+            key={s.label}
             className={`wizard-step ${i === step ? 'active' : ''} ${i < step ? 'done' : ''}`}
           >
-            <span className="wizard-step-num">{i + 1}</span>
-            {label}
+            <span className="wizard-step-num">{s.num}</span>
+            {s.label}
           </div>
         ))}
       </div>
@@ -212,10 +410,10 @@ export default function CheckInWizard({
               <span>✓</span>
             </div>
             <div className="wizard-nav">
-              <button className="btn btn-outline" onClick={() => setStep(0)}>
+              <button type="button" className="btn btn-outline" onClick={() => setStep(0)}>
                 Back
               </button>
-              <button className="btn btn-blue" onClick={goToPin}>
+              <button type="button" className="btn btn-blue" onClick={goToPin}>
                 Continue
               </button>
             </div>
@@ -250,10 +448,11 @@ export default function CheckInWizard({
               </>
             )}
             <div className="wizard-nav">
-              <button className="btn btn-outline" onClick={() => setStep(1)}>
+              <button type="button" className="btn btn-outline" onClick={() => setStep(1)}>
                 Back
               </button>
               <button
+                type="button"
                 className="btn btn-blue"
                 onClick={handlePinStepContinue}
                 disabled={
@@ -280,13 +479,14 @@ export default function CheckInWizard({
             {pinError && <div className="pin-error">{pinError}</div>}
             <div className="confirm-actions">
               <button
+                type="button"
                 className={`btn btn-lg btn-block ${btnClass}`}
                 onClick={handleConfirm}
                 disabled={loading}
               >
                 {loading ? 'Processing...' : actionLabel}
               </button>
-              <button className="btn btn-outline btn-block" onClick={reset}>
+              <button type="button" className="btn btn-outline btn-block" onClick={reset}>
                 Cancel
               </button>
             </div>
@@ -304,7 +504,7 @@ export default function CheckInWizard({
             <div className="success-time">
               {timestamp && formatTime(timestamp)}
             </div>
-            <button className="btn btn-blue btn-lg" onClick={reset}>
+            <button type="button" className="btn btn-blue btn-lg" onClick={reset}>
               Done
             </button>
           </div>
