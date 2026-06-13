@@ -624,6 +624,52 @@
   border-radius: 8px;
 }
 
+.checkout-reminder {
+  width: min(920px, 100%);
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 0 auto 14px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  text-align: center;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
+}
+
+.checkout-reminder strong {
+  color: inherit;
+  font-size: 0.95rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.checkout-reminder span {
+  color: inherit;
+  font-size: 0.98rem;
+  font-weight: 700;
+}
+
+.checkout-reminder-notice {
+  background: rgba(212, 160, 23, 0.16);
+  border: 1px solid rgba(212, 160, 23, 0.5);
+  color: #fff6d7;
+}
+
+.checkout-reminder-urgent {
+  background: rgba(212, 160, 23, 0.92);
+  border: 1px solid rgba(255, 231, 151, 0.8);
+  color: #071a3a;
+}
+
+.checkout-reminder-ended {
+  background: linear-gradient(180deg, #b91927, #9d101b);
+  border: 1px solid rgba(255, 195, 195, 0.65);
+  color: var(--white);
+}
+
 .kiosk-touch-panel {
   width: min(920px, 100%);
   margin: 0 auto;
@@ -989,6 +1035,20 @@
 @media (max-width: 720px) {
   .tablet-kiosk-page .kiosk-mode-toggle {
     margin-bottom: 12px;
+  }
+
+  .checkout-reminder {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+    min-height: 56px;
+    padding: 10px 14px;
+    text-align: left;
+  }
+
+  .checkout-reminder strong,
+  .checkout-reminder span {
+    width: 100%;
   }
 
   .tablet-kiosk-page .kiosk-mode-toggle .btn {

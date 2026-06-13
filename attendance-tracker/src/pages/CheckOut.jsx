@@ -1,4 +1,5 @@
 import CheckOutWizard from '../components/CheckOutWizard';
+import CheckoutReminder from '../components/CheckoutReminder';
 
 export default function CheckOut({ attendance }) {
   const {
@@ -15,6 +16,7 @@ export default function CheckOut({ attendance }) {
 
   return (
     <div className="kiosk-page tablet-kiosk-page">
+      <CheckoutReminder />
       <CheckOutWizard
         members={members}
         searchMembers={searchMembers}

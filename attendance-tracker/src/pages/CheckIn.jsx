@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import CheckInWizard from '../components/CheckInWizard';
+import CheckoutReminder from '../components/CheckoutReminder';
 
 export default function CheckIn({ attendance }) {
   const {
@@ -33,6 +34,7 @@ export default function CheckIn({ attendance }) {
           Check Out
         </button>
       </div>
+      <CheckoutReminder />
       <CheckInWizard
         key={mode}
         members={members}
