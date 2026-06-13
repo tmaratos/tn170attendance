@@ -87,6 +87,19 @@ input, select, textarea {
   background: #020812;
 }
 
+.ipad-app-layout {
+  display: block;
+  min-height: 100vh;
+}
+
+.ipad-main-content {
+  margin-left: 0;
+  min-height: 100vh;
+  padding: 0;
+  overflow-y: auto;
+  background: #020812;
+}
+
 .page-header {
   margin-bottom: 24px;
 }

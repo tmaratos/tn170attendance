@@ -4,6 +4,7 @@ import { useState } from 'react';
 const NAV_ITEMS = [
   { to: '/', label: 'Dashboard', icon: 'home' },
   { to: '/check-in', label: 'Check In / Out', icon: 'login' },
+  { to: '/ipad-kiosk', label: 'iPad Kiosk', icon: 'tablet' },
   { to: '/guests', label: 'Guests', icon: 'user' },
   { to: '/attendance', label: 'Attendance List', icon: 'list' },
   { to: '/reports', label: 'Reports', icon: 'file' },
@@ -37,6 +38,12 @@ function NavIcon({ name }) {
         <path d="M10 7V5a2 2 0 0 1 2-2h7v18h-7a2 2 0 0 1-2-2v-2" />
         <path d="M3 12h11" />
         <path d="m11 8 4 4-4 4" />
+      </>
+    ),
+    tablet: (
+      <>
+        <rect x="5" y="2" width="14" height="20" rx="2" />
+        <path d="M12 18h.01" />
       </>
     ),
     user: (
