@@ -65,10 +65,12 @@ button {
   cursor: pointer;
   border: none;
   background: none;
+  touch-action: manipulation;
 }
 
 input, select, textarea {
   font-family: inherit;
+  font-size: 16px;
 }
 
 .app-layout {
@@ -333,6 +335,30 @@ input, select, textarea {
 .text-muted { color: var(--gray-500); }
 
 @media (max-width: 1024px) {
+  .main-content {
+    margin-left: 0;
+    padding: 72px 12px 12px;
+  }
+}
+
+@media (pointer: coarse) and (max-width: 1366px) {
+  .sidebar {
+    transform: translateX(-110%);
+    transition: transform 0.3s ease;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    border-radius: 0;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+  }
+
+  .mobile-menu-btn {
+    display: block;
+  }
+
   .main-content {
     margin-left: 0;
     padding: 72px 12px 12px;

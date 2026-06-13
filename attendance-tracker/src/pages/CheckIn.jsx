@@ -16,7 +16,7 @@ export default function CheckIn({ attendance }) {
   const [mode, setMode] = useState('check-in');
 
   return (
-    <div className="kiosk-page">
+    <div className="kiosk-page tablet-kiosk-page">
       <div className="kiosk-mode-toggle">
         <button
           type="button"

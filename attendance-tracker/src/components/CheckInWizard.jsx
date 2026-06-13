@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import SearchMember from './SearchMember';
 import PinPad from './PinPad';
 import { getInitials, formatTime } from '../data/mockData';
@@ -34,6 +34,9 @@ export default function CheckInWizard({
   const [pinError, setPinError] = useState('');
   const [loading, setLoading] = useState(false);
   const [timestamp, setTimestamp] = useState(null);
+  const [successMessage, setSuccessMessage] = useState('');
+  const searchInputRef = useRef(null);
+  const successTimerRef = useRef(null);
 
   const results = useMemo(() => searchMembers(query), [query, searchMembers]);
   const popularSearches = useMemo(() => {
@@ -42,6 +45,20 @@ export default function CheckInWizard({
   }, [compact, members]);
 
   const previewMember = selected || results[0] || members[0];
+  const actionLabel = mode === 'check-in' ? 'CHECK IN' : 'CHECK OUT';
+  const actionVerb = mode === 'check-in' ? 'checked in' : 'checked out';
+  const successLabel = mode === 'check-in' ? 'CHECKED IN!' : 'CHECKED OUT!';
+  const btnClass = mode === 'check-in' ? 'btn-green' : 'btn-red';
+
+  useEffect(() => {
+    if (!compact) {
+      searchInputRef.current?.focus();
+    }
+
+    return () => {
+      if (successTimerRef.current) clearTimeout(successTimerRef.current);
+    };
+  }, [compact]);
 
   const reset = () => {
     setStep(0);
@@ -55,9 +72,41 @@ export default function CheckInWizard({
     setTimestamp(null);
   };
 
+  const resetForNextPerson = (message) => {
+    setSuccessMessage(message);
+    setQuery('');
+    setSelected(null);
+    setPin('');
+    setConfirmPin('');
+    setPinMode('verify');
+    setPinError('');
+    setLoading(false);
+    setTimestamp(null);
+    window.setTimeout(() => searchInputRef.current?.focus(), 0);
+    if (successTimerRef.current) clearTimeout(successTimerRef.current);
+    successTimerRef.current = window.setTimeout(() => setSuccessMessage(''), 2600);
+  };
+
+  const resolvePinMode = (member = selected) => {
+    if (!member) return 'verify';
+    if (needsPinSetup?.(member.id)) return 'create';
+    if (memberHasPin?.(member.id)) return 'verify';
+    if (member.hasPin === false || member.pinResetRequired) return 'create';
+    return member.pin ? 'verify' : 'create';
+  };
+
   const handleSelect = (member) => {
     setSelected(member);
     setStep(1);
+  };
+
+  const handleKioskSelect = (member) => {
+    setSelected(member);
+    setPin('');
+    setConfirmPin('');
+    setPinError('');
+    setSuccessMessage('');
+    setPinMode(resolvePinMode(member));
   };
 
   const handlePinDigit = (digit) => {
@@ -70,18 +119,9 @@ export default function CheckInWizard({
     setConfirmPin((p) => p + digit);
   };
 
-  const resolvePinMode = () => {
-    if (!selected) return 'verify';
-    if (needsPinSetup?.(selected.id)) return 'create';
-    if (memberHasPin?.(selected.id)) return 'verify';
-    if (selected.hasPin === false || selected.pinResetRequired) return 'create';
-    return selected.pin ? 'verify' : 'create';
-  };
-
   const goToPin = () => {
     if (!selected) return;
-    const nextMode = isFirebase ? resolvePinMode() : (selected.pin ? 'verify' : 'create');
-    setPinMode(nextMode);
+    setPinMode(resolvePinMode(selected));
     setPin('');
     setConfirmPin('');
     setPinError('');
@@ -163,9 +203,67 @@ export default function CheckInWizard({
     }
   };
 
-  const actionLabel = mode === 'check-in' ? 'CHECK IN' : 'CHECK OUT';
-  const successLabel = mode === 'check-in' ? 'CHECKED IN!' : 'CHECKED OUT!';
-  const btnClass = mode === 'check-in' ? 'btn-green' : 'btn-red';
+  const submitKioskPin = async (pinToSubmit) => {
+    if (!selected || loading) return;
+
+    const member = selected;
+    setLoading(true);
+    setPinError('');
+
+    if (pinMode === 'create') {
+      setLoading(false);
+      setPin('');
+      setPinError('PIN setup is required. See a senior member.');
+      return;
+    }
+
+    try {
+      if (isFirebase) {
+        if (mode === 'check-in') {
+          await onCheckIn(member.id, pinToSubmit);
+        } else {
+          await onCheckOut(member.id, pinToSubmit);
+        }
+      } else {
+        if (!verifyPin(member.id, pinToSubmit)) {
+          setPin('');
+          setPinError('Incorrect PIN. Try again.');
+          setLoading(false);
+          return;
+        }
+        if (mode === 'check-in') {
+          onCheckIn(member.id);
+        } else {
+          onCheckOut(member.id);
+        }
+      }
+
+      resetForNextPerson(`${member.name} ${actionVerb}.`);
+    } catch (err) {
+      setPin('');
+      setPinError(getCallableError(err) || 'Incorrect PIN. Try again.');
+      setLoading(false);
+    }
+  };
+
+  const handleKioskDigit = (digit) => {
+    if (loading || pin.length >= 4) return;
+    const nextPin = `${pin}${digit}`;
+    setPin(nextPin);
+    setPinError('');
+    if (nextPin.length === 4) {
+      submitKioskPin(nextPin);
+    }
+  };
+
+  const closeKioskModal = () => {
+    setSelected(null);
+    setPin('');
+    setConfirmPin('');
+    setPinError('');
+    setLoading(false);
+    window.setTimeout(() => searchInputRef.current?.focus(), 0);
+  };
 
   const getPanelClass = (index) => {
     if (index === step) return 'active';
@@ -353,143 +451,172 @@ export default function CheckInWizard({
     );
   }
 
-  return (
-    <div className="kiosk-panel">
-      <h2 className="kiosk-title">Check In / Out Process</h2>
-      <p className="kiosk-subtitle">
-        {mode === 'check-in'
-          ? "Search for your name to check in to tonight's meeting"
-          : 'Search for your name to check out'}
-      </p>
+  const kioskResults = query.trim() ? results.slice(0, 8) : [];
 
-      <div className="wizard-steps">
-        {STEPS.map((s, i) => (
-          <div
-            key={s.label}
-            className={`wizard-step ${i === step ? 'active' : ''} ${i < step ? 'done' : ''}`}
-          >
-            <span className="wizard-step-num">{s.num}</span>
-            {s.label}
+  return (
+    <div className="kiosk-panel kiosk-touch-panel">
+      <div className="kiosk-touch-header">
+        <div>
+          <p className="kiosk-touch-kicker">{mode === 'check-in' ? 'Member Check In' : 'Member Check Out'}</p>
+          <h2>{mode === 'check-in' ? 'Search and tap your name' : 'Search and tap your name to check out'}</h2>
+        </div>
+        <span className={`kiosk-touch-status ${mode === 'check-in' ? 'in' : 'out'}`}>
+          {mode === 'check-in' ? 'Check In' : 'Check Out'}
+        </span>
+      </div>
+
+      <div className="kiosk-search-shell">
+        <label className="kiosk-search-label" htmlFor={`${mode}-member-search`}>
+          Name or CAPID
+        </label>
+        <input
+          id={`${mode}-member-search`}
+          ref={searchInputRef}
+          className="kiosk-search-input"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          inputMode="search"
+          autoCapitalize="none"
+          autoCorrect="off"
+          autoComplete="off"
+          spellCheck="false"
+          placeholder="Start typing a name or CAPID"
+        />
+      </div>
+
+      {successMessage && (
+        <div className="kiosk-success-message" role="status">
+          {successMessage}
+        </div>
+      )}
+
+      <div className="kiosk-results" aria-live="polite">
+        {!query.trim() && (
+          <div className="kiosk-empty-state">
+            Use the search box to find your name or CAPID.
           </div>
+        )}
+
+        {query.trim() && kioskResults.length === 0 && (
+          <div className="kiosk-empty-state">
+            No matching members found.
+          </div>
+        )}
+
+        {kioskResults.map((member) => (
+          <button
+            key={member.id}
+            type="button"
+            className="kiosk-member-button"
+            onClick={() => handleKioskSelect(member)}
+          >
+            <span className="kiosk-member-avatar">{getInitials(member.name)}</span>
+            <span className="kiosk-member-copy">
+              <strong>{member.name}</strong>
+              <small>{member.grade} <span aria-hidden="true">&bull;</span> CAPID: {member.capid}</small>
+            </span>
+            <span className="kiosk-member-action">Tap</span>
+          </button>
         ))}
       </div>
 
-      <div className="wizard-content">
-        {step === 0 && (
-          <SearchMember
-            query={query}
-            onQueryChange={setQuery}
-            results={results}
-            onSelect={handleSelect}
-            selectedId={selected?.id}
-            popularSearches={popularSearches}
-          />
-        )}
-
-        {step === 1 && selected && (
-          <div>
-            <MemberMini member={selected} />
-            <div className="wizard-nav">
-              <button type="button" className="btn btn-outline" onClick={() => setStep(0)}>
-                Back
-              </button>
-              <button type="button" className="btn btn-blue" onClick={goToPin}>
-                Continue
-              </button>
-            </div>
-          </div>
-        )}
-
-        {step === 2 && selected && (
-          <div>
-            <p className="kiosk-subtitle">
-              {pinMode === 'create'
-                ? `Create your 4-digit PIN, ${selected.name.split(' ')[0]}`
-                : `Enter your 4-digit PIN for ${selected.name}`}
-            </p>
-            {pinError && <div className="pin-error">{pinError}</div>}
-            <PinPad
-              pin={pin}
-              onDigit={handlePinDigit}
-              onBackspace={() => setPin((p) => p.slice(0, -1))}
-              onClear={() => { setPin(''); setPinError(''); }}
-            />
-            {pinMode === 'create' && pin.length === 4 && (
-              <>
-                <p className="kiosk-subtitle">Confirm your PIN</p>
-                <PinPad
-                  pin={confirmPin}
-                  onDigit={handleConfirmPinDigit}
-                  onBackspace={() => setConfirmPin((p) => p.slice(0, -1))}
-                  onClear={() => setConfirmPin('')}
-                />
-              </>
-            )}
-            <div className="wizard-nav">
-              <button type="button" className="btn btn-outline" onClick={() => setStep(1)}>
-                Back
-              </button>
-              <button
-                type="button"
-                className="btn btn-blue"
-                onClick={handlePinStepContinue}
-                disabled={
-                  loading ||
-                  pin.length !== 4 ||
-                  (pinMode === 'create' && confirmPin.length !== 4)
-                }
-              >
-                {loading ? 'Please wait...' : 'Continue'}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {step === 3 && selected && (
-          <div>
-            <div className="confirm-member">
-              <div className="confirm-avatar">{getInitials(selected.name)}</div>
-              <div className="confirm-name">{selected.name}</div>
-              <div className="confirm-meta">
-                {selected.grade} <span aria-hidden="true">&bull;</span> CAPID: {selected.capid}
+      {selected && (
+        <div className="pin-modal-backdrop" role="presentation">
+          <div
+            className="pin-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="pin-modal-title"
+          >
+            <div className="pin-modal-header">
+              <div>
+                <p>{actionLabel}</p>
+                <h3 id="pin-modal-title">{selected.name}</h3>
+                <span>{selected.grade} <span aria-hidden="true">&bull;</span> CAPID: {selected.capid}</span>
               </div>
-            </div>
-            {pinError && <div className="pin-error">{pinError}</div>}
-            <div className="confirm-actions">
               <button
                 type="button"
-                className={`btn btn-lg btn-block ${btnClass}`}
-                onClick={handleConfirm}
-                disabled={loading}
+                className="pin-modal-cancel-top"
+                onClick={closeKioskModal}
+                aria-label="Cancel PIN entry"
               >
-                {loading ? 'Processing...' : actionLabel}
-              </button>
-              <button type="button" className="btn btn-outline btn-block" onClick={reset}>
                 Cancel
               </button>
             </div>
-          </div>
-        )}
 
-        {step === 4 && (
-          <div className="success-screen">
-            <div className={`success-icon ${mode === 'check-in' ? 'in' : 'out'}`}>
-              <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="m5 12 4 4L19 6" />
-              </svg>
+            <div className="pin-entry-display" aria-label={`${pin.length} of 4 PIN digits entered`}>
+              {Array.from({ length: 4 }).map((_, index) => (
+                <span key={index} className={index < pin.length ? 'filled' : ''} />
+              ))}
             </div>
-            <div className={`success-title ${mode === 'check-in' ? 'in' : 'out'}`}>
-              {successLabel}
+
+            {pinError && (
+              <div className="pin-modal-error" role="alert">
+                {pinError}
+              </div>
+            )}
+
+            {loading && (
+              <div className="pin-modal-working" role="status">
+                Checking PIN...
+              </div>
+            )}
+
+            <div className="pin-modal-pad">
+              {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
+                <button
+                  key={digit}
+                  type="button"
+                  className="pin-modal-key"
+                  onClick={() => handleKioskDigit(digit)}
+                  disabled={loading}
+                >
+                  {digit}
+                </button>
+              ))}
+              <button
+                type="button"
+                className="pin-modal-key secondary"
+                onClick={() => {
+                  setPin('');
+                  setPinError('');
+                }}
+                disabled={loading || pin.length === 0}
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                className="pin-modal-key"
+                onClick={() => handleKioskDigit('0')}
+                disabled={loading}
+              >
+                0
+              </button>
+              <button
+                type="button"
+                className="pin-modal-key secondary"
+                onClick={() => {
+                  setPin((current) => current.slice(0, -1));
+                  setPinError('');
+                }}
+                disabled={loading || pin.length === 0}
+              >
+                Back
+              </button>
             </div>
-            <div className="success-time">
-              {timestamp && formatTime(timestamp)}
-            </div>
-            <button type="button" className="btn btn-blue btn-lg" onClick={reset}>
-              Done
+
+            <button
+              type="button"
+              className="pin-modal-cancel"
+              onClick={closeKioskModal}
+              disabled={loading}
+            >
+              Cancel
             </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

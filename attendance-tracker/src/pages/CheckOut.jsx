@@ -14,7 +14,7 @@ export default function CheckOut({ attendance }) {
   } = attendance;
 
   return (
-    <div className="kiosk-page">
+    <div className="kiosk-page tablet-kiosk-page">
       <CheckOutWizard
         members={members}
         searchMembers={searchMembers}
