@@ -88,8 +88,46 @@ export default function GuestSignIn({ attendance }) {
     }
   };
 
+  const continueFromGuestName = () => {
+    if (!guestName.trim()) return;
+    setStep(1);
+  };
+
+  const continueFromHost = () => {
+    if (selectedHost) {
+      setStep(2);
+      return;
+    }
+    if (seniorMembers.length === 1) {
+      setSelectedHost(seniorMembers[0]);
+      setStep(2);
+    }
+  };
+
+  const handleFlowEnter = (event) => {
+    if (event.key !== 'Enter') return;
+    if (event.target.closest?.('button,a')) return;
+    event.preventDefault();
+
+    if (step === 0) {
+      continueFromGuestName();
+      return;
+    }
+    if (step === 1) {
+      continueFromHost();
+      return;
+    }
+    if (step === 2 && pin.length === 4) {
+      verifyHostPin();
+      return;
+    }
+    if (step === 3 && !loading) {
+      confirmGuestSignIn();
+    }
+  };
+
   return (
-    <div className="public-flow-page guest-flow">
+    <div className="public-flow-page guest-flow" onKeyDown={handleFlowEnter}>
       <div className="public-flow-shell">
         <div className="public-flow-header">
           <Link to="/" className="public-back-link">Home</Link>
@@ -153,7 +191,7 @@ export default function GuestSignIn({ attendance }) {
               <button
                 type="button"
                 className="public-confirm-button guest"
-                onClick={() => setStep(1)}
+                onClick={continueFromGuestName}
                 disabled={!guestName.trim()}
               >
                 Continue
@@ -170,6 +208,14 @@ export default function GuestSignIn({ attendance }) {
                 value={hostQuery}
                 onChange={(event) => setHostQuery(event.target.value)}
                 placeholder="Search host name or CAPID"
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && seniorMembers.length === 1) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setSelectedHost(seniorMembers[0]);
+                    setStep(2);
+                  }
+                }}
               />
               <div className="public-member-results">
                 {seniorMembers.map((member) => (
@@ -189,7 +235,7 @@ export default function GuestSignIn({ attendance }) {
               </div>
               <div className="public-flow-actions">
                 <button type="button" className="btn btn-outline" onClick={() => setStep(0)}>Back</button>
-                <button type="button" className="btn btn-blue" onClick={() => setStep(2)} disabled={!selectedHost}>Continue</button>
+                <button type="button" className="btn btn-blue" onClick={continueFromHost} disabled={!selectedHost && seniorMembers.length !== 1}>Continue</button>
               </div>
             </div>
           )}

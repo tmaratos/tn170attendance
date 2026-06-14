@@ -18,13 +18,17 @@ export default function PrintableAttendanceLog({ members, guests, settings }) {
   const checkedIn = members.filter((member) => member.status === 'checked-in').length;
   const checkedOut = members.filter((member) => member.status === 'checked-out').length;
   const guestsPresent = guests.filter((guest) => guest.status === 'checked-in').length;
+  const logoSrc = `${import.meta.env.BASE_URL}squadron-logo.jpeg`;
 
   return (
     <section className="print-attendance-log" aria-label="Printable attendance log">
       <header className="print-log-header">
-        <div>
-          <h1>{settings.squadronName}</h1>
-          <p>{settings.squadronDesignator} Attendance Log</p>
+        <div className="print-log-brand">
+          <img src={logoSrc} alt="Oak Ridge Composite Squadron patch" />
+          <div>
+            <h1>{settings.squadronName}</h1>
+            <p>{settings.squadronDesignator} Attendance Log</p>
+          </div>
         </div>
         <div>
           <strong>{shortDateStr}</strong>

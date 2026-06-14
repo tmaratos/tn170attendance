@@ -169,8 +169,33 @@ export default function PublicMemberFlow({
     setter((current) => (current.length < 4 ? `${current}${digit}` : current));
   };
 
+  const handleFlowEnter = (event) => {
+    if (event.key !== 'Enter') return;
+    if (event.target.closest?.('button,a')) return;
+    event.preventDefault();
+
+    if (step === 0 && results.length === 1) {
+      selectMember(results[0]);
+      return;
+    }
+
+    if (
+      step === 1 &&
+      !loading &&
+      pin.length === 4 &&
+      (!pinSetupRequired || confirmPin.length === 4)
+    ) {
+      verifyOrCreatePin();
+      return;
+    }
+
+    if (step === 2 && !loading) {
+      confirmAction();
+    }
+  };
+
   return (
-    <div className={`public-flow-page ${actionClass}`}>
+    <div className={`public-flow-page ${actionClass}`} onKeyDown={handleFlowEnter}>
       <div className="public-flow-shell">
         <div className="public-flow-header">
           <Link to="/" className="public-back-link">Home</Link>
@@ -202,6 +227,13 @@ export default function PublicMemberFlow({
                 autoCapitalize="none"
                 autoCorrect="off"
                 placeholder="Start typing..."
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && results.length > 0) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    selectMember(results[0]);
+                  }
+                }}
               />
               <div className="public-member-results">
                 {query.trim() && results.length === 0 && (

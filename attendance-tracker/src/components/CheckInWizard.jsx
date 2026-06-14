@@ -309,6 +309,23 @@ export default function CheckInWizard({
     window.setTimeout(() => searchInputRef.current?.focus(), 0);
   };
 
+  const handleKioskEnter = (event) => {
+    if (event.key !== 'Enter') return;
+    if (event.target.closest?.('button,a')) return;
+    event.preventDefault();
+
+    if (selected) {
+      if (pinMode === 'create' && pin.length === 4 && confirmPin.length === 4) {
+        submitKioskPin(pin);
+      }
+      return;
+    }
+
+    if (query.trim() && kioskResults.length > 0) {
+      handleKioskSelect(kioskResults[0]);
+    }
+  };
+
   const getPanelClass = (index) => {
     if (index === step) return 'active';
     if (index < step) return 'done';
@@ -498,7 +515,7 @@ export default function CheckInWizard({
   const kioskResults = query.trim() ? results.slice(0, 8) : [];
 
   return (
-    <div className="kiosk-panel kiosk-touch-panel">
+    <div className="kiosk-panel kiosk-touch-panel" onKeyDown={handleKioskEnter}>
       <div className="kiosk-touch-header">
         <div>
           <p className="kiosk-touch-kicker">{mode === 'check-in' ? 'Member Check In' : 'Member Check Out'}</p>
@@ -525,6 +542,13 @@ export default function CheckInWizard({
           autoComplete="off"
           spellCheck="false"
           placeholder="Start typing a name or CAPID"
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && kioskResults.length > 0) {
+              event.preventDefault();
+              event.stopPropagation();
+              handleKioskSelect(kioskResults[0]);
+            }
+          }}
         />
       </div>
 

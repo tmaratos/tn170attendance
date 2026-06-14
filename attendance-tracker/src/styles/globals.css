@@ -444,6 +444,20 @@ input, select, textarea {
     border-bottom: 2px solid #111827;
   }
 
+  .print-log-brand {
+    display: flex !important;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .print-log-brand img {
+    display: block !important;
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+
   .print-log-header h1 {
     margin: 0;
     color: #111827;
