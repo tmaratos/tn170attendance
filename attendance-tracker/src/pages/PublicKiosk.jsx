@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
 import CheckoutReminder from '../components/CheckoutReminder';
-import KioskModeBanner from '../components/KioskModeBanner';
 import { formatTime } from '../data/mockData';
 import { useLocalTime } from '../hooks/useLocalTime';
 import {
@@ -102,16 +101,13 @@ function KioskStatusPanel({ members, guests, now }) {
 }
 
 export default function PublicKiosk({ attendance }) {
-  const { members, guests, settings, isKioskMode } = attendance;
+  const { members, guests, settings } = attendance;
   const { now, dateStr, timeStr } = useLocalTime();
   const meetingStatus = getMeetingStatus(settings, now);
   const logoSrc = `${import.meta.env.BASE_URL}squadron-logo.jpeg`;
 
   return (
     <div className="public-kiosk-page">
-      {isKioskMode && (
-        <KioskModeBanner settings={settings} usingLocalRoster={attendance.usingLocalRoster} />
-      )}
       <div className="public-kiosk-body">
         <main className="public-kiosk-shell">
           <section className="public-kiosk-hero">

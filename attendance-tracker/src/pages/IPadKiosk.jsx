@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import CheckInWizard from '../components/CheckInWizard';
 import CheckoutReminder from '../components/CheckoutReminder';
-import KioskModeBanner from '../components/KioskModeBanner';
 import LocalClock from '../components/LocalClock';
 import { formatTime, getInitials } from '../data/mockData';
 import { useLocalTime } from '../hooks/useLocalTime';
@@ -17,8 +16,6 @@ export default function IPadKiosk({ attendance }) {
     checkInMember,
     checkOutMember,
     isFirebase,
-    isKioskMode,
-    usingLocalRoster,
     memberHasPin,
     needsPinSetup,
     createMemberPin,
@@ -35,9 +32,6 @@ export default function IPadKiosk({ attendance }) {
 
   return (
     <div className="ipad-kiosk-root">
-      {isKioskMode && (
-        <KioskModeBanner settings={settings} usingLocalRoster={attendance.usingLocalRoster} />
-      )}
       <header className="ipad-kiosk-header">
         <div className="ipad-brand">
           <img src={logoSrc} alt="Squadron Logo" />
