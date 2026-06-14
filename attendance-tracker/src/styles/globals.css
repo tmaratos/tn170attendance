@@ -45,11 +45,11 @@
 
 html, body, #root {
   width: 100%;
-  min-height: 100%;
   min-height: 100dvh;
 }
 
 body {
+  min-height: 100dvh;
   font-family: var(--font);
   background: #020812;
   color: var(--gray-800);
@@ -103,9 +103,7 @@ input, select, textarea {
   margin-left: 0;
   width: 100%;
   max-width: none;
-  min-height: 100vh;
   min-height: 100dvh;
-  height: 100vh;
   height: 100dvh;
   padding: 0;
   overflow: hidden;

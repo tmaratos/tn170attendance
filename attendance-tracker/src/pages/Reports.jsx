@@ -111,7 +111,7 @@ export default function Reports({ attendance }) {
           seniorSession={seniorSession}
           addActivity={addActivity}
           title="Full Attendance CSV"
-          description="Export all member and guest attendance records for tonight's meeting, including members not yet checked in."
+          description="Export all member and guest attendance records with Type column, CAPID, check-in/out times, and force-action notes."
         />
 
         {isCloudBackend && (

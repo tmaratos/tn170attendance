@@ -380,7 +380,7 @@
 .pin-pad {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 5px;
+  gap: 8px;
 }
 
 .pin-pad-compact .pin-key {
@@ -389,8 +389,8 @@
 }
 
 .pin-key {
-  aspect-ratio: 1.45;
-  min-height: 40px;
+  aspect-ratio: 1;
+  min-height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -408,7 +408,11 @@
 }
 
 .pin-key.action {
-  font-size: 0.56rem;
+  aspect-ratio: auto;
+  font-size: clamp(0.62rem, 2.8vw, 0.75rem);
+  font-weight: 800;
+  line-height: 1.1;
+  padding: 4px 2px;
 }
 
 .confirm-member {
@@ -1243,8 +1247,10 @@
 }
 
 .pin-modal-key.secondary {
-  font-size: 1.08rem;
+  font-size: clamp(0.82rem, 2.5vw, 1.08rem);
   color: #08347c;
+  line-height: 1.1;
+  padding: 4px;
 }
 
 .pin-modal-key:disabled {
@@ -1393,13 +1399,16 @@
 .admin-login-page {
   width: 100%;
   max-width: none;
-  height: 100vh;
-  height: 100dvh;
+  min-height: 100dvh;
   max-height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left));
+  padding:
+    max(8px, env(safe-area-inset-top))
+    max(12px, env(safe-area-inset-right))
+    0
+    max(12px, env(safe-area-inset-left));
   background:
     radial-gradient(circle at 50% -10%, rgba(212, 160, 23, 0.14), transparent 32%),
     linear-gradient(180deg, #061f43 0%, #03162c 52%, #020914 100%);
@@ -1884,7 +1893,7 @@
   flex: 1;
   min-height: 0;
   width: min(1200px, 100%);
-  margin: 0 auto;
+  margin-inline: auto;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1893,10 +1902,12 @@
 .public-flow-card {
   flex: 1;
   min-height: 0;
+  width: min(100%, 960px);
+  margin-inline: auto;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: clamp(18px, 3vw, 30px);
+  padding: clamp(14px, 2.5vw, 30px);
 }
 
 .public-flow-section {
@@ -2126,7 +2137,7 @@
 
 .pin-section {
   width: min(560px, 100%);
-  margin: 0 auto;
+  margin-inline: auto;
 }
 
 .pin-section .pin-pad {
@@ -2274,7 +2285,7 @@
 }
 
 .public-success-screen {
-  min-height: 500px;
+  min-height: min(420px, 55dvh);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -2325,19 +2336,22 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding-bottom: max(24px, env(safe-area-inset-bottom));
+  justify-content: flex-start;
+  padding-top: max(8px, env(safe-area-inset-top));
+  padding-bottom: max(16px, env(safe-area-inset-bottom));
   overflow-y: auto;
 }
 
 .admin-login-page .admin-login-card {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   width: min(640px, 100%);
-  margin: auto 0;
+  margin-inline: auto;
+  margin-block: 0;
 }
 
 .admin-login-card {
   width: min(640px, 100%);
+  margin-inline: auto;
   padding: 24px;
   text-align: center;
 }
@@ -2580,6 +2594,41 @@
 
   .public-status-panel {
     max-height: min(200px, 26dvh);
+  }
+}
+
+@media (max-width: 768px) {
+  .admin-login-card {
+    padding: 16px;
+  }
+
+  .admin-login-card img {
+    width: 88px;
+    height: 88px;
+    margin: 0 auto 8px;
+  }
+
+  .admin-login-card h1 {
+    font-size: 1.75rem;
+    margin: 6px 0 2px;
+  }
+
+  .admin-login-card > span {
+    margin-bottom: 12px;
+    font-size: 0.92rem;
+  }
+
+  .admin-login-card strong {
+    font-size: 1.2rem;
+  }
+
+  .public-flow-title h1 {
+    font-size: clamp(1.6rem, 7vw, 2.2rem);
+    margin: 2px 0 12px;
+  }
+
+  .public-flow-card {
+    padding: 14px;
   }
 }
 

@@ -98,7 +98,7 @@ export default function PinPad({
             className={`pin-key ${key === 'clear' || key === 'back' ? 'action' : ''}`}
             onClick={() => handleKey(key)}
           >
-            {key === 'back' ? 'DEL' : key === 'clear' ? 'CLR' : key}
+            {key === 'back' ? 'Backspace' : key === 'clear' ? 'Clear' : key}
           </button>
         ))}
       </div>

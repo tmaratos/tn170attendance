@@ -5,35 +5,83 @@ import { getCallableError } from './errors';
 import { formatTime, formatDuration } from '../data/mockData';
 import { ADMIN_CAPIDS, getEmbeddedRosterMembers } from '../data/rosterData';
 
+const CSV_HEADERS = [
+  'Type',
+  'Name',
+  'CAPID/Pending CAPID',
+  'Role',
+  'Hosted By',
+  'Check-In',
+  'Check-Out',
+  'Duration',
+  'Status',
+  'Force Action Note',
+];
+
 function escapeCsvCell(value) {
   return `"${String(value ?? '').replace(/"/g, '""')}"`;
 }
 
-export function buildAttendanceCsv(members, guests) {
-  const headers = ['Name', 'Grade', 'CAPID', 'Role', 'Status', 'Check In', 'Check Out', 'Duration'];
-  const memberRows = (members || []).map((m) => [
-    m.name,
-    m.grade,
-    m.capid,
-    m.role,
-    m.status === 'checked-in' ? 'Checked In' : m.status === 'checked-out' ? 'Checked Out' : 'Not Present',
-    formatTime(m.checkInTime),
-    formatTime(m.checkOutTime),
-    formatDuration(m.checkInTime, m.checkOutTime),
-  ]);
-  const guestRows = (guests || []).map((g) => [
-    g.name,
-    '—',
-    '—',
-    'Guest',
-    g.status === 'checked-in' ? 'Present' : 'Signed Out',
-    formatTime(g.checkInTime),
-    formatTime(g.checkOutTime),
-    formatDuration(g.checkInTime, g.checkOutTime),
-  ]);
+function statusLabel(status) {
+  if (status === 'checked-in' || status === 'checked_in') return 'Checked In';
+  if (status === 'checked-out' || status === 'checked_out') return 'Checked Out';
+  return 'Not Present';
+}
 
-  const rows = [headers, ...memberRows, ...guestRows];
-  return rows.map((r) => r.map(escapeCsvCell).join(',')).join('\n');
+function guestStatusLabel(status) {
+  if (status === 'checked-in' || status === 'checked_in') return 'Present';
+  if (status === 'checked-out' || status === 'checked_out') return 'Signed Out';
+  return 'Not Present';
+}
+
+function memberCapidLabel(member) {
+  if (member.capid && member.capid !== '—') return member.capid;
+  if (member.temporaryId) return member.temporaryId;
+  if (member.capidRaw) return member.capidRaw;
+  return 'Pending CAPID';
+}
+
+function forceActionNote(record) {
+  if (!record?.forceAction || !record?.forceNote) return '';
+  const type = record.forceType === 'system' ? 'System force logout' : 'Admin force logout';
+  return `${type}: ${record.forceNote}`;
+}
+
+export function buildMemberExportRow(member) {
+  return [
+    'Member',
+    member.name,
+    memberCapidLabel(member),
+    member.role || '',
+    '',
+    formatTime(member.checkInTime),
+    formatTime(member.checkOutTime),
+    formatDuration(member.checkInTime, member.checkOutTime),
+    statusLabel(member.status),
+    forceActionNote(member),
+  ];
+}
+
+export function buildGuestExportRow(guest) {
+  return [
+    'Guest',
+    guest.name,
+    '',
+    '',
+    guest.hostName || guest.host || '',
+    formatTime(guest.checkInTime),
+    formatTime(guest.checkOutTime),
+    formatDuration(guest.checkInTime, guest.checkOutTime),
+    guestStatusLabel(guest.status),
+    '',
+  ];
+}
+
+export function buildAttendanceCsv(members, guests) {
+  const memberRows = (members || []).map(buildMemberExportRow);
+  const guestRows = (guests || []).map(buildGuestExportRow);
+  const rows = [CSV_HEADERS, ...memberRows, ...guestRows];
+  return rows.map((row) => row.map(escapeCsvCell).join(',')).join('\n');
 }
 
 function defaultExportFilename() {

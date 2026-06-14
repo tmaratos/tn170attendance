@@ -15,13 +15,13 @@ function downloadLocalCsv(members, guests) {
 
 export default function AttendanceCsvExport({
   members,
-  guests,
+  guests = [],
   isFirebase,
   meeting,
   seniorSession,
   addActivity,
   title = 'Export Attendance CSV',
-  description = 'Download the full roster with check-in/out times and guest records.',
+  description = 'Download members and guests with Type, CAPID, check-in/out times, and force-action notes.',
   buttonClassName = 'btn btn-blue',
   showAuth = true,
 }) {

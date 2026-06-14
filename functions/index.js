@@ -965,13 +965,15 @@ exports.exportReport = onCall(callableOptions, async (request) => {
     const r = d.data();
     return {
       name: r.memberName,
-      grade: r.grade,
-      capid: r.capid,
+      capid: r.capid || r.temporaryId || 'Pending CAPID',
       role: r.role,
       status: r.status,
       checkIn: r.checkInTime?.toDate?.()?.toISOString() || '',
       checkOut: r.checkOutTime?.toDate?.()?.toISOString() || '',
       durationMinutes: r.durationMinutes,
+      forceAction: !!r.forceAction,
+      forceType: r.forceType || null,
+      forceNote: r.notes || r.forceNote || '',
     };
   });
 
@@ -987,21 +989,90 @@ exports.exportReport = onCall(callableOptions, async (request) => {
     };
   });
 
+  const formatExportTime = (value) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  };
+
+  const formatExportDuration = (checkIn, checkOut, durationMinutes) => {
+    if (durationMinutes != null && durationMinutes !== '') return `${durationMinutes}m`;
+    if (!checkIn || !checkOut) return '';
+    const ms = new Date(checkOut) - new Date(checkIn);
+    const hours = Math.floor(ms / 3600000);
+    const minutes = Math.floor((ms % 3600000) / 60000);
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
+  };
+
+  const memberStatusLabel = (status) => {
+    if (status === 'checked_in') return 'Checked In';
+    if (status === 'checked_out') return 'Checked Out';
+    return 'Not Present';
+  };
+
+  const guestStatusLabel = (status) => {
+    if (status === 'checked_in') return 'Present';
+    if (status === 'checked_out') return 'Signed Out';
+    return 'Not Present';
+  };
+
+  const forceActionNote = (record) => {
+    if (!record.forceAction || !record.forceNote) return '';
+    const type = record.forceType === 'system' ? 'System force logout' : 'Admin force logout';
+    return `${type}: ${record.forceNote}`;
+  };
+
   let content = '';
   let mimeType = 'text/csv';
 
   if (exportFormat === 'csv') {
-    const headers = ['Name', 'Grade', 'CAPID', 'Role', 'Status', 'Check-In', 'Check-Out', 'Duration (min)'];
+    const headers = [
+      'Type',
+      'Name',
+      'CAPID/Pending CAPID',
+      'Role',
+      'Hosted By',
+      'Check-In',
+      'Check-Out',
+      'Duration',
+      'Status',
+      'Force Action Note',
+    ];
+    const escapeCell = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
     const rows = [
       headers.join(','),
       ...memberRows.map((r) =>
-        [r.name, r.grade, r.capid, r.role, r.status, r.checkIn, r.checkOut, r.durationMinutes ?? '']
-          .map((c) => `"${String(c).replace(/"/g, '""')}"`)
+        [
+          'Member',
+          r.name,
+          r.capid,
+          r.role,
+          '',
+          formatExportTime(r.checkIn),
+          formatExportTime(r.checkOut),
+          formatExportDuration(r.checkIn, r.checkOut, r.durationMinutes),
+          memberStatusLabel(r.status),
+          forceActionNote(r),
+        ]
+          .map(escapeCell)
           .join(',')
       ),
       ...guestRows.map((r) =>
-        [r.name, '—', '—', 'Guest', r.status, r.checkIn, r.checkOut, r.durationMinutes ?? '']
-          .map((c) => `"${String(c).replace(/"/g, '""')}"`)
+        [
+          'Guest',
+          r.name,
+          '',
+          '',
+          r.host,
+          formatExportTime(r.checkIn),
+          formatExportTime(r.checkOut),
+          formatExportDuration(r.checkIn, r.checkOut, r.durationMinutes),
+          guestStatusLabel(r.status),
+          '',
+        ]
+          .map(escapeCell)
           .join(',')
       ),
     ];

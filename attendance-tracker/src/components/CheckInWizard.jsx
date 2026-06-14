@@ -712,7 +712,7 @@ export default function CheckInWizard({
                 }}
                 disabled={loading || pin.length === 0}
               >
-                Back
+                Backspace
               </button>
             </div>
 
