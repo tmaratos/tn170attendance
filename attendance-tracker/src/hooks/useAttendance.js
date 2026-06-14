@@ -1,11 +1,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   MOCK_MEMBERS,
-  MOCK_GUESTS,
-  MOCK_ACTIVITY,
   DEFAULT_SETTINGS,
   getEmbeddedRosterMembers,
-  buildInitialKioskLocalState,
+  buildEmptyKioskLocalState,
 } from '../data/mockData';
 import { isFirebaseConfigured, isSparkKioskMode } from '../services/firebase';
 import { verifyKioskPin } from '../services/kioskPin';
@@ -48,8 +46,8 @@ import {
 import { isAfterSystemForceCheckoutTime } from '../utils/timeRules';
 import { ADMIN_CAPIDS } from '../data/rosterData';
 
-const STORAGE_KEY = 'tn170-attendance';
-const KIOSK_STORAGE_KEY = 'tn170-kiosk-local';
+const STORAGE_KEY = 'tn170-attendance-v2';
+const KIOSK_STORAGE_KEY = 'tn170-kiosk-local-v3';
 const SENIOR_SESSION_KEY = 'tn170-senior-session';
 const SYSTEM_FORCE_KEY_PREFIX = 'tn170-system-force-checkout';
 
@@ -77,8 +75,8 @@ function loadMockState() {
   }
   return {
     members: MOCK_MEMBERS,
-    guests: MOCK_GUESTS,
-    activity: MOCK_ACTIVITY,
+    guests: [],
+    activity: [],
     settings: DEFAULT_SETTINGS,
     recurringGuests: [],
   };
@@ -135,12 +133,7 @@ function loadKioskLocalState() {
     if (stored) {
       const parsed = JSON.parse(stored);
       return {
-        settings: DEFAULT_SETTINGS,
-        recurringGuests: [],
-        guests: MOCK_GUESTS,
-        activity: MOCK_ACTIVITY,
-        pins: {},
-        attendance: {},
+        ...buildEmptyKioskLocalState(),
         ...parsed,
         settings: { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) },
       };
@@ -149,9 +142,8 @@ function loadKioskLocalState() {
     /* seed fresh below */
   }
 
-  const seeded = buildInitialKioskLocalState();
   return {
-    ...seeded,
+    ...buildEmptyKioskLocalState(),
     settings: DEFAULT_SETTINGS,
   };
 }
@@ -490,9 +482,8 @@ function useSparkKioskAttendance() {
   }, []);
 
   const resetData = useCallback(() => {
-    const seeded = buildInitialKioskLocalState();
     const fresh = {
-      ...seeded,
+      ...buildEmptyKioskLocalState(),
       settings: DEFAULT_SETTINGS,
     };
     setLocalState(fresh);
@@ -883,8 +874,8 @@ function useMockAttendance() {
   const resetData = useCallback(() => {
     const fresh = {
       members: MOCK_MEMBERS,
-      guests: MOCK_GUESTS,
-      activity: MOCK_ACTIVITY,
+      guests: [],
+      activity: [],
       settings: DEFAULT_SETTINGS,
       recurringGuests: [],
     };
