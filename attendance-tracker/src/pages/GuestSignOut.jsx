@@ -52,6 +52,7 @@ export default function GuestSignOut({ attendance }) {
     setSelectedGuest(guest);
     setGuestQuery(guest.name);
     setError('');
+    setStep(1);
   };
 
   const continueFromGuest = () => {
@@ -179,14 +180,6 @@ export default function GuestSignOut({ attendance }) {
                     ))}
                   </>
                 )}
-                <button
-                  type="button"
-                  className="public-confirm-button guest-out"
-                  onClick={continueFromGuest}
-                  disabled={!selectedGuest}
-                >
-                  Continue
-                </button>
                 <p className="public-flow-alt-link">
                   Need to sign someone in?{' '}
                   <Link to="/guest-sign-in">Go to Guest Sign In</Link>

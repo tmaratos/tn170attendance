@@ -175,9 +175,9 @@ export async function verifyPinAndCheckIn(capid, pin) {
   return result.data;
 }
 
-export async function verifyPinAndCheckOut(capid, pin) {
+export async function verifyPinAndCheckOut(capid) {
   const fn = callFunction('verifyPinAndCheckOut');
-  const result = await fn({ capid: String(capid), pin });
+  const result = await fn({ capid: String(capid) });
   return result.data;
 }
 

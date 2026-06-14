@@ -330,11 +330,16 @@ exports.verifyPinAndCheckIn = onCall(callableOptions, async (request) => {
 });
 
 exports.verifyPinAndCheckOut = onCall(callableOptions, async (request) => {
-  const { capid, pin } = request.data || {};
+  const { capid } = request.data || {};
   const memberId = String(capid);
-  validatePin(pin);
+  if (!memberId) {
+    throw new HttpsError('invalid-argument', 'Member CAPID is required.');
+  }
 
-  const member = await verifyActorPin(memberId, pin);
+  const member = await getMember(memberId);
+  if (!member || member.active === false) {
+    throw new HttpsError('not-found', 'Member not found.');
+  }
   const meeting = await getOrCreateTodaysMeeting();
 
   const openRecord = await getOpenAttendanceRecord(meeting.id, memberId);
