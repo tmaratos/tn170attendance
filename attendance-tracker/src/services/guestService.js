@@ -25,6 +25,9 @@ function mapGuestAttendance(docSnap) {
     status: data.status,
     checkInTime: timestampToIso(data.checkInTime),
     checkOutTime: timestampToIso(data.checkOutTime),
+    forceAction: !!data.forceAction,
+    forceType: data.forceType || null,
+    forceNote: data.forceNote || data.notes || null,
     meetingId: data.meetingId,
   };
 }

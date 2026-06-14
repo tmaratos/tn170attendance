@@ -31,6 +31,10 @@ export function toUiMember(memberDoc, attendanceRecord = null) {
     status,
     checkInTime: attendanceRecord?.checkInTime || null,
     checkOutTime: attendanceRecord?.checkOutTime || null,
+    forceAction: !!attendanceRecord?.forceAction,
+    forceType: attendanceRecord?.forceType || null,
+    forceNote: attendanceRecord?.notes || null,
+    checkedOutBy: attendanceRecord?.checkedOutBy || null,
     attendanceRecordId: attendanceRecord?.id || null,
   };
 }

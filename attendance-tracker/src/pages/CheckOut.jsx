@@ -1,5 +1,4 @@
-import CheckOutWizard from '../components/CheckOutWizard';
-import CheckoutReminder from '../components/CheckoutReminder';
+import PublicMemberFlow from '../components/PublicMemberFlow';
 
 export default function CheckOut({ attendance }) {
   const {
@@ -15,19 +14,17 @@ export default function CheckOut({ attendance }) {
   } = attendance;
 
   return (
-    <div className="kiosk-page tablet-kiosk-page">
-      <CheckoutReminder />
-      <CheckOutWizard
-        members={members}
-        searchMembers={searchMembers}
-        verifyPin={verifyPin}
-        onCheckIn={checkInMember}
-        onCheckOut={checkOutMember}
-        isFirebase={isFirebase}
-        memberHasPin={memberHasPin}
-        needsPinSetup={needsPinSetup}
-        createMemberPin={createMemberPin}
-      />
-    </div>
+    <PublicMemberFlow
+      mode="check-out"
+      members={members}
+      searchMembers={searchMembers}
+      verifyPin={verifyPin}
+      onCheckIn={checkInMember}
+      onCheckOut={checkOutMember}
+      isFirebase={isFirebase}
+      memberHasPin={memberHasPin}
+      needsPinSetup={needsPinSetup}
+      createMemberPin={createMemberPin}
+    />
   );
 }

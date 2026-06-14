@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import PinPad from '../components/PinPad';
 import { getInitials } from '../data/mockData';
+import { useLocalTime } from '../hooks/useLocalTime';
+import { isAfterSystemForceCheckoutTime } from '../utils/timeRules';
 
 export default function AdminTools({ attendance }) {
   const {
@@ -30,6 +32,8 @@ export default function AdminTools({ attendance }) {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [resetTarget, setResetTarget] = useState('');
+  const { now } = useLocalTime();
+  const forceCheckoutDue = isAfterSystemForceCheckoutTime(now);
 
   const results = useMemo(() => searchMembers(query), [query, searchMembers]);
 
@@ -68,14 +72,18 @@ export default function AdminTools({ attendance }) {
           await forceCheckInMember(memberId, adminPin);
           setMessage('Member force checked in.');
         } else {
-          await forceCheckOutMember(memberId, adminPin);
+          await forceCheckOutMember(
+            memberId,
+            adminPin,
+            'Admin force logout - manually signed out by senior member.'
+          );
           setMessage('Member force checked out.');
         }
       } else if (action === 'check-in') {
         checkInMember(memberId, true);
         setMessage('Member force checked in.');
       } else {
-        checkOutMember(memberId, true);
+        checkOutMember(memberId, true, 'Admin force logout - manually signed out by senior member.');
         setMessage('Member force checked out.');
       }
       setTimeout(() => setMessage(''), 3000);
@@ -187,6 +195,16 @@ export default function AdminTools({ attendance }) {
                       {member.status === 'checked-in' ? 'Checked In' : member.status === 'checked-out' ? 'Checked Out' : 'Not Present'}
                     </span>
                   </span>
+                  {forceCheckoutDue && member.status === 'checked-in' && (
+                    <span className="force-note due">
+                      System force checkout due at 9:30 PM.
+                    </span>
+                  )}
+                  {member.forceAction && member.forceNote && (
+                    <span className={`force-note ${member.forceType === 'system' ? 'system' : 'admin'}`}>
+                      {member.forceType === 'system' ? 'System force logout' : 'Admin force logout'}: {member.forceNote}
+                    </span>
+                  )}
                 </div>
               </div>
               <button

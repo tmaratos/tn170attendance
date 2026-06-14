@@ -24,6 +24,7 @@ export default function CheckInWizard({
   memberHasPin,
   needsPinSetup,
   createMemberPin,
+  refreshOnSuccess = false,
 }) {
   const [step, setStep] = useState(0);
   const [query, setQuery] = useState('');
@@ -84,7 +85,13 @@ export default function CheckInWizard({
     setTimestamp(null);
     window.setTimeout(() => searchInputRef.current?.focus(), 0);
     if (successTimerRef.current) clearTimeout(successTimerRef.current);
-    successTimerRef.current = window.setTimeout(() => setSuccessMessage(''), 2600);
+    successTimerRef.current = window.setTimeout(() => {
+      if (refreshOnSuccess) {
+        window.location.reload();
+        return;
+      }
+      setSuccessMessage('');
+    }, refreshOnSuccess ? 1500 : 2600);
   };
 
   const resolvePinMode = (member = selected) => {

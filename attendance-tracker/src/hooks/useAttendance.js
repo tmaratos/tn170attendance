@@ -31,9 +31,21 @@ import {
   guestCheckIn,
   guestCheckOut,
 } from '../services/guestService';
+import { isAfterSystemForceCheckoutTime } from '../utils/timeRules';
 
 const STORAGE_KEY = 'tn170-attendance';
 const SENIOR_SESSION_KEY = 'tn170-senior-session';
+const SYSTEM_FORCE_KEY_PREFIX = 'tn170-system-force-checkout';
+
+function mockHashPin(pin, memberId) {
+  const input = `${memberId}:${pin}:tn170`;
+  let hash = 2166136261;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `fnv1a:${(hash >>> 0).toString(16).padStart(8, '0')}`;
+}
 
 function loadMockState() {
   try {
@@ -72,12 +84,102 @@ function saveSeniorSession(session) {
   }
 }
 
+function forceCheckoutDateKey(date = new Date()) {
+  return date.toLocaleDateString('en-CA');
+}
+
+function systemForceNote(date = new Date()) {
+  return `System force logout at ${date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })} local time.`;
+}
+
+function adminForceNote(date = new Date()) {
+  return `Admin force logout at ${date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  })} local time.`;
+}
+
 function useMockAttendance() {
   const [state, setState] = useState(loadMockState);
 
   useEffect(() => {
     saveMockState(state);
   }, [state]);
+
+  useEffect(() => {
+    const runSystemForceCheckout = () => {
+      const now = new Date();
+      if (!isAfterSystemForceCheckoutTime(now)) return;
+
+      const forceKey = `${SYSTEM_FORCE_KEY_PREFIX}-${forceCheckoutDateKey(now)}`;
+      if (localStorage.getItem(forceKey) === 'done') return;
+
+      setState((prev) => {
+        const openMembers = prev.members.filter((m) => m.status === 'checked-in');
+        const openGuests = prev.guests.filter((g) => g.status === 'checked-in');
+        if (!openMembers.length && !openGuests.length) {
+          localStorage.setItem(forceKey, 'done');
+          return prev;
+        }
+
+        const checkOutTime = now.toISOString();
+        const note = systemForceNote(now);
+        localStorage.setItem(forceKey, 'done');
+
+        return {
+          ...prev,
+          members: prev.members.map((member) =>
+            member.status === 'checked-in'
+              ? {
+                  ...member,
+                  status: 'checked-out',
+                  checkOutTime,
+                  forceAction: true,
+                  forceType: 'system',
+                  forceNote: note,
+                }
+              : member
+          ),
+          guests: prev.guests.map((guest) =>
+            guest.status === 'checked-in'
+              ? {
+                  ...guest,
+                  status: 'checked-out',
+                  checkOutTime,
+                  forceAction: true,
+                  forceType: 'system',
+                  forceNote: note,
+                }
+              : guest
+          ),
+          activity: [
+            ...openMembers.map((member, index) => ({
+              id: `sfm${Date.now()}-${index}`,
+              message: `${member.name} system force logged out`,
+              timestamp: checkOutTime,
+              type: 'force-out',
+            })),
+            ...openGuests.map((guest, index) => ({
+              id: `sfg${Date.now()}-${index}`,
+              message: `${guest.name} (Guest) system force logged out`,
+              timestamp: checkOutTime,
+              type: 'force-out',
+            })),
+            ...prev.activity,
+          ].slice(0, 50),
+        };
+      });
+    };
+
+    runSystemForceCheckout();
+    const interval = window.setInterval(runSystemForceCheckout, 30000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   const addActivity = useCallback((message, type) => {
     setState((prev) => ({
@@ -99,7 +201,15 @@ function useMockAttendance() {
           ...prev,
           members: prev.members.map((m) =>
             m.id === memberId
-              ? { ...m, status: 'checked-in', checkInTime: now, checkOutTime: null }
+              ? {
+                  ...m,
+                  status: 'checked-in',
+                  checkInTime: now,
+                  checkOutTime: null,
+                  forceAction: false,
+                  forceType: null,
+                  forceNote: null,
+                }
               : m
           ),
         };
@@ -116,12 +226,25 @@ function useMockAttendance() {
   );
 
   const checkOutMember = useCallback(
-    (memberId, force = false) => {
+    (memberId, force = false, note = null) => {
       const now = new Date().toISOString();
       setState((prev) => ({
         ...prev,
         members: prev.members.map((m) =>
-          m.id === memberId ? { ...m, status: 'checked-out', checkOutTime: now } : m
+          m.id === memberId
+            ? {
+                ...m,
+                status: 'checked-out',
+                checkOutTime: now,
+                ...(force
+                  ? {
+                      forceAction: true,
+                      forceType: 'admin',
+                      forceNote: note || adminForceNote(new Date()),
+                    }
+                  : {}),
+              }
+            : m
         ),
       }));
       const member = state.members.find((m) => m.id === memberId);
@@ -180,6 +303,9 @@ function useMockAttendance() {
           checkInTime: now,
           checkOutTime: null,
           status: 'checked-in',
+          forceAction: false,
+          forceType: null,
+          forceNote: null,
           firstVisit: existing?.firstVisit || today,
           lastVisit: today,
           totalVisits: existing ? existing.totalVisits + 1 : 1,
@@ -259,7 +385,9 @@ function useMockAttendance() {
   const verifyPin = useCallback(
     (memberId, pin) => {
       const member = state.members.find((m) => m.id === memberId);
-      return member && member.pin === pin;
+      if (!member) return false;
+      if (member.pinHash) return member.pinHash === mockHashPin(pin, memberId);
+      return member.pin === pin;
     },
     [state.members]
   );
@@ -272,7 +400,7 @@ function useMockAttendance() {
   const memberHasPin = useCallback(
     (memberId) => {
       const member = state.members.find((m) => m.id === memberId);
-      return member && !!member.pin;
+      return member && (!!member.pin || !!member.pinHash);
     },
     [state.members]
   );
@@ -280,12 +408,25 @@ function useMockAttendance() {
   const needsPinSetup = useCallback(
     (memberId) => {
       const member = state.members.find((m) => m.id === memberId);
-      return member && !member.pin;
+      return member && !member.pin && !member.pinHash;
     },
     [state.members]
   );
 
-  const createMemberPin = useCallback(async () => true, []);
+  const createMemberPin = useCallback(async (memberId, pin, confirmPin) => {
+    if (!/^\d{4}$/.test(pin) || pin !== confirmPin) {
+      throw new Error('PIN must be 4 digits and match confirmation.');
+    }
+    setState((prev) => ({
+      ...prev,
+      members: prev.members.map((member) =>
+        member.id === memberId
+          ? { ...member, pin: null, pinHash: mockHashPin(pin, memberId), hasPin: true }
+          : member
+      ),
+    }));
+    return true;
+  }, []);
   const authenticateSenior = useCallback(async () => null, []);
   const resetMemberPinFn = useCallback(async () => {}, []);
 
@@ -365,6 +506,9 @@ function useFirebaseAttendance() {
       guestRecords.map((g) => ({
         ...g,
         status: g.status === 'checked_in' ? 'checked-in' : 'checked-out',
+        forceAction: !!g.forceAction,
+        forceType: g.forceType || null,
+        forceNote: g.forceNote || g.notes || null,
       })),
     [guestRecords]
   );

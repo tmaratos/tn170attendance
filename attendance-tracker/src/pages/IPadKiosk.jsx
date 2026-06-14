@@ -3,6 +3,8 @@ import CheckInWizard from '../components/CheckInWizard';
 import CheckoutReminder from '../components/CheckoutReminder';
 import LocalClock from '../components/LocalClock';
 import { formatTime, getInitials } from '../data/mockData';
+import { useLocalTime } from '../hooks/useLocalTime';
+import { isAfterSignOutReviewTime, isAfterSystemForceCheckoutTime } from '../utils/timeRules';
 
 export default function IPadKiosk({ attendance }) {
   const {
@@ -19,6 +21,10 @@ export default function IPadKiosk({ attendance }) {
     createMemberPin,
   } = attendance;
   const [mode, setMode] = useState('check-in');
+  const { now } = useLocalTime();
+  const afterReviewTime = isAfterSignOutReviewTime(now);
+  const afterForceTime = isAfterSystemForceCheckoutTime(now);
+  const logoSrc = `${import.meta.env.BASE_URL}squadron-logo.jpeg`;
 
   const checkedInMembers = members.filter((member) => member.status === 'checked-in');
   const checkedInGuests = guests.filter((guest) => guest.status === 'checked-in');
@@ -28,7 +34,7 @@ export default function IPadKiosk({ attendance }) {
     <div className="ipad-kiosk-root">
       <header className="ipad-kiosk-header">
         <div className="ipad-brand">
-          <img src="/squadron-logo.jpeg" alt="Squadron Logo" />
+          <img src={logoSrc} alt="Squadron Logo" />
           <div>
             <span>{settings.squadronDesignator}</span>
             <h1>Attendance Kiosk</h1>
@@ -73,6 +79,7 @@ export default function IPadKiosk({ attendance }) {
             memberHasPin={memberHasPin}
             needsPinSetup={needsPinSetup}
             createMemberPin={createMemberPin}
+            refreshOnSuccess
           />
         </section>
 
@@ -87,21 +94,25 @@ export default function IPadKiosk({ attendance }) {
 
           <div className="ipad-present-list">
             {checkedInMembers.slice(0, 14).map((member) => (
-              <div className="ipad-present-row" key={member.id}>
+              <div className={`ipad-present-row ${afterReviewTime ? 'needs-review' : ''}`} key={member.id}>
                 <span className="ipad-present-avatar">{getInitials(member.name)}</span>
                 <span>
                   <strong>{member.name}</strong>
                   <small>{member.grade} <span aria-hidden="true">&bull;</span> {formatTime(member.checkInTime)}</small>
+                  {afterReviewTime && <small className="ipad-review-note">Still checked in after 9:00 PM</small>}
+                  {afterForceTime && <small className="ipad-review-note force-due">System force checkout due at 9:30 PM</small>}
                 </span>
               </div>
             ))}
 
             {checkedInGuests.slice(0, 4).map((guest) => (
-              <div className="ipad-present-row guest" key={guest.id}>
+              <div className={`ipad-present-row guest ${afterReviewTime ? 'needs-review' : ''}`} key={guest.id}>
                 <span className="ipad-present-avatar">{guest.name.slice(0, 1)}</span>
                 <span>
                   <strong>{guest.name}</strong>
                   <small>Guest <span aria-hidden="true">&bull;</span> {formatTime(guest.checkInTime)}</small>
+                  {afterReviewTime && <small className="ipad-review-note">Still checked in after 9:00 PM</small>}
+                  {afterForceTime && <small className="ipad-review-note force-due">System force checkout due at 9:30 PM</small>}
                 </span>
               </div>
             ))}

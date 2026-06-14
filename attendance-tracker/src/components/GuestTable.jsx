@@ -1,6 +1,12 @@
 import { formatTime } from '../data/mockData';
+import { useLocalTime } from '../hooks/useLocalTime';
+import { isAfterSignOutReviewTime, isAfterSystemForceCheckoutTime } from '../utils/timeRules';
 
 export default function GuestTable({ guests, compact = false }) {
+  const { now } = useLocalTime();
+  const afterReviewTime = isAfterSignOutReviewTime(now);
+  const afterForceTime = isAfterSystemForceCheckoutTime(now);
+
   if (!guests.length) {
     return <div className="empty-state">No guests present</div>;
   }
@@ -16,18 +22,36 @@ export default function GuestTable({ guests, compact = false }) {
           </tr>
         </thead>
         <tbody>
-          {guests.map((guest) => (
-            <tr key={guest.id}>
-              <td>
-                <div className="guest-cell">
-                  <div className="avatar guest-avatar">{guest.name.slice(0, 1)}</div>
-                  <span className="member-name">{guest.name}</span>
-                </div>
-              </td>
-              <td>{guest.hostName}</td>
-              <td className="time-cell in">{formatTime(guest.checkInTime)}</td>
-            </tr>
-          ))}
+          {guests.map((guest) => {
+            const needsReview = afterReviewTime && guest.status === 'checked-in' && !guest.checkOutTime;
+            const forceDue = afterForceTime && guest.status === 'checked-in' && !guest.checkOutTime;
+            const forceType = guest.forceType || (
+              guest.forceNote?.toLowerCase().includes('system') ? 'system' : 'admin'
+            );
+            return (
+              <tr key={guest.id} className={forceDue || needsReview ? 'needs-signout-review' : ''}>
+                <td>
+                  <div className="guest-cell">
+                    <div className="avatar guest-avatar">{guest.name.slice(0, 1)}</div>
+                    <span className="member-name">{guest.name}</span>
+                    {needsReview && (
+                      <span className="review-warning">Still checked in after 9:00 PM</span>
+                    )}
+                    {forceDue && (
+                      <span className="force-note due">System force checkout due at 9:30 PM.</span>
+                    )}
+                    {guest.forceAction && guest.forceNote && (
+                      <span className={`force-note ${forceType}`}>
+                        {forceType === 'system' ? 'System force logout' : 'Admin force logout'}: {guest.forceNote}
+                      </span>
+                    )}
+                  </div>
+                </td>
+                <td>{guest.hostName}</td>
+                <td className="time-cell in">{formatTime(guest.checkInTime)}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

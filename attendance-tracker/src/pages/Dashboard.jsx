@@ -6,6 +6,7 @@ import GuestTable from '../components/GuestTable';
 import ActivityFeed from '../components/ActivityFeed';
 import CheckInWizard from '../components/CheckInWizard';
 import LocalClock from '../components/LocalClock';
+import PrintableAttendanceLog from '../components/PrintableAttendanceLog';
 import { isMeetingInProgress, formatMeetingTime } from '../data/mockData';
 import { useLocalTime } from '../hooks/useLocalTime';
 
@@ -59,30 +60,32 @@ export default function Dashboard({ attendance }) {
   const handlePrint = () => window.print();
 
   return (
-    <div className="dashboard-page">
-      <Header
-        title="Welcome!"
-        subtitle={<LocalClock />}
-      />
+    <>
+      <PrintableAttendanceLog members={members} guests={guests} settings={settings} />
+      <div className="dashboard-page">
+        <Header
+          title="Welcome!"
+          subtitle={<LocalClock />}
+        />
 
       <div className="stats-grid">
         <StatCard
           label="Checked In"
           value={stats.checkedIn}
           color="green"
-          linkTo="/attendance?filter=checked-in"
+          linkTo="/admin/members?filter=checked-in"
         />
         <StatCard
           label="Checked Out"
           value={stats.checkedOut}
           color="red"
-          linkTo="/attendance?filter=checked-out"
+          linkTo="/admin/members?filter=checked-out"
         />
         <StatCard
           label="Guests Present"
           value={stats.guestsPresent}
           color="gold"
-          linkTo="/guests"
+          linkTo="/admin/guests"
         />
         <StatCard
           label="Total Present"
@@ -119,7 +122,7 @@ export default function Dashboard({ attendance }) {
             <AttendanceTable members={checkedInMembers.slice(0, 8)} compact />
           </div>
           <div className="panel-footer">
-            <Link to="/attendance?filter=checked-in" className="panel-footer-link">
+            <Link to="/admin/members?filter=checked-in" className="panel-footer-link">
               View All Checked In <span aria-hidden="true">&rarr;</span>
             </Link>
           </div>
@@ -135,7 +138,7 @@ export default function Dashboard({ attendance }) {
             <AttendanceTable members={checkedOutMembers.slice(0, 8)} showCheckOut compact />
           </div>
           <div className="panel-footer">
-            <Link to="/attendance?filter=checked-out" className="panel-footer-link">
+            <Link to="/admin/members?filter=checked-out" className="panel-footer-link">
               View All Checked Out <span aria-hidden="true">&rarr;</span>
             </Link>
           </div>
@@ -152,7 +155,7 @@ export default function Dashboard({ attendance }) {
               <GuestTable guests={presentGuests} compact />
             </div>
             <div className="panel-footer">
-              <Link to="/guests" className="panel-footer-link">
+              <Link to="/admin/guests" className="panel-footer-link">
                 View All Guests <span aria-hidden="true">&rarr;</span>
               </Link>
             </div>
@@ -188,15 +191,15 @@ export default function Dashboard({ attendance }) {
 
         <div className="quick-actions no-print">
           <h3 className="quick-actions-title">Quick Actions</h3>
-          <Link to="/admin?action=check-in" className="btn btn-green">
+          <Link to="/admin/tools?action=check-in" className="btn btn-green">
             <ActionIcon type="in" />
             <span><strong>Force Check In</strong><small>Check in a member</small></span>
           </Link>
-          <Link to="/admin?action=check-out" className="btn btn-red">
+          <Link to="/admin/tools?action=check-out" className="btn btn-red">
             <ActionIcon type="out" />
             <span><strong>Force Check Out</strong><small>Check out a member</small></span>
           </Link>
-          <Link to="/attendance" className="btn btn-blue">
+          <Link to="/admin/members" className="btn btn-blue">
             <ActionIcon type="list" />
             <span><strong>View Full List</strong><small>All members and guests</small></span>
           </Link>
@@ -206,6 +209,7 @@ export default function Dashboard({ attendance }) {
           </button>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

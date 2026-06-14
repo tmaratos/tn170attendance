@@ -1,6 +1,4 @@
-import { useState } from 'react';
-import CheckInWizard from '../components/CheckInWizard';
-import CheckoutReminder from '../components/CheckoutReminder';
+import PublicMemberFlow from '../components/PublicMemberFlow';
 
 export default function CheckIn({ attendance }) {
   const {
@@ -14,40 +12,19 @@ export default function CheckIn({ attendance }) {
     needsPinSetup,
     createMemberPin,
   } = attendance;
-  const [mode, setMode] = useState('check-in');
 
   return (
-    <div className="kiosk-page tablet-kiosk-page">
-      <div className="kiosk-mode-toggle">
-        <button
-          type="button"
-          className={`btn ${mode === 'check-in' ? 'btn-green' : 'btn-outline'}`}
-          onClick={() => setMode('check-in')}
-        >
-          Check In
-        </button>
-        <button
-          type="button"
-          className={`btn ${mode === 'check-out' ? 'btn-red' : 'btn-outline'}`}
-          onClick={() => setMode('check-out')}
-        >
-          Check Out
-        </button>
-      </div>
-      <CheckoutReminder />
-      <CheckInWizard
-        key={mode}
-        members={members}
-        searchMembers={searchMembers}
-        verifyPin={verifyPin}
-        onCheckIn={checkInMember}
-        onCheckOut={checkOutMember}
-        mode={mode}
-        isFirebase={isFirebase}
-        memberHasPin={memberHasPin}
-        needsPinSetup={needsPinSetup}
-        createMemberPin={createMemberPin}
-      />
-    </div>
+    <PublicMemberFlow
+      mode="check-in"
+      members={members}
+      searchMembers={searchMembers}
+      verifyPin={verifyPin}
+      onCheckIn={checkInMember}
+      onCheckOut={checkOutMember}
+      isFirebase={isFirebase}
+      memberHasPin={memberHasPin}
+      needsPinSetup={needsPinSetup}
+      createMemberPin={createMemberPin}
+    />
   );
 }

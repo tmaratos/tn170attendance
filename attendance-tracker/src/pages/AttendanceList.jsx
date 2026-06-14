@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { formatTime, formatDuration, getInitials } from '../data/mockData';
+import { useLocalTime } from '../hooks/useLocalTime';
+import { isAfterSystemForceCheckoutTime } from '../utils/timeRules';
 
 const FILTERS = [
   { key: 'all', label: 'All' },
@@ -17,6 +19,8 @@ export default function AttendanceList({ attendance }) {
   const initialFilter = searchParams.get('filter') || 'all';
   const [filter, setFilter] = useState(initialFilter);
   const [search, setSearch] = useState('');
+  const { now } = useLocalTime();
+  const forceCheckoutDue = isAfterSystemForceCheckoutTime(now);
 
   const filteredMembers = useMemo(() => {
     let list = members;
@@ -85,12 +89,27 @@ export default function AttendanceList({ attendance }) {
                 </tr>
               </thead>
               <tbody>
-                {filteredMembers.map((m) => (
-                  <tr key={m.id}>
+                {filteredMembers.map((m) => {
+                  const forceDue = forceCheckoutDue && m.status === 'checked-in' && !m.checkOutTime;
+                  const forceType = m.forceType || (
+                    m.forceNote?.toLowerCase().includes('system') ? 'system' : 'admin'
+                  );
+                  return (
+                  <tr key={m.id} className={forceDue ? 'needs-signout-review' : ''}>
                     <td>
                       <div className="member-cell">
                         <div className="avatar">{getInitials(m.name)}</div>
-                        <span className="member-name">{m.name}</span>
+                        <div className="member-info">
+                          <span className="member-name">{m.name}</span>
+                          {forceDue && (
+                            <span className="force-note due">System force checkout due at 9:30 PM.</span>
+                          )}
+                          {m.forceAction && m.forceNote && (
+                            <span className={`force-note ${forceType}`}>
+                              {forceType === 'system' ? 'System force logout' : 'Admin force logout'}: {m.forceNote}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </td>
                     <td>{m.grade}</td>
@@ -110,7 +129,8 @@ export default function AttendanceList({ attendance }) {
                     <td>{formatTime(m.checkOutTime)}</td>
                     <td>{formatDuration(m.checkInTime, m.checkOutTime)}</td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
             {filteredMembers.length === 0 && (
@@ -139,12 +159,27 @@ export default function AttendanceList({ attendance }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {guests.map((g) => (
-                    <tr key={g.id}>
+                  {guests.map((g) => {
+                    const forceDue = forceCheckoutDue && g.status === 'checked-in' && !g.checkOutTime;
+                    const forceType = g.forceType || (
+                      g.forceNote?.toLowerCase().includes('system') ? 'system' : 'admin'
+                    );
+                    return (
+                    <tr key={g.id} className={forceDue ? 'needs-signout-review' : ''}>
                       <td>
                         <div className="member-cell">
                           <div className="avatar">{g.name[0]}</div>
-                          <span className="member-name">{g.name}</span>
+                          <div className="member-info">
+                            <span className="member-name">{g.name}</span>
+                            {forceDue && (
+                              <span className="force-note due">System force checkout due at 9:30 PM.</span>
+                            )}
+                            {g.forceAction && g.forceNote && (
+                              <span className={`force-note ${forceType}`}>
+                                {forceType === 'system' ? 'System force logout' : 'Admin force logout'}: {g.forceNote}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td>—</td>
@@ -160,7 +195,8 @@ export default function AttendanceList({ attendance }) {
                       <td>{formatTime(g.checkOutTime)}</td>
                       <td>{formatDuration(g.checkInTime, g.checkOutTime)}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
               {guests.length === 0 && (

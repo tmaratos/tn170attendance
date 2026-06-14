@@ -2,14 +2,13 @@ import { NavLink } from 'react-router-dom';
 import { useState } from 'react';
 
 const NAV_ITEMS = [
-  { to: '/', label: 'Dashboard', icon: 'home' },
-  { to: '/check-in', label: 'Check In / Out', icon: 'login' },
-  { to: '/ipad-kiosk', label: 'iPad Kiosk', icon: 'tablet' },
-  { to: '/guests', label: 'Guests', icon: 'user' },
-  { to: '/attendance', label: 'Attendance List', icon: 'list' },
-  { to: '/reports', label: 'Reports', icon: 'file' },
-  { to: '/admin', label: 'Admin Tools', icon: 'shield' },
-  { to: '/settings', label: 'Settings', icon: 'gear' },
+  { to: '/admin/dashboard', label: 'Dashboard', icon: 'home' },
+  { to: '/', label: 'Public Kiosk', icon: 'tablet' },
+  { to: '/admin/guests', label: 'Guests', icon: 'user' },
+  { to: '/admin/members', label: 'Member Management', icon: 'list' },
+  { to: '/admin/reports', label: 'Reports', icon: 'file' },
+  { to: '/admin/tools', label: 'Admin Tools', icon: 'shield' },
+  { to: '/admin/settings', label: 'Settings', icon: 'gear' },
 ];
 
 function NavIcon({ name }) {
@@ -90,6 +89,7 @@ function NavIcon({ name }) {
 
 export default function Sidebar({ settings }) {
   const [open, setOpen] = useState(false);
+  const logoSrc = `${import.meta.env.BASE_URL}squadron-logo.jpeg`;
 
   return (
     <>
@@ -107,7 +107,7 @@ export default function Sidebar({ settings }) {
       <aside className={`sidebar no-print ${open ? 'open' : ''}`}>
         <div className="sidebar-brand">
           <img
-            src="/squadron-logo.jpeg"
+            src={logoSrc}
             alt="Squadron Logo"
             className="sidebar-logo"
           />
