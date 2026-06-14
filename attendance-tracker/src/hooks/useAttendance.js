@@ -5,7 +5,8 @@ import {
   MOCK_ACTIVITY,
   DEFAULT_SETTINGS,
 } from '../data/mockData';
-import { isFirebaseConfigured } from '../services/firebase';
+import { isFirebaseConfigured, isSparkKioskMode } from '../services/firebase';
+import { hashKioskPinSync, verifyKioskPin } from '../utils/kioskPin';
 import {
   subscribeMembers,
   searchMembers as searchMemberList,
@@ -41,6 +42,7 @@ import {
 import { isAfterSystemForceCheckoutTime } from '../utils/timeRules';
 
 const STORAGE_KEY = 'tn170-attendance';
+const KIOSK_STORAGE_KEY = 'tn170-kiosk-local';
 const SENIOR_SESSION_KEY = 'tn170-senior-session';
 const SYSTEM_FORCE_KEY_PREFIX = 'tn170-system-force-checkout';
 
@@ -109,6 +111,416 @@ function adminForceNote(date = new Date()) {
     minute: '2-digit',
     hour12: true,
   })} local time.`;
+}
+
+function loadKioskLocalState() {
+  try {
+    const stored = localStorage.getItem(KIOSK_STORAGE_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch {
+    /* use defaults */
+  }
+  return {
+    pins: {},
+    attendance: {},
+    guests: MOCK_GUESTS,
+    activity: MOCK_ACTIVITY,
+    settings: DEFAULT_SETTINGS,
+    recurringGuests: [],
+  };
+}
+
+function saveKioskLocalState(state) {
+  localStorage.setItem(KIOSK_STORAGE_KEY, JSON.stringify(state));
+}
+
+function attendanceRecordToUi(record) {
+  if (!record) return null;
+  return {
+    status: record.status,
+    checkInTime: record.checkInTime || null,
+    checkOutTime: record.checkOutTime || null,
+    forceAction: !!record.forceAction,
+    forceType: record.forceType || null,
+    notes: record.forceNote || null,
+  };
+}
+
+function useSparkKioskAttendance() {
+  const [rawMembers, setRawMembers] = useState([]);
+  const [localState, setLocalState] = useState(loadKioskLocalState);
+  const [remoteSettings, setRemoteSettings] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    saveKioskLocalState(localState);
+  }, [localState]);
+
+  useEffect(() => {
+    const unsubs = [
+      subscribeMembers((members) => {
+        setRawMembers(members);
+        setLoading(false);
+      }),
+      subscribeSettings(setRemoteSettings),
+    ];
+    return () => unsubs.forEach((unsub) => unsub());
+  }, []);
+
+  useEffect(() => {
+    const runSystemForceCheckout = () => {
+      const now = new Date();
+      if (!isAfterSystemForceCheckoutTime(now)) return;
+
+      const forceKey = `${SYSTEM_FORCE_KEY_PREFIX}-${forceCheckoutDateKey(now)}`;
+      if (localStorage.getItem(forceKey) === 'done') return;
+
+      setLocalState((prev) => {
+        const openMemberIds = Object.entries(prev.attendance)
+          .filter(([, record]) => record.status === 'checked-in')
+          .map(([id]) => id);
+        const openGuests = prev.guests.filter((g) => g.status === 'checked-in');
+        if (!openMemberIds.length && !openGuests.length) {
+          localStorage.setItem(forceKey, 'done');
+          return prev;
+        }
+
+        const checkOutTime = now.toISOString();
+        const note = systemForceNote(now);
+        localStorage.setItem(forceKey, 'done');
+        const attendance = { ...prev.attendance };
+        for (const id of openMemberIds) {
+          attendance[id] = {
+            ...attendance[id],
+            status: 'checked-out',
+            checkOutTime,
+            forceAction: true,
+            forceType: 'system',
+            forceNote: note,
+          };
+        }
+
+        return {
+          ...prev,
+          attendance,
+          guests: prev.guests.map((guest) =>
+            guest.status === 'checked-in'
+              ? {
+                  ...guest,
+                  status: 'checked-out',
+                  checkOutTime,
+                  forceAction: true,
+                  forceType: 'system',
+                  forceNote: note,
+                }
+              : guest
+          ),
+          activity: [
+            ...openMemberIds.map((id, index) => {
+              const member = rawMembers.find(
+                (m) => String(m.memberId || m.capid || m.temporaryId) === String(id)
+              );
+              return {
+                id: `sfm${Date.now()}-${index}`,
+                message: `${member?.displayName || member?.fullName || id} system force logged out`,
+                timestamp: checkOutTime,
+                type: 'force-out',
+              };
+            }),
+            ...openGuests.map((guest, index) => ({
+              id: `sfg${Date.now()}-${index}`,
+              message: `${guest.name} (Guest) system force logged out`,
+              timestamp: checkOutTime,
+              type: 'force-out',
+            })),
+            ...prev.activity,
+          ].slice(0, 50),
+        };
+      });
+    };
+
+    runSystemForceCheckout();
+    const interval = window.setInterval(runSystemForceCheckout, 30000);
+    return () => window.clearInterval(interval);
+  }, [rawMembers]);
+
+  const settings = useMemo(
+    () => ({ ...DEFAULT_SETTINGS, ...localState.settings, ...(remoteSettings || {}) }),
+    [localState.settings, remoteSettings]
+  );
+
+  const members = useMemo(
+    () =>
+      rawMembers.map((member) => {
+        const memberId = String(member.memberId || member.capid || member.temporaryId);
+        const record = attendanceRecordToUi(localState.attendance[memberId]);
+        return toUiMember(member, record);
+      }),
+    [rawMembers, localState.attendance]
+  );
+
+  const addActivity = useCallback((message, type) => {
+    setLocalState((prev) => ({
+      ...prev,
+      activity: [
+        { id: `a${Date.now()}`, message, timestamp: new Date().toISOString(), type },
+        ...prev.activity,
+      ].slice(0, 50),
+    }));
+  }, []);
+
+  const checkInMember = useCallback(
+    (memberId, force = false) => {
+      const now = new Date().toISOString();
+      setLocalState((prev) => ({
+        ...prev,
+        attendance: {
+          ...prev.attendance,
+          [String(memberId)]: {
+            status: 'checked-in',
+            checkInTime: now,
+            checkOutTime: null,
+            forceAction: false,
+            forceType: null,
+            forceNote: null,
+          },
+        },
+      }));
+      const member = members.find((m) => String(m.id) === String(memberId));
+      if (member) {
+        addActivity(
+          force ? `${member.name} force checked in by admin` : `${member.name} checked in`,
+          force ? 'force-in' : 'check-in'
+        );
+      }
+    },
+    [members, addActivity]
+  );
+
+  const checkOutMember = useCallback(
+    (memberId, force = false, note = null) => {
+      const now = new Date().toISOString();
+      setLocalState((prev) => ({
+        ...prev,
+        attendance: {
+          ...prev.attendance,
+          [String(memberId)]: {
+            ...prev.attendance[String(memberId)],
+            status: 'checked-out',
+            checkOutTime: now,
+            ...(force
+              ? {
+                  forceAction: true,
+                  forceType: 'admin',
+                  forceNote: note || adminForceNote(new Date()),
+                }
+              : {}),
+          },
+        },
+      }));
+      const member = members.find((m) => String(m.id) === String(memberId));
+      if (member) {
+        addActivity(
+          force ? `${member.name} force checked out by admin` : `${member.name} checked out`,
+          force ? 'force-out' : 'check-out'
+        );
+      }
+    },
+    [members, addActivity]
+  );
+
+  const checkInGuest = useCallback(
+    (guestData) => {
+      const now = new Date().toISOString();
+      const today = now.split('T')[0];
+      setLocalState((prev) => {
+        const existing = prev.recurringGuests.find(
+          (g) => g.name.toLowerCase() === guestData.name.toLowerCase()
+        );
+        let recurringGuests = prev.recurringGuests;
+        if (existing) {
+          recurringGuests = prev.recurringGuests.map((g) =>
+            g.name.toLowerCase() === guestData.name.toLowerCase()
+              ? {
+                  ...g,
+                  hostId: guestData.hostId,
+                  hostName: guestData.hostName,
+                  lastVisit: today,
+                  totalVisits: g.totalVisits + 1,
+                  status: 'checked-in',
+                }
+              : g
+          );
+        } else {
+          recurringGuests = [
+            ...prev.recurringGuests,
+            {
+              id: `rg${Date.now()}`,
+              name: guestData.name,
+              hostId: guestData.hostId,
+              hostName: guestData.hostName,
+              firstVisit: today,
+              lastVisit: today,
+              totalVisits: 1,
+              status: 'checked-in',
+            },
+          ];
+        }
+        const newGuest = {
+          id: `g${Date.now()}`,
+          name: guestData.name,
+          hostId: guestData.hostId,
+          hostName: guestData.hostName,
+          checkInTime: now,
+          checkOutTime: null,
+          status: 'checked-in',
+          forceAction: false,
+          forceType: null,
+          forceNote: null,
+          firstVisit: existing?.firstVisit || today,
+          lastVisit: today,
+          totalVisits: existing ? existing.totalVisits + 1 : 1,
+        };
+        return {
+          ...prev,
+          guests: [
+            ...prev.guests.filter(
+              (g) => g.status !== 'checked-in' || g.name !== guestData.name
+            ),
+            newGuest,
+          ],
+          recurringGuests,
+        };
+      });
+      addActivity(`${guestData.name} (Guest) checked in`, 'guest-in');
+    },
+    [addActivity]
+  );
+
+  const checkOutGuest = useCallback(
+    (guestId) => {
+      const now = new Date().toISOString();
+      setLocalState((prev) => {
+        const guest = prev.guests.find((g) => g.id === guestId);
+        const updatedGuests = prev.guests.map((g) =>
+          g.id === guestId ? { ...g, status: 'checked-out', checkOutTime: now } : g
+        );
+        const recurringGuests = prev.recurringGuests.map((g) =>
+          guest && g.name.toLowerCase() === guest.name.toLowerCase()
+            ? { ...g, status: 'checked-out' }
+            : g
+        );
+        return { ...prev, guests: updatedGuests, recurringGuests };
+      });
+      const guest = localState.guests.find((g) => g.id === guestId);
+      if (guest) addActivity(`${guest.name} (Guest) checked out`, 'guest-out');
+    },
+    [localState.guests, addActivity]
+  );
+
+  const updateSettings = useCallback((newSettings) => {
+    setLocalState((prev) => ({ ...prev, settings: { ...prev.settings, ...newSettings } }));
+  }, []);
+
+  const resetData = useCallback(() => {
+    const fresh = loadKioskLocalState();
+    fresh.pins = {};
+    fresh.attendance = {};
+    fresh.guests = MOCK_GUESTS;
+    fresh.activity = MOCK_ACTIVITY;
+    fresh.recurringGuests = [];
+    setLocalState(fresh);
+    saveKioskLocalState(fresh);
+  }, []);
+
+  const searchMembers = useCallback(
+    (query) => {
+      const filtered = searchMemberList(rawMembers, query);
+      return filtered.map((member) => {
+        const memberId = String(member.id);
+        const record = attendanceRecordToUi(localState.attendance[memberId]);
+        const raw = rawMembers.find(
+          (rm) => String(rm.memberId || rm.capid || rm.temporaryId) === memberId
+        );
+        return toUiMember(raw, record);
+      });
+    },
+    [rawMembers, localState.attendance]
+  );
+
+  const getStatsFn = useCallback(
+    () => getStats(members, localState.guests),
+    [members, localState.guests]
+  );
+
+  const verifyPin = useCallback(
+    (memberId, pin) => {
+      const storedHash = localState.pins[String(memberId)];
+      return verifyKioskPin(pin, String(memberId), storedHash);
+    },
+    [localState.pins]
+  );
+
+  const verifyAdminPin = useCallback(
+    (pin) => settings.adminPin === pin,
+    [settings.adminPin]
+  );
+
+  const memberHasPin = useCallback(
+    (memberId) => !!localState.pins[String(memberId)],
+    [localState.pins]
+  );
+
+  const needsPinSetup = useCallback(
+    (memberId) => !localState.pins[String(memberId)],
+    [localState.pins]
+  );
+
+  const createMemberPin = useCallback(async (memberId, pin, confirmPin) => {
+    if (!/^\d{4}$/.test(pin) || pin !== confirmPin) {
+      throw new Error('PIN must be 4 digits and match confirmation.');
+    }
+    const pinHash = hashKioskPinSync(pin, String(memberId));
+    setLocalState((prev) => ({
+      ...prev,
+      pins: { ...prev.pins, [String(memberId)]: pinHash },
+    }));
+    return true;
+  }, []);
+
+  const authenticateSenior = useCallback(async () => null, []);
+  const resetMemberPinFn = useCallback(async () => {}, []);
+
+  return {
+    members,
+    guests: localState.guests,
+    activity: localState.activity,
+    settings,
+    recurringGuests: localState.recurringGuests,
+    meeting: null,
+    seniorSession: null,
+    isFirebase: false,
+    isCloudBackend: false,
+    isKioskMode: true,
+    loading,
+    error: null,
+    checkInMember,
+    checkOutMember,
+    checkInGuest,
+    checkOutGuest,
+    updateSettings,
+    resetData,
+    searchMembers,
+    getStats: getStatsFn,
+    verifyPin,
+    verifyAdminPin,
+    memberHasPin,
+    needsPinSetup,
+    createMemberPin,
+    authenticateSenior,
+    resetMemberPin: resetMemberPinFn,
+    addActivity,
+  };
 }
 
 function useMockAttendance() {
@@ -446,6 +858,8 @@ function useMockAttendance() {
     meeting: null,
     seniorSession: null,
     isFirebase: false,
+    isCloudBackend: false,
+    isKioskMode: false,
     loading: false,
     error: null,
     checkInMember,
@@ -722,6 +1136,8 @@ function useFirebaseAttendance() {
     meeting,
     seniorSession,
     isFirebase: true,
+    isCloudBackend: true,
+    isKioskMode: false,
     loading,
     error,
     checkInMember,
@@ -756,8 +1172,11 @@ function useFirebaseAttendance() {
 }
 
 export function useAttendance() {
-  if (isFirebaseConfigured()) {
-    return useFirebaseAttendance();
+  if (!isFirebaseConfigured()) {
+    return useMockAttendance();
   }
-  return useMockAttendance();
+  if (isSparkKioskMode()) {
+    return useSparkKioskAttendance();
+  }
+  return useFirebaseAttendance();
 }

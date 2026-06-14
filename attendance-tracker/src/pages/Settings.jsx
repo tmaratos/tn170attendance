@@ -4,7 +4,7 @@ import { DEFAULT_SETTINGS } from '../data/mockData';
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 export default function Settings({ attendance }) {
-  const { settings, updateSettings, resetData, isFirebase } = attendance;
+  const { settings, updateSettings, resetData, isCloudBackend, isKioskMode } = attendance;
   const [form, setForm] = useState({ ...settings });
   const [saved, setSaved] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -118,10 +118,29 @@ export default function Settings({ attendance }) {
 
           <div className="settings-section">
             <h3 className="settings-section-title">Security</h3>
-            {isFirebase ? (
+            {isCloudBackend ? (
               <p className="report-card-desc">
-                Firebase mode uses per-member PINs verified by Cloud Functions. Admin access requires a senior member CAPID and PIN — there is no shared admin PIN.
+                Cloud mode uses per-member PINs verified by Cloud Functions. Admin access requires a senior member CAPID and PIN — there is no shared admin PIN.
               </p>
+            ) : isKioskMode ? (
+              <>
+                <p className="report-card-desc">
+                  Kiosk mode stores member PINs on this device only (hashed in the browser). This is less secure than Cloud Functions but required on the free Spark plan. Set a shared admin PIN for senior tools.
+                </p>
+                <div className="settings-grid">
+                  <div className="form-group">
+                    <label className="form-label">Admin PIN (4 digits)</label>
+                    <input
+                      type="text"
+                      className="form-input"
+                      maxLength={4}
+                      pattern="\d{4}"
+                      value={form.adminPin}
+                      onChange={(e) => handleChange('adminPin', e.target.value.replace(/\D/g, '').slice(0, 4))}
+                    />
+                  </div>
+                </div>
+              </>
             ) : (
               <div className="settings-grid">
                 <div className="form-group">
@@ -149,9 +168,11 @@ export default function Settings({ attendance }) {
       <div className="panel">
         <h3 className="settings-section-title" style={{ color: 'var(--red)' }}>Danger Zone</h3>
         <p className="report-card-desc" style={{ marginBottom: 16 }}>
-          {isFirebase
+          {isCloudBackend
             ? 'Clear your senior member session. Firestore data is not affected.'
-            : 'Reset all attendance data to the original mock data. This cannot be undone.'}
+            : isKioskMode
+              ? 'Clear local attendance, guest records, and device PINs. The Firestore member roster is not affected.'
+              : 'Reset all attendance data to the original mock data. This cannot be undone.'}
         </p>
         {confirmReset ? (
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>

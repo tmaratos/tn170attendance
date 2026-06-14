@@ -12,7 +12,7 @@ export default function AdminTools({ attendance }) {
     verifyAdminPin,
     checkInMember,
     checkOutMember,
-    isFirebase,
+    isCloudBackend,
     authenticateSenior,
     forceCheckInMember,
     forceCheckOutMember,
@@ -42,7 +42,7 @@ export default function AdminTools({ attendance }) {
     setLoading(true);
     setPinError('');
     try {
-      if (isFirebase) {
+      if (isCloudBackend) {
         if (!adminCapid.trim()) {
           setPinError('Enter your CAPID.');
           return;
@@ -67,7 +67,7 @@ export default function AdminTools({ attendance }) {
     setLoading(true);
     setMessage('');
     try {
-      if (isFirebase) {
+      if (isCloudBackend) {
         if (action === 'check-in') {
           await forceCheckInMember(memberId, adminPin);
           setMessage('Member force checked in.');
@@ -99,7 +99,7 @@ export default function AdminTools({ attendance }) {
       <div>
         <h1 className="page-title">Admin Tools</h1>
         <p className="page-subtitle">
-          {isFirebase
+          {isCloudBackend
             ? 'Senior members: enter your CAPID and PIN to access administrative functions'
             : 'Enter admin PIN to access administrative functions'}
         </p>
@@ -107,9 +107,9 @@ export default function AdminTools({ attendance }) {
         <div className="kiosk-panel" style={{ maxWidth: 480, margin: '0 auto' }}>
           <h2 className="kiosk-title">Senior Member Authentication</h2>
           <p className="kiosk-subtitle">
-            {isFirebase ? 'Enter your CAPID and 4-digit PIN' : 'Enter the 4-digit admin PIN'}
+            {isCloudBackend ? 'Enter your CAPID and 4-digit PIN' : 'Enter the 4-digit admin PIN'}
           </p>
-          {isFirebase && (
+          {isCloudBackend && (
             <div className="form-group" style={{ marginBottom: 16 }}>
               <input
                 type="text"
@@ -220,7 +220,7 @@ export default function AdminTools({ attendance }) {
         </div>
       </div>
 
-      {isFirebase && seniorSession?.canResetPins && (
+      {isCloudBackend && seniorSession?.canResetPins && (
         <div className="panel" style={{ marginTop: 24 }}>
           <h3 className="panel-title" style={{ marginBottom: 12 }}>PIN Reset</h3>
           <p className="report-card-desc" style={{ marginBottom: 16 }}>

@@ -17,6 +17,7 @@
     }
   ],
   "hosting": {
+    "site": "tn170-attendance",
     "public": "attendance-tracker/dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [

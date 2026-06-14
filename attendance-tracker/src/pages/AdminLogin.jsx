@@ -10,7 +10,7 @@ export default function AdminLogin({ attendance, onLogin }) {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { dateStr, shortTimeStr } = useLocalTime();
-  const needsCapid = attendance.isFirebase;
+  const needsCapid = attendance.isCloudBackend;
   const logoSrc = `${import.meta.env.BASE_URL}squadron-logo.jpeg`;
 
   const submit = async () => {
@@ -37,8 +37,15 @@ export default function AdminLogin({ attendance, onLogin }) {
     }
   };
 
+  const handleEnter = (event) => {
+    if (event.key !== 'Enter') return;
+    if (event.target.closest?.('button,a')) return;
+    event.preventDefault();
+    submit();
+  };
+
   return (
-    <div className="admin-login-page">
+    <div className="admin-login-page" onKeyDown={handleEnter}>
       <div className="admin-login-card">
         <Link to="/" className="public-back-link">Home</Link>
         <img src={logoSrc} alt="Oak Ridge Composite Squadron patch" />
@@ -57,6 +64,7 @@ export default function AdminLogin({ attendance, onLogin }) {
               inputMode="numeric"
               autoComplete="off"
               placeholder="Senior member CAPID"
+              onKeyDown={handleEnter}
             />
           </label>
         )}
