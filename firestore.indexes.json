@@ -40,13 +40,20 @@
       ]
     },
     {
-      "collectionGroup": "guests",
+      "collectionGroup": "members",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "normalizedName", "order": "ASCENDING" },
+        { "fieldPath": "temporaryId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "members",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "isSeniorMember", "order": "ASCENDING" },
         { "fieldPath": "active", "order": "ASCENDING" }
       ]
-    }
+    },
   ],
   "fieldOverrides": []
 }

@@ -3,7 +3,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "seed:members": "node scripts/seed-members.js"
+    "seed:members": "node scripts/seed-members.js",
+    "build:app": "npm run build --prefix attendance-tracker",
+    "deploy": "npm run build:app && firebase deploy",
+    "deploy:hosting": "npm run build:app && firebase deploy --only hosting",
+    "deploy:functions": "firebase deploy --only functions",
+    "deploy:rules": "firebase deploy --only firestore:rules,firestore:indexes"
   },
   "dependencies": {
     "firebase-admin": "^12.7.0"

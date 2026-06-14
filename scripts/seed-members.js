@@ -2,7 +2,7 @@
  * Seed TN-170 squadron roster into Firestore.
  *
  * Usage:
- *   FIREBASE_PROJECT_ID=your-project-id npm run seed:members
+ *   $env:FIREBASE_PROJECT_ID="tn170-attendance"; npm run seed:members
  *
  * Requires Application Default Credentials:
  *   firebase login
@@ -17,8 +17,9 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(__dirname, '..');
 
-const PIN_RESET_CAPIDS = new Set([
+const ADMIN_CAPIDS = new Set([
   '326320', // Maj Steven C Mellard
   '249023', // 1st Lt Ernest E Burchell
   '757794', // 2d Lt Tonya M Osborne
@@ -27,7 +28,7 @@ const PIN_RESET_CAPIDS = new Set([
   '729204', // 2d Lt Tristan G Maratos
 ]);
 
-const ROSTER_LINES = `
+const DEFAULT_ROSTER = `
 362254 Maj Lemont T Adrian
 706279 2d Lt Janelle C Allison
 712652 C/CMSgt Seth Aubre Beers
@@ -80,7 +81,32 @@ const ROSTER_LINES = `
 702416 C/TSgt Garrett Tage Warthan
 738555 SM Jesse W Wilkie
 734587 C/MSgt Tucker Reed Wilkie
-`.trim().split('\n').map((l) => l.trim()).filter(Boolean);
+`.trim();
+
+function normalizeName(name) {
+  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function loadRosterLines() {
+  const candidates = [
+    join(ROOT, 'data', 'roster.txt'),
+    join(ROOT, 'docs', 'roster.txt'),
+    join(ROOT, 'data', 'members.txt'),
+  ];
+
+  for (const path of candidates) {
+    if (existsSync(path)) {
+      console.log(`Loading roster from ${path}`);
+      return readFileSync(path, 'utf8')
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l && !l.startsWith('#') && !/parent email/i.test(l));
+    }
+  }
+
+  console.log('No roster file found — using embedded TN-170 roster.');
+  return DEFAULT_ROSTER.split('\n').map((l) => l.trim()).filter(Boolean);
+}
 
 function parseGradeAndName(tokens) {
   let gradeEnd = 1;
@@ -107,28 +133,43 @@ function parseRole(grade) {
   return { role: 'Senior Member', isCadet: false, isSeniorMember: true };
 }
 
+function buildPermissions(capid, isSenior) {
+  const isAdmin = ADMIN_CAPIDS.has(capid);
+  return {
+    isAdmin,
+    canForceAttendance: isAdmin,
+    canResetPins: isAdmin,
+    canExportReports: isSenior || isAdmin,
+    canManageMembers: isAdmin,
+    canManageGuests: isSenior || isAdmin,
+  };
+}
+
 function parseRosterLine(line) {
   const tokens = line.split(/\s+/);
   const capid = tokens[0];
   const { grade, firstName, middleName, lastName, fullName, displayName } = parseGradeAndName(tokens);
   const roleInfo = parseRole(grade);
   const isSenior = roleInfo.isSeniorMember;
+  const permissions = buildPermissions(capid, isSenior);
 
   return {
+    memberId: capid,
     capid,
+    temporaryId: null,
     grade,
     firstName,
     middleName,
     lastName,
     fullName,
     displayName,
+    normalizedName: normalizeName(displayName),
     ...roleInfo,
+    isProspective: false,
     hasPin: false,
     pinResetRequired: false,
-    canResetPins: PIN_RESET_CAPIDS.has(capid),
-    canExportReports: isSenior,
     active: true,
-    createdAt: FieldValue.serverTimestamp(),
+    ...permissions,
     updatedAt: FieldValue.serverTimestamp(),
   };
 }
@@ -153,18 +194,62 @@ function initAdmin() {
 
 async function seedMembers() {
   const db = initAdmin();
-  const batch = db.batch();
-  const members = ROSTER_LINES.map(parseRosterLine);
+  const rosterLines = loadRosterLines();
+  const parsed = rosterLines.map(parseRosterLine);
+  const rosterCapids = new Set(parsed.map((m) => m.capid));
 
-  console.log(`Seeding ${members.length} members...`);
+  console.log(`Seeding ${parsed.length} members (merge mode — preserves PINs & attendance)...`);
 
-  for (const member of members) {
+  let created = 0;
+  let updated = 0;
+
+  for (const member of parsed) {
     const ref = db.collection('members').doc(member.capid);
-    batch.set(ref, member, { merge: true });
+    const existing = await ref.get();
+    const existingData = existing.exists ? existing.data() : {};
+
+    const merged = {
+      ...member,
+      hasPin: existingData.hasPin ?? member.hasPin,
+      pinResetRequired: existingData.pinResetRequired ?? member.pinResetRequired,
+      active: existingData.active ?? member.active,
+      createdAt: existingData.createdAt || FieldValue.serverTimestamp(),
+    };
+
+    if (existing.exists) {
+      merged.isAdmin = member.isAdmin;
+      merged.canForceAttendance = member.canForceAttendance;
+      merged.canResetPins = member.canResetPins;
+      merged.canExportReports = existingData.canExportReports ?? member.canExportReports;
+      merged.canManageMembers = member.canManageMembers;
+      merged.canManageGuests = existingData.canManageGuests ?? member.canManageGuests;
+      if (existingData.isProspective) {
+        merged.isProspective = existingData.isProspective;
+        merged.temporaryId = existingData.temporaryId;
+      }
+      updated += 1;
+    } else {
+      merged.createdAt = FieldValue.serverTimestamp();
+      created += 1;
+    }
+
+    await ref.set(merged, { merge: true });
   }
 
-  const settingsRef = db.collection('settings').doc('squadron');
-  batch.set(settingsRef, {
+  const allMembers = await db.collection('members').get();
+  let pendingPreserved = 0;
+  for (const doc of allMembers.docs) {
+    const data = doc.data();
+    if (data.isProspective || String(doc.id).startsWith('TEMP-')) {
+      pendingPreserved += 1;
+      continue;
+    }
+    if (!rosterCapids.has(doc.id) && data.capid && !rosterCapids.has(data.capid)) {
+      console.log(`  Preserving member not in roster: ${doc.id} (${data.displayName || data.fullName})`);
+    }
+  }
+
+  await db.collection('settings').doc('squadron').set({
     squadronName: 'Oak Ridge Composite Squadron',
     squadronDesignator: 'TN-170',
     motto: 'Not Without Effort',
@@ -174,17 +259,17 @@ async function seedMembers() {
     updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
 
-  await batch.commit();
-
-  const seniors = members.filter((m) => m.isSeniorMember).length;
-  const cadets = members.filter((m) => m.isCadet).length;
-  const pinResetters = members.filter((m) => m.canResetPins).length;
+  const seniors = parsed.filter((m) => m.isSeniorMember).length;
+  const cadets = parsed.filter((m) => m.isCadet).length;
+  const admins = parsed.filter((m) => m.isAdmin).length;
 
   console.log('Seed complete.');
-  console.log(`  Total: ${members.length}`);
+  console.log(`  Roster: ${parsed.length} (${created} new, ${updated} updated)`);
   console.log(`  Senior Members: ${seniors}`);
   console.log(`  Cadets: ${cadets}`);
-  console.log(`  PIN reset authorized: ${pinResetters}`);
+  console.log(`  Admins: ${admins}`);
+  console.log(`  Pending members preserved: ${pendingPreserved}`);
+  console.log('  PIN hashes in memberPins collection were not modified.');
 }
 
 seedMembers().catch((err) => {

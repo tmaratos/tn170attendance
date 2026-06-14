@@ -134,16 +134,18 @@ function buildActivityMessage(data) {
 }
 
 export function mergeMembersWithAttendance(members, attendanceRecords) {
-  const byCapid = new Map();
+  const byKey = new Map();
   for (const record of attendanceRecords) {
-    const existing = byCapid.get(record.capid);
+    const key = String(record.memberId || record.capid);
+    const existing = byKey.get(key);
     if (!existing || record.status === 'checked_in') {
-      byCapid.set(record.capid, record);
+      byKey.set(key, record);
     }
   }
 
   return members.map((member) => {
-    const record = byCapid.get(String(member.capid));
+    const key = String(member.memberId || member.capid || member.temporaryId);
+    const record = byKey.get(key);
     return toUiMember(member, record);
   });
 }
@@ -179,6 +181,22 @@ export async function forceCheckOut(actorCapid, actorPin, targetCapid, notes) {
     targetCapid: String(targetCapid),
     notes,
   });
+  return result.data;
+}
+
+export async function startMeeting(actorCapid, actorPin, meetingTitle) {
+  const fn = callFunction('startMeeting');
+  const result = await fn({
+    actorCapid: String(actorCapid),
+    actorPin,
+    meetingTitle: meetingTitle || null,
+  });
+  return result.data;
+}
+
+export async function closeMeeting(actorCapid, actorPin) {
+  const fn = callFunction('closeMeeting');
+  const result = await fn({ actorCapid: String(actorCapid), actorPin });
   return result.data;
 }
 

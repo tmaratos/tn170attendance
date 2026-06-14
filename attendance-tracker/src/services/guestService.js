@@ -90,12 +90,12 @@ export async function guestCheckIn({ hostCapid, hostPin, guestName, guestId }) {
   return result.data;
 }
 
-export async function guestCheckOut(guestAttendanceId, hostCapid, hostPin) {
+export async function guestCheckOut(guestAttendanceId, actorCapid, actorPin) {
   const fn = callFunction('guestCheckOut');
   const result = await fn({
     guestAttendanceId,
-    hostCapid: hostCapid ? String(hostCapid) : null,
-    hostPin: hostPin || null,
+    actorCapid: String(actorCapid),
+    actorPin,
   });
   return result.data;
 }

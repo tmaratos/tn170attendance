@@ -13,6 +13,11 @@ import {
   createPin,
   resetMemberPin,
   verifySeniorAccess,
+  subscribeSettings,
+  createPendingMember,
+  updatePendingMemberCapid,
+  deactivateMember,
+  reactivateMember,
 } from '../services/memberService';
 import {
   subscribeTodaysMeeting,
@@ -23,6 +28,8 @@ import {
   verifyPinAndCheckOut,
   forceCheckIn,
   forceCheckOut,
+  startMeeting,
+  closeMeeting,
   getStats,
 } from '../services/attendanceService';
 import {
@@ -476,6 +483,13 @@ function useFirebaseAttendance() {
     const unsubs = [subscribeMembers(setRawMembers)];
     unsubs.push(subscribeTodaysMeeting(setMeeting));
     unsubs.push(subscribeRecurringGuests(setRecurringGuests));
+    unsubs.push(
+      subscribeSettings((remoteSettings) => {
+        if (remoteSettings) {
+          setSettings((prev) => ({ ...prev, ...remoteSettings }));
+        }
+      })
+    );
     setLoading(false);
     return () => unsubs.forEach((u) => u());
   }, []);
@@ -516,12 +530,15 @@ function useFirebaseAttendance() {
   const searchMembers = useCallback(
     (query) => {
       const filtered = searchMemberList(rawMembers, query);
-      const byCapid = new Map(
-        attendanceRecords.map((r) => [String(r.capid), r])
+      const byKey = new Map(
+        attendanceRecords.map((r) => [String(r.memberId || r.capid), r])
       );
       return filtered.map((m) => {
-        const raw = rawMembers.find((rm) => String(rm.capid) === String(m.capid));
-        return toUiMember(raw, byCapid.get(String(m.capid)));
+        const raw = rawMembers.find(
+          (rm) => String(rm.memberId || rm.capid || rm.temporaryId) === String(m.id)
+        );
+        const key = String(raw?.memberId || raw?.capid || raw?.temporaryId);
+        return toUiMember(raw, byKey.get(key));
       });
     },
     [rawMembers, attendanceRecords]
@@ -529,7 +546,9 @@ function useFirebaseAttendance() {
 
   const memberHasPin = useCallback(
     (memberId) => {
-      const member = rawMembers.find((m) => String(m.capid) === String(memberId));
+      const member = rawMembers.find(
+        (m) => String(m.memberId || m.capid || m.temporaryId) === String(memberId)
+      );
       return member ? !!member.hasPin && !member.pinResetRequired : false;
     },
     [rawMembers]
@@ -537,7 +556,9 @@ function useFirebaseAttendance() {
 
   const needsPinSetup = useCallback(
     (memberId) => {
-      const member = rawMembers.find((m) => String(m.capid) === String(memberId));
+      const member = rawMembers.find(
+        (m) => String(m.memberId || m.capid || m.temporaryId) === String(memberId)
+      );
       return member ? !member.hasPin || member.pinResetRequired : false;
     },
     [rawMembers]
@@ -564,8 +585,8 @@ function useFirebaseAttendance() {
     });
   }, []);
 
-  const checkOutGuest = useCallback(async (guestAttendanceId) => {
-    return guestCheckOut(guestAttendanceId);
+  const checkOutGuest = useCallback(async (guestAttendanceId, actorCapid, actorPin) => {
+    return guestCheckOut(guestAttendanceId, actorCapid, actorPin);
   }, []);
 
   const authenticateSenior = useCallback(async (capid, pin) => {
@@ -590,7 +611,8 @@ function useFirebaseAttendance() {
   const forceCheckInMember = useCallback(
     async (targetCapid, actorPin, notes) => {
       if (!seniorSession) throw new Error('Senior authentication required.');
-      return forceCheckIn(seniorSession.capid, actorPin, targetCapid, notes);
+      const actorId = seniorSession.memberId || seniorSession.capid;
+      return forceCheckIn(actorId, actorPin, targetCapid, notes);
     },
     [seniorSession]
   );
@@ -598,7 +620,8 @@ function useFirebaseAttendance() {
   const forceCheckOutMember = useCallback(
     async (targetCapid, actorPin, notes) => {
       if (!seniorSession) throw new Error('Senior authentication required.');
-      return forceCheckOut(seniorSession.capid, actorPin, targetCapid, notes);
+      const actorId = seniorSession.memberId || seniorSession.capid;
+      return forceCheckOut(actorId, actorPin, targetCapid, notes);
     },
     [seniorSession]
   );
@@ -606,7 +629,73 @@ function useFirebaseAttendance() {
   const resetMemberPinFn = useCallback(
     async (targetCapid, actorPin) => {
       if (!seniorSession) throw new Error('Senior authentication required.');
-      return resetMemberPin(seniorSession.capid, actorPin, targetCapid);
+      return resetMemberPin(seniorSession.memberId || seniorSession.capid, actorPin, targetCapid);
+    },
+    [seniorSession]
+  );
+
+  const createPendingMemberFn = useCallback(
+    async (payload, actorPin) => {
+      if (!seniorSession) throw new Error('Senior authentication required.');
+      return createPendingMember({
+        actorCapid: seniorSession.memberId || seniorSession.capid,
+        actorPin,
+        ...payload,
+      });
+    },
+    [seniorSession]
+  );
+
+  const updatePendingCapidFn = useCallback(
+    async (memberId, newCapid, actorPin) => {
+      if (!seniorSession) throw new Error('Senior authentication required.');
+      return updatePendingMemberCapid({
+        actorCapid: seniorSession.memberId || seniorSession.capid,
+        actorPin,
+        memberId,
+        newCapid,
+      });
+    },
+    [seniorSession]
+  );
+
+  const deactivateMemberFn = useCallback(
+    async (targetMemberId, actorPin, reason) => {
+      if (!seniorSession) throw new Error('Senior authentication required.');
+      return deactivateMember({
+        actorCapid: seniorSession.memberId || seniorSession.capid,
+        actorPin,
+        targetMemberId,
+        reason,
+      });
+    },
+    [seniorSession]
+  );
+
+  const reactivateMemberFn = useCallback(
+    async (targetMemberId, actorPin) => {
+      if (!seniorSession) throw new Error('Senior authentication required.');
+      return reactivateMember({
+        actorCapid: seniorSession.memberId || seniorSession.capid,
+        actorPin,
+        targetMemberId,
+      });
+    },
+    [seniorSession]
+  );
+
+  const startMeetingFn = useCallback(
+    async (actorPin, meetingTitle) => {
+      if (!seniorSession) throw new Error('Senior authentication required.');
+      return startMeeting(seniorSession.memberId || seniorSession.capid, actorPin, meetingTitle);
+    },
+    [seniorSession]
+  );
+
+  const closeMeetingFn = useCallback(
+    async (actorPin) => {
+      if (!seniorSession) throw new Error('Senior authentication required.');
+      return closeMeeting(seniorSession.memberId || seniorSession.capid, actorPin);
     },
     [seniorSession]
   );
@@ -652,6 +741,12 @@ function useFirebaseAttendance() {
     forceCheckInMember,
     forceCheckOutMember,
     resetMemberPin: resetMemberPinFn,
+    createPendingMember: createPendingMemberFn,
+    updatePendingMemberCapid: updatePendingCapidFn,
+    deactivateMember: deactivateMemberFn,
+    reactivateMember: reactivateMemberFn,
+    startMeeting: startMeetingFn,
+    closeMeeting: closeMeetingFn,
     clearSeniorSession: () => {
       setSeniorSession(null);
       saveSeniorSession(null);
