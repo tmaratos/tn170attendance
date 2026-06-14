@@ -5,8 +5,10 @@ import { formatDateTime, formatDuration, formatTime, getInitials } from '../data
 import { getCallableError } from '../services/errors';
 import { useLocalTime } from '../hooks/useLocalTime';
 
-function StepBar({ step, pinSetup }) {
-  const labels = ['Search', pinSetup ? 'Create PIN' : 'PIN', 'Confirm', 'Success'];
+function StepBar({ step, pinSetup, isCheckIn }) {
+  const labels = isCheckIn
+    ? ['Search', pinSetup ? 'Create PIN' : 'PIN', 'Confirm', 'Success']
+    : ['Search', 'Confirm', 'Success'];
 
   return (
     <div className="public-flow-steps">
@@ -62,6 +64,8 @@ export default function PublicMemberFlow({
   const actionLabel = isCheckIn ? 'CHECK IN' : 'CHECK OUT';
   const successLabel = isCheckIn ? 'CHECKED IN' : 'CHECKED OUT';
   const actionClass = isCheckIn ? 'check-in' : 'check-out';
+  const confirmStep = isCheckIn ? 2 : 1;
+  const successStep = isCheckIn ? 3 : 2;
 
   const results = useMemo(() => {
     if (!query.trim()) return [];
@@ -89,7 +93,7 @@ export default function PublicMemberFlow({
     setPin('');
     setConfirmPin('');
     setError('');
-    setStep(1);
+    setStep(isCheckIn ? 1 : confirmStep);
   };
 
   const verifyOrCreatePin = async () => {
@@ -140,7 +144,7 @@ export default function PublicMemberFlow({
       if (isFirebase) {
         result = isCheckIn
           ? await onCheckIn(selected.id, pin)
-          : await onCheckOut(selected.id, pin);
+          : await onCheckOut(selected.id);
       } else if (isCheckIn) {
         onCheckIn(selected.id);
       } else {
@@ -148,13 +152,13 @@ export default function PublicMemberFlow({
       }
 
       setSuccessTime(result?.checkInTime || result?.checkOutTime || new Date().toISOString());
-      setStep(3);
+      setStep(successStep);
       window.setTimeout(() => {
         window.location.reload();
       }, 1800);
     } catch (err) {
       setPin('');
-      setStep(1);
+      setStep(isCheckIn ? 1 : confirmStep);
       setError(getCallableError(err) || `${actionLabel} failed.`);
     } finally {
       setLoading(false);
@@ -177,6 +181,7 @@ export default function PublicMemberFlow({
     }
 
     if (
+      isCheckIn &&
       step === 1 &&
       !loading &&
       pin.length === 4 &&
@@ -186,7 +191,7 @@ export default function PublicMemberFlow({
       return;
     }
 
-    if (step === 2 && !loading) {
+    if (step === confirmStep && !loading) {
       confirmAction();
     }
   };
@@ -209,14 +214,16 @@ export default function PublicMemberFlow({
             <h1>{isCheckIn ? 'Find your record' : 'Find your record to check out'}</h1>
           </div>
 
-          <StepBar step={step} pinSetup={pinSetupRequired} />
+          <StepBar step={step} pinSetup={pinSetupRequired} isCheckIn={isCheckIn} />
 
           {step === 0 && (
             <div className="public-flow-section">
-              <p className="pin-setup-hint kiosk-pin-help">
-                New or forgot PIN? Select your name — you&apos;ll be prompted to create one if none
-                exists yet. Your PIN is stored securely in Firebase and works on any kiosk device.
-              </p>
+              {isCheckIn && (
+                <p className="pin-setup-hint kiosk-pin-help">
+                  New or forgot PIN? Select your name — you&apos;ll be prompted to create one if none
+                  exists yet. Your PIN is stored securely in Firebase and works on any kiosk device.
+                </p>
+              )}
               <label htmlFor={`${mode}-search`}>Search by name or CAPID</label>
               <input
                 id={`${mode}-search`}
@@ -248,7 +255,7 @@ export default function PublicMemberFlow({
             </div>
           )}
 
-          {step === 1 && selected && (
+          {isCheckIn && step === 1 && selected && (
             <div className="public-flow-section pin-section">
               <div className="public-selected-member">
                 <strong>{selected.name}</strong>
@@ -304,7 +311,7 @@ export default function PublicMemberFlow({
             </div>
           )}
 
-          {step === 2 && selected && (
+          {step === confirmStep && selected && (
             <div className="public-flow-section">
               <div className="public-confirm-card">
                 <span className="public-member-avatar large">{getInitials(selected.name)}</span>
@@ -344,7 +351,7 @@ export default function PublicMemberFlow({
             </div>
           )}
 
-          {step === 3 && selected && (
+          {step === successStep && selected && (
             <div className="public-success-screen">
               <div className={`public-success-icon ${actionClass}`}>
                 <svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

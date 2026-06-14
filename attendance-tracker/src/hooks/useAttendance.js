@@ -352,12 +352,6 @@ function useSparkKioskAttendance() {
     async (memberId, pinOrForce = false, note = null) => {
       const force = pinOrForce === true;
       const id = String(memberId);
-      if (!force && typeof pinOrForce === 'string') {
-        const storedHash = memberPinHashes[id];
-        if (!storedHash || !(await verifyKioskPin(pinOrForce, id, storedHash))) {
-          throw new Error('Incorrect PIN.');
-        }
-      }
       const now = new Date().toISOString();
       setLocalState((prev) => ({
         ...prev,
@@ -1109,8 +1103,8 @@ function useFirebaseAttendance() {
     return verifyPinAndCheckIn(memberId, pin);
   }, []);
 
-  const checkOutMember = useCallback(async (memberId, pin) => {
-    return verifyPinAndCheckOut(memberId, pin);
+  const checkOutMember = useCallback(async (memberId) => {
+    return verifyPinAndCheckOut(memberId);
   }, []);
 
   const checkInGuest = useCallback(async (guestData) => {

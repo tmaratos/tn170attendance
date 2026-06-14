@@ -4,14 +4,6 @@ import PinPad from './PinPad';
 import { getInitials, formatTime } from '../data/mockData';
 import { getCallableError } from '../services/errors';
 
-const STEPS = [
-  { num: 1, label: 'Search Member' },
-  { num: 2, label: 'Select Member' },
-  { num: 3, label: 'Enter PIN' },
-  { num: 4, label: 'Confirm Action' },
-  { num: 5, label: 'Success' },
-];
-
 export default function CheckInWizard({
   members,
   searchMembers,
@@ -40,6 +32,10 @@ export default function CheckInWizard({
   const successTimerRef = useRef(null);
 
   const results = useMemo(() => searchMembers(query), [query, searchMembers]);
+  const isCheckIn = mode === 'check-in';
+  const pinStep = isCheckIn ? 2 : null;
+  const confirmStep = isCheckIn ? 3 : 2;
+  const successStep = isCheckIn ? 4 : 3;
   const popularSearches = useMemo(() => {
     if (compact) return ['My Name', 'My CAPID'];
     return members.slice(0, 4).map((m) => m.name.split(' ')[0]);
@@ -103,10 +99,27 @@ export default function CheckInWizard({
 
   const handleSelect = (member) => {
     setSelected(member);
-    setStep(1);
+    setStep(isCheckIn ? 1 : confirmStep);
   };
 
-  const handleKioskSelect = (member) => {
+  const handleKioskSelect = async (member) => {
+    if (!isCheckIn) {
+      setLoading(true);
+      setPinError('');
+      try {
+        if (isFirebase) {
+          await onCheckOut(member.id);
+        } else {
+          onCheckOut(member.id);
+        }
+        resetForNextPerson(`${member.name} ${actionVerb}.`);
+      } catch (err) {
+        setPinError(getCallableError(err) || 'Check-out failed.');
+        setLoading(false);
+      }
+      return;
+    }
+
     setSelected(member);
     setPin('');
     setConfirmPin('');
@@ -131,7 +144,7 @@ export default function CheckInWizard({
     setPin('');
     setConfirmPin('');
     setPinError('');
-    setStep(2);
+    setStep(pinStep);
   };
 
   const handlePinStepContinue = async () => {
@@ -153,7 +166,7 @@ export default function CheckInWizard({
         setLoading(true);
         try {
           await createMemberPin(selected.id, pin, confirmPin);
-          setStep(3);
+          setStep(confirmStep);
         } catch (err) {
           setPinError(getCallableError(err) || 'Could not create PIN.');
           setPin('');
@@ -163,17 +176,17 @@ export default function CheckInWizard({
         }
         return;
       }
-      setStep(3);
+      setStep(confirmStep);
       return;
     }
 
     if (isFirebase) {
-      setStep(3);
+      setStep(confirmStep);
       return;
     }
 
     if (verifyPin(selected.id, pin)) {
-      setStep(3);
+      setStep(confirmStep);
     } else {
       setPinError('Incorrect PIN.');
       setPin('');
@@ -188,7 +201,7 @@ export default function CheckInWizard({
       if (isFirebase) {
         result = mode === 'check-in'
           ? await onCheckIn(selected.id, pin)
-          : await onCheckOut(selected.id, pin);
+          : await onCheckOut(selected.id);
         setTimestamp(result?.checkInTime || result?.checkOutTime || new Date().toISOString());
       } else {
         const now = new Date().toISOString();
@@ -199,10 +212,10 @@ export default function CheckInWizard({
           onCheckOut(selected.id);
         }
       }
-      setStep(4);
+      setStep(successStep);
     } catch (err) {
       setPinError(getCallableError(err) || 'Action failed.');
-      setStep(2);
+      setStep(isCheckIn ? pinStep : confirmStep);
       setPin('');
     } finally {
       setLoading(false);
@@ -232,11 +245,7 @@ export default function CheckInWizard({
       }
       try {
         await createMemberPin(member.id, pinToSubmit, confirmPin);
-        if (mode === 'check-in') {
-          await onCheckIn(member.id, pinToSubmit);
-        } else {
-          await onCheckOut(member.id, pinToSubmit);
-        }
+        await onCheckIn(member.id, pinToSubmit);
         resetForNextPerson(`${member.name} ${actionVerb}.`);
       } catch (err) {
         setPin('');
@@ -249,11 +258,7 @@ export default function CheckInWizard({
 
     try {
       if (isFirebase) {
-        if (mode === 'check-in') {
-          await onCheckIn(member.id, pinToSubmit);
-        } else {
-          await onCheckOut(member.id, pinToSubmit);
-        }
+        await onCheckIn(member.id, pinToSubmit);
       } else {
         if (!verifyPin(member.id, pinToSubmit)) {
           setPin('');
@@ -261,11 +266,7 @@ export default function CheckInWizard({
           setLoading(false);
           return;
         }
-        if (mode === 'check-in') {
-          onCheckIn(member.id);
-        } else {
-          onCheckOut(member.id);
-        }
+        onCheckIn(member.id);
       }
 
       resetForNextPerson(`${member.name} ${actionVerb}.`);
@@ -349,7 +350,7 @@ export default function CheckInWizard({
 
     return (
       <div className="kiosk-panel compact">
-        <h2 className="kiosk-title">Check In / Out Process</h2>
+        <h2 className="kiosk-title">{isCheckIn ? 'Check In / Out Process' : 'Member Check Out Process'}</h2>
 
         <div className="wizard-horizontal">
           <div className={`wizard-step-panel ${getPanelClass(0)}`}>
@@ -402,7 +403,11 @@ export default function CheckInWizard({
                 ))}
               </div>
               {selected && step === 1 && (
-                <button type="button" className="btn btn-blue pin-continue-btn" onClick={goToPin}>
+                <button
+                  type="button"
+                  className="btn btn-blue pin-continue-btn"
+                  onClick={() => (isCheckIn ? goToPin() : setStep(confirmStep))}
+                >
                   Continue <span aria-hidden="true">&rarr;</span>
                 </button>
               )}
@@ -412,57 +417,61 @@ export default function CheckInWizard({
             </div>
           </div>
 
-          <div className={`wizard-step-panel ${getPanelClass(2)}`}>
-            <div className="wizard-step-label">
-              <span className="wizard-step-num">3</span>
-              Enter PIN
+          {isCheckIn && (
+            <div className={`wizard-step-panel ${getPanelClass(pinStep)}`}>
+              <div className="wizard-step-label">
+                <span className="wizard-step-num">3</span>
+                Enter PIN
+              </div>
+              <div className="wizard-step-content">
+                <p className="wizard-mini-copy">Enter your 4-digit PIN</p>
+                {pinError && <div className="pin-error">{pinError}</div>}
+                <PinPad
+                  pin={pin}
+                  onDigit={handlePinDigit}
+                  onBackspace={() => setPin((p) => p.slice(0, -1))}
+                  onClear={() => { setPin(''); setPinError(''); }}
+                  compact
+                />
+                {pinMode === 'create' && pin.length === 4 && (
+                  <>
+                    <p className="wizard-mini-copy">Confirm PIN</p>
+                    <PinPad
+                      pin={confirmPin}
+                      onDigit={handleConfirmPinDigit}
+                      onBackspace={() => setConfirmPin((p) => p.slice(0, -1))}
+                      onClear={() => setConfirmPin('')}
+                      compact
+                    />
+                  </>
+                )}
+                {step === pinStep && (
+                  <button
+                    type="button"
+                    className="btn btn-blue pin-continue-btn"
+                    onClick={handlePinStepContinue}
+                    disabled={
+                      loading ||
+                      pin.length !== 4 ||
+                      (pinMode === 'create' && confirmPin.length !== 4)
+                    }
+                  >
+                    {loading ? 'Wait...' : 'Continue'} <span aria-hidden="true">&rarr;</span>
+                  </button>
+                )}
+              </div>
             </div>
-            <div className="wizard-step-content">
-              <p className="wizard-mini-copy">Enter your 4-digit PIN</p>
-              {pinError && <div className="pin-error">{pinError}</div>}
-              <PinPad
-                pin={pin}
-                onDigit={handlePinDigit}
-                onBackspace={() => setPin((p) => p.slice(0, -1))}
-                onClear={() => { setPin(''); setPinError(''); }}
-                compact
-              />
-              {pinMode === 'create' && pin.length === 4 && (
-                <>
-                  <p className="wizard-mini-copy">Confirm PIN</p>
-                  <PinPad
-                    pin={confirmPin}
-                    onDigit={handleConfirmPinDigit}
-                    onBackspace={() => setConfirmPin((p) => p.slice(0, -1))}
-                    onClear={() => setConfirmPin('')}
-                    compact
-                  />
-                </>
-              )}
-              {step === 2 && (
-                <button
-                  type="button"
-                  className="btn btn-blue pin-continue-btn"
-                  onClick={handlePinStepContinue}
-                  disabled={
-                    loading ||
-                    pin.length !== 4 ||
-                    (pinMode === 'create' && confirmPin.length !== 4)
-                  }
-                >
-                  {loading ? 'Wait...' : 'Continue'} <span aria-hidden="true">&rarr;</span>
-                </button>
-              )}
-            </div>
-          </div>
+          )}
 
-          <div className={`wizard-step-panel ${getPanelClass(3)}`}>
+          <div className={`wizard-step-panel ${getPanelClass(confirmStep)}`}>
             <div className="wizard-step-label">
-              <span className="wizard-step-num">4</span>
+              <span className="wizard-step-num">{isCheckIn ? 4 : 3}</span>
               Confirm Action
             </div>
             <div className="wizard-step-content">
-              <p className="wizard-mini-copy">You are checking in:</p>
+              <p className="wizard-mini-copy">
+                {isCheckIn ? 'You are checking in:' : 'You are checking out:'}
+              </p>
               {previewMember && <MemberMini member={previewMember} />}
               {pinError && <div className="pin-error">{pinError}</div>}
               <div className="confirm-actions">
@@ -470,7 +479,7 @@ export default function CheckInWizard({
                   type="button"
                   className={`btn ${btnClass}`}
                   onClick={handleConfirm}
-                  disabled={loading || step !== 3 || !selected}
+                  disabled={loading || step !== confirmStep || !selected}
                 >
                   {loading ? 'Processing...' : actionLabel}
                 </button>
@@ -481,9 +490,9 @@ export default function CheckInWizard({
             </div>
           </div>
 
-          <div className={`wizard-step-panel ${getPanelClass(4)}`}>
+          <div className={`wizard-step-panel ${getPanelClass(successStep)}`}>
             <div className="wizard-step-label">
-              <span className="wizard-step-num">5</span>
+              <span className="wizard-step-num">{isCheckIn ? 5 : 4}</span>
               Success
             </div>
             <div className="wizard-step-content">
@@ -497,7 +506,7 @@ export default function CheckInWizard({
                   {successLabel}
                 </div>
                 <div className="success-time-box">
-                  <span>Check In Time</span>
+                  <span>{isCheckIn ? 'Check In Time' : 'Check Out Time'}</span>
                   <strong>{timestamp ? formatTime(timestamp) : '7:15 PM'}</strong>
                 </div>
                 <button type="button" className="btn btn-blue" onClick={reset}>
@@ -526,10 +535,12 @@ export default function CheckInWizard({
       </div>
 
       <div className="kiosk-search-shell">
-        <p className="pin-setup-hint kiosk-pin-help">
-          New or forgot PIN? Select your name — you&apos;ll be prompted to create one if none
-          exists yet. Your PIN is stored in Firebase and works on any kiosk device.
-        </p>
+        {isCheckIn && (
+          <p className="pin-setup-hint kiosk-pin-help">
+            New or forgot PIN? Select your name — you&apos;ll be prompted to create one if none
+            exists yet. Your PIN is stored in Firebase and works on any kiosk device.
+          </p>
+        )}
         <label className="kiosk-search-label" htmlFor={`${mode}-member-search`}>
           Name or CAPID
         </label>
@@ -591,7 +602,13 @@ export default function CheckInWizard({
         ))}
       </div>
 
-      {selected && (
+      {pinError && !selected && (
+        <div className="pin-modal-error" role="alert" style={{ marginBottom: 12 }}>
+          {pinError}
+        </div>
+      )}
+
+      {selected && isCheckIn && (
         <div className="pin-modal-backdrop" role="presentation">
           <div
             className="pin-modal"
