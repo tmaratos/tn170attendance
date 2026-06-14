@@ -25,11 +25,11 @@ export function isFirebaseConfigured() {
   );
 }
 
-/** Spark / free tier: Firestore roster + local kiosk attendance (no Cloud Functions). */
+/** Spark / free tier: Firestore roster + local kiosk attendance (no Cloud Functions). Defaults on unless explicitly disabled. */
 export function isSparkKioskMode() {
   if (!isFirebaseConfigured()) return false;
   if (import.meta.env.VITE_FIREBASE_EMULATOR === 'true') return false;
-  return import.meta.env.VITE_FIREBASE_FREE_MODE === 'true';
+  return import.meta.env.VITE_FIREBASE_FREE_MODE !== 'false';
 }
 
 export function isCloudBackendMode() {

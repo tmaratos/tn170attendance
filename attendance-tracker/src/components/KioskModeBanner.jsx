@@ -3,7 +3,7 @@ export default function KioskModeBanner({ settings }) {
     <div className="kiosk-mode-banner" role="status">
       <strong>Kiosk mode</strong>
       <span>
-        Member roster from Firebase · attendance and PINs stored on this device only
+        Member roster from Firebase - attendance and PINs stored on this device only
         {settings?.squadronDesignator ? ` (${settings.squadronDesignator})` : ''}
       </span>
     </div>
