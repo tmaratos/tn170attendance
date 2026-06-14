@@ -2,14 +2,42 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { getFunctions, connectFunctionsEmulator, httpsCallable } from 'firebase/functions';
 import { getStorage, connectStorageEmulator } from 'firebase/storage';
+import {
+  productionFirebaseConfig,
+  productionSparkKioskMode,
+} from '../config/firebaseConfig.js';
+
+const PLACEHOLDER_VALUES = new Set([
+  'your_api_key',
+  'YOUR_FIREBASE_API_KEY',
+  'your-project-id',
+  'YOUR_PROJECT_ID',
+]);
+
+function configValue(envValue, fallback) {
+  if (envValue && !PLACEHOLDER_VALUES.has(envValue)) return envValue;
+  return fallback;
+}
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  apiKey: configValue(import.meta.env.VITE_FIREBASE_API_KEY, productionFirebaseConfig.apiKey),
+  authDomain: configValue(
+    import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    productionFirebaseConfig.authDomain
+  ),
+  projectId: configValue(
+    import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    productionFirebaseConfig.projectId
+  ),
+  storageBucket: configValue(
+    import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    productionFirebaseConfig.storageBucket
+  ),
+  messagingSenderId: configValue(
+    import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    productionFirebaseConfig.messagingSenderId
+  ),
+  appId: configValue(import.meta.env.VITE_FIREBASE_APP_ID, productionFirebaseConfig.appId),
 };
 
 export function isFirebaseConfigured() {
@@ -29,7 +57,10 @@ export function isFirebaseConfigured() {
 export function isSparkKioskMode() {
   if (!isFirebaseConfigured()) return false;
   if (import.meta.env.VITE_FIREBASE_EMULATOR === 'true') return false;
-  return import.meta.env.VITE_FIREBASE_FREE_MODE !== 'false';
+  const freeMode = import.meta.env.VITE_FIREBASE_FREE_MODE;
+  if (freeMode === 'false') return false;
+  if (freeMode === 'true') return true;
+  return productionSparkKioskMode;
 }
 
 export function isCloudBackendMode() {

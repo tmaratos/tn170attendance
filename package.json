@@ -5,6 +5,7 @@
   "scripts": {
     "seed:members": "node scripts/seed-members.js",
     "build:app": "npm run build --prefix attendance-tracker",
+    "build:pages": "npm run build:app && node scripts/sync-github-pages.js",
     "deploy": "npm run deploy:spark",
     "deploy:spark": "npm run build:app && firebase deploy --only firestore:rules,firestore:indexes,hosting",
     "deploy:hosting": "npm run build:app && firebase deploy --only hosting",
