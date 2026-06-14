@@ -233,7 +233,7 @@ export function buildSampleActivity() {
   ];
 }
 
-/** Initial localStorage payload for Spark kiosk mode (attendance samples; PINs are per-device). */
+/** Initial localStorage payload for Spark kiosk mode (attendance samples; PINs in Firestore). */
 export function buildInitialKioskLocalState() {
   const members = getEmbeddedRosterMembers();
   const attendance = {};

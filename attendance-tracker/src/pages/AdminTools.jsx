@@ -27,6 +27,7 @@ export default function AdminTools({ attendance }) {
 
   const [authenticated, setAuthenticated] = useState(!!seniorSession);
   const [adminCapid, setAdminCapid] = useState('');
+  const [adminMemberId, setAdminMemberId] = useState('');
   const [adminPin, setAdminPin] = useState('');
   const [pinError, setPinError] = useState('');
   const [query, setQuery] = useState('');
@@ -42,6 +43,7 @@ export default function AdminTools({ attendance }) {
   const resetResults = useMemo(() => searchMembers(resetQuery), [resetQuery, searchMembers]);
   const showPinReset =
     (isCloudBackend && seniorSession?.canResetPins) || (isKioskMode && canResetPins);
+  const adminMembers = attendance.adminMembers || [];
 
   const handleAdminAuth = async () => {
     if (adminPin.length !== 4) return;
@@ -54,6 +56,18 @@ export default function AdminTools({ attendance }) {
           return;
         }
         await authenticateSenior(adminCapid.trim(), adminPin);
+        setAuthenticated(true);
+      } else if (isKioskMode) {
+        if (!adminMemberId) {
+          setPinError('Select your admin account.');
+          return;
+        }
+        const ok = await verifyAdminPin(adminMemberId, adminPin);
+        if (!ok) {
+          setPinError('Incorrect admin PIN.');
+          setAdminPin('');
+          return;
+        }
         setAuthenticated(true);
       } else if (verifyAdminPin(adminPin)) {
         setAuthenticated(true);
@@ -107,13 +121,15 @@ export default function AdminTools({ attendance }) {
         <p className="page-subtitle">
           {isCloudBackend
             ? 'Senior members: enter your CAPID and PIN to access administrative functions'
-            : 'Enter admin PIN to access administrative functions'}
+            : isKioskMode
+              ? 'Select your admin account and enter your Firestore PIN'
+              : 'Enter admin PIN to access administrative functions'}
         </p>
 
         <div className="kiosk-panel" style={{ maxWidth: 480, margin: '0 auto' }}>
           <h2 className="kiosk-title">Senior Member Authentication</h2>
           <p className="kiosk-subtitle">
-            {isCloudBackend ? 'Enter your CAPID and 4-digit PIN' : 'Enter the 4-digit admin PIN'}
+            {isCloudBackend ? 'Enter your CAPID and 4-digit PIN' : isKioskMode ? 'Select admin and enter PIN' : 'Enter the 4-digit admin PIN'}
           </p>
           {isCloudBackend && (
             <div className="form-group" style={{ marginBottom: 16 }}>
@@ -124,6 +140,26 @@ export default function AdminTools({ attendance }) {
                 value={adminCapid}
                 onChange={(e) => setAdminCapid(e.target.value.replace(/\D/g, ''))}
               />
+            </div>
+          )}
+          {isKioskMode && !isCloudBackend && (
+            <div className="form-group" style={{ marginBottom: 16 }}>
+              <select
+                className="form-input form-input-lg admin-select-field"
+                value={adminMemberId}
+                onChange={(e) => {
+                  setAdminMemberId(e.target.value);
+                  setAdminPin('');
+                  setPinError('');
+                }}
+              >
+                <option value="">Choose your name...</option>
+                {adminMembers.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.name} — {member.grade} — CAPID {member.capid}
+                  </option>
+                ))}
+              </select>
             </div>
           )}
           {pinError && <div className="pin-error">{pinError}</div>}
@@ -137,7 +173,12 @@ export default function AdminTools({ attendance }) {
             <button
               className="btn btn-gold btn-lg"
               onClick={handleAdminAuth}
-              disabled={adminPin.length !== 4 || loading}
+              disabled={
+                adminPin.length !== 4 ||
+                loading ||
+                (isCloudBackend && !adminCapid.trim()) ||
+                (isKioskMode && !isCloudBackend && !adminMemberId)
+              }
             >
               {loading ? 'Authenticating...' : 'Authenticate'}
             </button>
@@ -230,8 +271,8 @@ export default function AdminTools({ attendance }) {
         <div className="panel" style={{ marginTop: 24 }}>
           <h3 className="panel-title" style={{ marginBottom: 12 }}>PIN Reset</h3>
           <p className="report-card-desc" style={{ marginBottom: 16 }}>
-            Reset a member&apos;s PIN on this device. They will create a new PIN at next check-in.
-            {isKioskMode ? ' PINs are stored locally in this browser only.' : ''}
+            Reset a member&apos;s PIN. They will create a new PIN at next check-in.
+            {isKioskMode ? ' PINs are stored in Firebase and sync across all kiosks.' : ''}
           </p>
           {isCloudBackend ? (
             <>
@@ -286,7 +327,7 @@ export default function AdminTools({ attendance }) {
                         <span className="member-name">{member.name}</span>
                         <span className="member-meta">
                           {member.grade} • CAPID {member.capid}
-                          {member.hasPin ? ' • PIN set on this device' : ' • No PIN on this device'}
+                          {member.hasPin ? ' • PIN set' : ' • No PIN / reset required'}
                         </span>
                       </div>
                     </div>
@@ -297,7 +338,11 @@ export default function AdminTools({ attendance }) {
                       onClick={async () => {
                         setLoading(true);
                         try {
-                          await resetMemberPin(member.id, adminPin);
+                          await resetMemberPin(
+                            member.id,
+                            adminPin,
+                            isKioskMode ? adminMemberId : seniorSession?.memberId || seniorSession?.capid
+                          );
                           setMessage(`PIN reset for ${member.name}. They can create a new PIN at check-in.`);
                           setTimeout(() => setMessage(''), 4000);
                         } catch (err) {

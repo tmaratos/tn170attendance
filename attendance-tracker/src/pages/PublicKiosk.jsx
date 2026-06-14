@@ -159,7 +159,7 @@ export default function PublicKiosk({ attendance }) {
           </Link>
         </div>
         <p className="kiosk-footer-pin-help">
-          New or forgot PIN? Tap Check In, select your name, and create a PIN if none exists on this device.
+          New or forgot PIN? Tap Check In, select your name, and create a PIN if none exists yet.
         </p>
       </footer>
     </div>

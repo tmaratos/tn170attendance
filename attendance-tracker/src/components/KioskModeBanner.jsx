@@ -5,8 +5,8 @@ export default function KioskModeBanner({ settings, usingLocalRoster }) {
       <strong>Kiosk mode</strong>
       <span>
         {usingLocalRoster
-          ? `Local TN-170 roster (${designator}) — attendance and PINs on this device; Firestore roster empty`
-          : `Member roster from Firebase (${designator}) — attendance and PINs stored on this device only`}
+          ? `Local TN-170 roster (${designator}) — attendance on this device; Firestore roster empty`
+          : `Member roster from Firebase (${designator}) — attendance on this device; PINs stored in Firestore`}
       </span>
     </div>
   );

@@ -125,7 +125,7 @@ export default function Settings({ attendance }) {
             ) : isKioskMode ? (
               <>
                 <p className="report-card-desc">
-                  Kiosk mode stores member PINs on this device only (hashed in the browser). This is less secure than Cloud Functions but required on the free Spark plan. Set a shared admin PIN for senior tools.
+                  Kiosk mode stores member PIN hashes in Firestore (hashed in the browser before upload). Attendance stays on each device. Cloud Functions verification is preferred when Blaze billing is available.
                 </p>
                 <p className="report-card-desc pin-setup-hint">
                   On first use of each tablet or browser, every member must create their PIN once at check-in.
