@@ -21,15 +21,27 @@ service cloud.firestore {
     }
 
     // PIN hashes — Spark kiosk reads hash for client-side verify; never stores plaintext.
+    // Read is open so collection queries (subscribeMemberPins) work for all active kiosks.
+    function memberPinDocHasValidHash(data) {
+      return data.keys().hasAll(['pinHash'])
+        && data.pinHash is string
+        && data.pinHash.size() >= 8
+        && (data.pinHash.matches('^sha256:.*') || data.pinHash.matches('^fnv1a:.*'));
+    }
+
     match /memberPins/{capid} {
-      allow read: if isActiveMember(capid);
+      allow read: if true;
       allow delete: if false;
       allow create: if isActiveMember(capid)
         && !exists(/databases/$(database)/documents/memberPins/$(capid))
         && request.resource.data.keys().hasAll(['pinHash', 'pinCreatedAt', 'pinUpdatedAt'])
         && request.resource.data.pinHash is string
         && request.resource.data.pinHash.size() >= 8;
-      allow update: if isActiveMember(capid) && memberPinResetRequired(capid);
+      allow update: if isActiveMember(capid)
+        && (memberPinResetRequired(capid) || !memberPinDocHasValidHash(resource.data))
+        && request.resource.data.keys().hasAll(['pinHash', 'pinUpdatedAt'])
+        && request.resource.data.pinHash is string
+        && request.resource.data.pinHash.size() >= 8;
     }
 
     match /meetings/{meetingId} {
