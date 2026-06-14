@@ -8,6 +8,13 @@ const db = getFirestore();
 
 const BCRYPT_ROUNDS = 10;
 
+// Keep callable functions small and bounded for free-tier kiosk usage.
+const callableOptions = {
+  timeoutSeconds: 30,
+  maxInstances: 10,
+  memory: '256MiB',
+};
+
 const ADMIN_CAPIDS = new Set([
   '326320', // Maj Steven C Mellard
   '249023', // 1st Lt Ernest E Burchell
@@ -230,7 +237,7 @@ function memberAttendanceFields(member) {
   };
 }
 
-exports.createPin = onCall(async (request) => {
+exports.createPin = onCall(callableOptions, async (request) => {
   const { capid, pin, confirmPin } = request.data || {};
   const memberId = String(capid);
   validatePin(pin);
@@ -280,7 +287,7 @@ exports.createPin = onCall(async (request) => {
   };
 });
 
-exports.verifyPinAndCheckIn = onCall(async (request) => {
+exports.verifyPinAndCheckIn = onCall(callableOptions, async (request) => {
   const { capid, pin } = request.data || {};
   const memberId = String(capid);
   validatePin(pin);
@@ -329,7 +336,7 @@ exports.verifyPinAndCheckIn = onCall(async (request) => {
   };
 });
 
-exports.verifyPinAndCheckOut = onCall(async (request) => {
+exports.verifyPinAndCheckOut = onCall(callableOptions, async (request) => {
   const { capid, pin } = request.data || {};
   const memberId = String(capid);
   validatePin(pin);
@@ -373,7 +380,7 @@ exports.verifyPinAndCheckOut = onCall(async (request) => {
   };
 });
 
-exports.resetMemberPin = onCall(async (request) => {
+exports.resetMemberPin = onCall(callableOptions, async (request) => {
   const { actorCapid, actorPin, targetCapid } = request.data || {};
   validatePin(actorPin);
 
@@ -406,7 +413,7 @@ exports.resetMemberPin = onCall(async (request) => {
   return { success: true, message: `PIN reset for ${target.displayName || target.fullName}.` };
 });
 
-exports.forceCheckIn = onCall(async (request) => {
+exports.forceCheckIn = onCall(callableOptions, async (request) => {
   const { actorCapid, actorPin, targetCapid, notes } = request.data || {};
   validatePin(actorPin);
 
@@ -459,7 +466,7 @@ exports.forceCheckIn = onCall(async (request) => {
   return { success: true, checkInTime: now.toDate().toISOString() };
 });
 
-exports.forceCheckOut = onCall(async (request) => {
+exports.forceCheckOut = onCall(callableOptions, async (request) => {
   const { actorCapid, actorPin, targetCapid, notes } = request.data || {};
   validatePin(actorPin);
 
@@ -510,7 +517,7 @@ exports.forceCheckOut = onCall(async (request) => {
   return { success: true, checkOutTime: now.toDate().toISOString() };
 });
 
-exports.guestCheckIn = onCall(async (request) => {
+exports.guestCheckIn = onCall(callableOptions, async (request) => {
   const { hostCapid, hostPin, guestName, guestId } = request.data || {};
   validatePin(hostPin);
 
@@ -612,7 +619,7 @@ exports.guestCheckIn = onCall(async (request) => {
   };
 });
 
-exports.guestCheckOut = onCall(async (request) => {
+exports.guestCheckOut = onCall(callableOptions, async (request) => {
   const { guestAttendanceId, actorCapid, actorPin } = request.data || {};
 
   if (!guestAttendanceId) {
@@ -666,7 +673,7 @@ exports.guestCheckOut = onCall(async (request) => {
   return { success: true, checkOutTime: now.toDate().toISOString() };
 });
 
-exports.createPendingMember = onCall(async (request) => {
+exports.createPendingMember = onCall(callableOptions, async (request) => {
   const { actorCapid, actorPin, fullName, grade, role } = request.data || {};
   validatePin(actorPin);
 
@@ -723,7 +730,7 @@ exports.createPendingMember = onCall(async (request) => {
   return { success: true, memberId: temporaryId, temporaryId, fullName: trimmedName };
 });
 
-exports.updatePendingMemberCapid = onCall(async (request) => {
+exports.updatePendingMemberCapid = onCall(callableOptions, async (request) => {
   const { actorCapid, actorPin, memberId, newCapid } = request.data || {};
   validatePin(actorPin);
 
@@ -792,7 +799,7 @@ exports.updatePendingMemberCapid = onCall(async (request) => {
   return { success: true, memberId: capidStr, capid: capidStr };
 });
 
-exports.deactivateMember = onCall(async (request) => {
+exports.deactivateMember = onCall(callableOptions, async (request) => {
   const { actorCapid, actorPin, targetMemberId, reason } = request.data || {};
   validatePin(actorPin);
 
@@ -827,7 +834,7 @@ exports.deactivateMember = onCall(async (request) => {
   return { success: true };
 });
 
-exports.reactivateMember = onCall(async (request) => {
+exports.reactivateMember = onCall(callableOptions, async (request) => {
   const { actorCapid, actorPin, targetMemberId } = request.data || {};
   validatePin(actorPin);
 
@@ -860,7 +867,7 @@ exports.reactivateMember = onCall(async (request) => {
   return { success: true };
 });
 
-exports.startMeeting = onCall(async (request) => {
+exports.startMeeting = onCall(callableOptions, async (request) => {
   const { actorCapid, actorPin, meetingTitle } = request.data || {};
   validatePin(actorPin);
 
@@ -889,7 +896,7 @@ exports.startMeeting = onCall(async (request) => {
   return { success: true, meetingId: meeting.id };
 });
 
-exports.closeMeeting = onCall(async (request) => {
+exports.closeMeeting = onCall(callableOptions, async (request) => {
   const { actorCapid, actorPin } = request.data || {};
   validatePin(actorPin);
 
@@ -920,7 +927,7 @@ exports.closeMeeting = onCall(async (request) => {
   return { success: true, meetingId: meeting.id };
 });
 
-exports.verifySeniorAccess = onCall(async (request) => {
+exports.verifySeniorAccess = onCall(callableOptions, async (request) => {
   const { capid, pin } = request.data || {};
   validatePin(pin);
 
@@ -941,7 +948,7 @@ exports.verifySeniorAccess = onCall(async (request) => {
   };
 });
 
-exports.exportReport = onCall(async (request) => {
+exports.exportReport = onCall(callableOptions, async (request) => {
   const { actorCapid, actorPin, meetingId, format } = request.data || {};
   validatePin(actorPin);
 
