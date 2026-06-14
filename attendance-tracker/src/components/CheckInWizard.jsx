@@ -218,9 +218,33 @@ export default function CheckInWizard({
     setPinError('');
 
     if (pinMode === 'create') {
-      setLoading(false);
-      setPin('');
-      setPinError('PIN setup is required. See a senior member.');
+      if (confirmPin.length !== 4) {
+        setPin(`${pinToSubmit}`);
+        setPinError('Confirm your new 4-digit PIN below.');
+        setLoading(false);
+        return;
+      }
+      if (pinToSubmit !== confirmPin) {
+        setPin('');
+        setConfirmPin('');
+        setPinError('PINs do not match. Try again.');
+        setLoading(false);
+        return;
+      }
+      try {
+        await createMemberPin(member.id, pinToSubmit, confirmPin);
+        if (mode === 'check-in') {
+          await onCheckIn(member.id, pinToSubmit);
+        } else {
+          await onCheckOut(member.id, pinToSubmit);
+        }
+        resetForNextPerson(`${member.name} ${actionVerb}.`);
+      } catch (err) {
+        setPin('');
+        setConfirmPin('');
+        setPinError(getCallableError(err) || 'Could not create PIN.');
+        setLoading(false);
+      }
       return;
     }
 
@@ -254,11 +278,24 @@ export default function CheckInWizard({
   };
 
   const handleKioskDigit = (digit) => {
-    if (loading || pin.length >= 4) return;
+    if (loading) return;
+    if (pinMode === 'create' && pin.length >= 4 && confirmPin.length >= 4) return;
+
+    if (pinMode === 'create' && pin.length >= 4) {
+      const nextConfirm = `${confirmPin}${digit}`.slice(0, 4);
+      setConfirmPin(nextConfirm);
+      setPinError('');
+      if (nextConfirm.length === 4) {
+        submitKioskPin(pin);
+      }
+      return;
+    }
+
+    if (pin.length >= 4) return;
     const nextPin = `${pin}${digit}`;
     setPin(nextPin);
     setPinError('');
-    if (nextPin.length === 4) {
+    if (nextPin.length === 4 && pinMode !== 'create') {
       submitKioskPin(nextPin);
     }
   };
@@ -560,6 +597,20 @@ export default function CheckInWizard({
             {pinError && (
               <div className="pin-modal-error" role="alert">
                 {pinError}
+              </div>
+            )}
+
+            {pinMode === 'create' && pin.length === 4 && (
+              <p className="wizard-mini-copy" style={{ textAlign: 'center', marginBottom: 8 }}>
+                Confirm your new PIN
+              </p>
+            )}
+
+            {pinMode === 'create' && pin.length === 4 && (
+              <div className="pin-entry-display" aria-label={`${confirmPin.length} of 4 confirm digits entered`}>
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <span key={`confirm-${index}`} className={index < confirmPin.length ? 'filled' : ''} />
+                ))}
               </div>
             )}
 

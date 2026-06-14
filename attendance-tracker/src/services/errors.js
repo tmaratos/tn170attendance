@@ -1,6 +1,8 @@
 export function getCallableError(error) {
   if (!error) return 'Request failed';
-  if (typeof error.message === 'string' && error.message) return error.message;
-  if (error.details) return String(error.details);
+  const message = error.message || error.details;
+  if (typeof message === 'string' && message) {
+    return message.replace(/^Firebase:\s*/i, '').replace(/\s*\([^)]*\)\.?$/g, '').trim() || message;
+  }
   return 'Request failed';
 }

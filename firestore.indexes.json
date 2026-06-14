@@ -13,7 +13,7 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "meetingId", "order": "ASCENDING" },
-        { "fieldPath": "capid", "order": "ASCENDING" }
+        { "fieldPath": "memberId", "order": "ASCENDING" }
       ]
     },
     {
@@ -53,7 +53,7 @@
         { "fieldPath": "isSeniorMember", "order": "ASCENDING" },
         { "fieldPath": "active", "order": "ASCENDING" }
       ]
-    },
+    }
   ],
   "fieldOverrides": []
 }

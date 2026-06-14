@@ -54,14 +54,14 @@ export function toUiMember(memberDoc, attendanceRecord = null) {
   };
 }
 
-export function subscribeMembers(callback) {
+export function subscribeMembers(callback, { includeInactive = false } = {}) {
   const db = getDb();
   if (!db) return () => {};
 
   return onSnapshot(collection(db, 'members'), (snap) => {
     const members = snap.docs
       .map((d) => ({ memberId: d.id, ...d.data() }))
-      .filter((m) => m.active !== false);
+      .filter((m) => includeInactive || m.active !== false);
     callback(members);
   });
 }

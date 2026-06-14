@@ -79,10 +79,10 @@ export function subscribeActivityLog(meetingId, callback, maxItems = 50) {
         const data = d.data();
         return {
           id: d.id,
-          type: mapActivityType(data.type),
+          type: mapActivityType(data.activityType || data.type),
           message: buildActivityMessage(data),
           timestamp: timestampToIso(data.timestamp),
-          rawType: data.type,
+          rawType: data.activityType || data.type,
         };
       });
     callback(items);
@@ -102,14 +102,21 @@ function mapActivityType(type) {
     pin_created: 'check-in',
     pin_reset: 'force-in',
     report_exported: 'check-in',
+    meeting_started: 'check-in',
+    meeting_closed: 'check-out',
+    pending_member_created: 'check-in',
+    capid_added: 'check-in',
+    member_deactivated: 'force-out',
+    member_reactivated: 'check-in',
   };
   return map[type] || 'check-in';
 }
 
 function buildActivityMessage(data) {
-  const target = data.targetName || data.details?.guestName;
+  const type = data.activityType || data.type;
+  const target = data.targetName || data.guestName || data.details?.guestName;
   const actor = data.actorName;
-  switch (data.type) {
+  switch (type) {
     case 'member_checked_in':
       return `${target} checked in`;
     case 'member_checked_out':
@@ -128,6 +135,18 @@ function buildActivityMessage(data) {
       return `${target}'s PIN was reset by ${actor}`;
     case 'report_exported':
       return `${actor} exported ${data.details?.format || 'report'}`;
+    case 'meeting_started':
+      return `Meeting started by ${actor}`;
+    case 'meeting_closed':
+      return `Meeting closed by ${actor}`;
+    case 'pending_member_created':
+      return `Pending member ${target} created by ${actor}`;
+    case 'capid_added':
+      return `CAPID assigned to ${target} by ${actor}`;
+    case 'member_deactivated':
+      return `${target} deactivated by ${actor}`;
+    case 'member_reactivated':
+      return `${target} reactivated by ${actor}`;
     default:
       return data.details?.message || 'Activity recorded';
   }

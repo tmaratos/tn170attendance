@@ -72,7 +72,7 @@ export default function GuestSignIn({ attendance }) {
       await checkInGuest({
         name: guestName.trim(),
         hostId: selectedHost.id,
-        hostCapid: selectedHost.capid || selectedHost.id,
+        hostCapid: selectedHost.capidRaw || selectedHost.id,
         hostName: selectedHost.name,
         hostPin: pin,
         guestId: selectedGuest?.guestId || selectedGuest?.id || null,

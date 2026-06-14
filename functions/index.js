@@ -83,19 +83,28 @@ async function getOrCreateTodaysMeeting() {
 async function logActivity({
   meetingId,
   type,
+  actorMemberId = null,
   actorCapid = null,
   actorName = null,
+  targetMemberId = null,
   targetCapid = null,
   targetName = null,
+  guestId = null,
+  guestName = null,
   details = null,
 }) {
   await db.collection('activityLog').add({
     meetingId: meetingId || null,
+    activityType: type,
     type,
+    actorMemberId,
     actorCapid,
     actorName,
+    targetMemberId,
     targetCapid,
     targetName,
+    guestId,
+    guestName,
     details,
     timestamp: FieldValue.serverTimestamp(),
   });
@@ -167,18 +176,21 @@ async function requireGuestHost(actor) {
 async function canSignOutGuest(actor, record) {
   if (actor.isAdmin) return true;
   if (actor.canManageGuests && actor.isSeniorMember) return true;
-  if (String(actor.memberId || actor.id) === String(record.hostCapid)) return true;
-  if (String(actor.capid) === String(record.hostCapid)) return true;
+  const actorId = String(actor.memberId || actor.id);
+  const actorCapid = String(actor.capid || '');
+  if (String(record.hostMemberId) === actorId) return true;
+  if (String(record.hostCapid) === actorCapid) return true;
+  if (String(record.hostCapid) === actorId) return true;
   return false;
 }
 
 async function getOpenAttendanceRecord(meetingId, memberId) {
   const member = await getMember(memberId);
-  const lookupKey = member?.capid || member?.temporaryId || memberId;
+  const memberKey = String(member?.memberId || member?.id || memberId);
   const snap = await db
     .collection('attendanceRecords')
     .where('meetingId', '==', meetingId)
-    .where('capid', '==', String(lookupKey))
+    .where('memberId', '==', memberKey)
     .limit(5)
     .get();
 
@@ -209,7 +221,8 @@ async function generateTemporaryId() {
 function memberAttendanceFields(member) {
   return {
     memberId: member.memberId || member.id,
-    capid: member.capid || member.temporaryId || member.memberId,
+    capid: member.capid || null,
+    temporaryId: member.temporaryId || (!member.capid ? (member.memberId || member.id) : null),
     memberName: member.displayName || member.fullName,
     grade: member.grade,
     role: member.role,
@@ -254,6 +267,7 @@ exports.createPin = onCall(async (request) => {
   await logActivity({
     meetingId: meeting.id,
     type: 'pin_created',
+    targetMemberId: memberId,
     targetCapid: member.capid || member.temporaryId || memberId,
     targetName: member.displayName || member.fullName,
     details: { memberId },
@@ -299,8 +313,10 @@ exports.verifyPinAndCheckIn = onCall(async (request) => {
   await logActivity({
     meetingId: meeting.id,
     type: 'member_checked_in',
+    actorMemberId: memberId,
     actorCapid: member.capid || member.temporaryId || memberId,
     actorName: member.displayName || member.fullName,
+    targetMemberId: memberId,
     targetCapid: member.capid || member.temporaryId || memberId,
     targetName: member.displayName || member.fullName,
   });
@@ -421,6 +437,7 @@ exports.forceCheckIn = onCall(async (request) => {
     checkedInBy: String(actorCapid),
     checkedOutBy: null,
     forceAction: true,
+    forceActionBy: String(actorCapid),
     forceType: 'admin',
     notes: notes || null,
     createdAt: FieldValue.serverTimestamp(),
@@ -430,8 +447,10 @@ exports.forceCheckIn = onCall(async (request) => {
   await logActivity({
     meetingId: meeting.id,
     type: 'force_check_in',
+    actorMemberId: String(actorCapid),
     actorCapid: actor.capid || actorCapid,
     actorName: actor.displayName || actor.fullName,
+    targetMemberId: targetId,
     targetCapid: target.capid || target.temporaryId || targetId,
     targetName: target.displayName || target.fullName,
     details: { notes: notes || null },
@@ -470,6 +489,7 @@ exports.forceCheckOut = onCall(async (request) => {
     durationMinutes,
     checkedOutBy: String(actorCapid),
     forceAction: true,
+    forceActionBy: String(actorCapid),
     forceType: 'admin',
     notes: notes || null,
     updatedAt: FieldValue.serverTimestamp(),
@@ -478,8 +498,10 @@ exports.forceCheckOut = onCall(async (request) => {
   await logActivity({
     meetingId: meeting.id,
     type: 'force_check_out',
+    actorMemberId: String(actorCapid),
     actorCapid: actor.capid || actorCapid,
     actorName: actor.displayName || actor.fullName,
+    targetMemberId: targetId,
     targetCapid: target.capid || target.temporaryId || targetId,
     targetName: target.displayName || target.fullName,
     details: { notes: notes || null },
@@ -554,12 +576,14 @@ exports.guestCheckIn = onCall(async (request) => {
     });
   }
 
+  const hostMemberId = String(host.memberId || host.id || hostCapid);
   const attendanceRef = db.collection('guestAttendanceRecords').doc();
   await attendanceRef.set({
     meetingId: meeting.id,
     guestId: guestRef.id,
     guestName: trimmedName,
-    hostCapid: String(hostCapid),
+    hostMemberId,
+    hostCapid: String(host.capid || hostCapid),
     hostName: host.displayName || host.fullName,
     status: 'checked_in',
     checkInTime: now,
@@ -572,9 +596,11 @@ exports.guestCheckIn = onCall(async (request) => {
   await logActivity({
     meetingId: meeting.id,
     type: 'guest_checked_in',
+    actorMemberId: hostMemberId,
     actorCapid: host.capid || hostCapid,
     actorName: host.displayName || host.fullName,
-    targetName: trimmedName,
+    guestId: guestRef.id,
+    guestName: trimmedName,
     details: { guestId: guestRef.id },
   });
 
@@ -755,7 +781,7 @@ exports.updatePendingMemberCapid = onCall(async (request) => {
   const meeting = await getOrCreateTodaysMeeting();
   await logActivity({
     meetingId: meeting.id,
-    type: 'pending_capid_assigned',
+    type: 'capid_added',
     actorCapid: actor.capid || actorCapid,
     actorName: actor.displayName || actor.fullName,
     targetCapid: capidStr,
@@ -877,6 +903,7 @@ exports.closeMeeting = onCall(async (request) => {
 
   await db.collection('meetings').doc(meeting.id).update({
     endTime: now,
+    closedAt: now,
     status: 'closed',
     closedByCapid: actor.capid || actorCapid,
     closedByName: actor.displayName || actor.fullName,

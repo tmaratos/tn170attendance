@@ -57,7 +57,7 @@ export default function Guests({ attendance }) {
         await checkInGuest({
           name: guestName.trim(),
           hostId: selectedHost.id,
-          hostCapid: selectedHost.capid || selectedHost.id,
+          hostCapid: selectedHost.capidRaw || selectedHost.id,
           hostName: selectedHost.name,
           hostPin: pin,
           guestId: matchingRecurring.find((g) => g.name.toLowerCase() === guestName.trim().toLowerCase())?.guestId,
