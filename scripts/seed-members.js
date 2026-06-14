@@ -109,7 +109,7 @@ function loadRosterLines() {
 }
 
 function parseGradeAndName(tokens) {
-  let gradeEnd = 1;
+  let gradeEnd = 2;
   if ((tokens[1] === '1st' || tokens[1] === '2d') && tokens[2] === 'Lt') {
     gradeEnd = 3;
   }

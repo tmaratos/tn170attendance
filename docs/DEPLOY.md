@@ -1,138 +1,125 @@
-# TN-170 Attendance Tracker — Firebase Deployment
+# TN-170 Attendance Tracker - Firebase Deployment
 
-## Permanent free policy (Spark only)
+## Permanent Free Policy
 
-This project **must stay on the Firebase Spark plan ($0/month, no billing card)**. Do **not** upgrade to Blaze.
+This project must stay on the Firebase Spark plan: $0/month and no billing card. Do not upgrade to Blaze.
 
-| Service | Spark | TN-170 usage |
-|---------|-------|--------------|
-| **Firestore** | Yes — 50K reads / 20K writes / day | Read-only member roster from clients; seeded via Admin SDK or console |
-| **Hosting** | Yes — 10 GB storage, 360 MB/day transfer | Static SPA |
-| **Cloud Functions** | **Not available** | Code kept in repo for a future Blaze upgrade only — **never deploy on Spark** |
-| **Firebase Storage / Auth** | Not used | Not used |
+| Service | Spark support | TN-170 usage |
+| --- | --- | --- |
+| Firestore | Yes | Read-only member roster from clients |
+| Hosting | Yes | Static website hosting |
+| Cloud Functions | No | Code remains in the repo only; it is blocked from deploy |
+| Firebase Storage | Not used | Avoided to keep the project simple and free |
+| Firebase Auth | Not used | PIN flow is handled by the kiosk app |
 
-### Production architecture on Spark (kiosk mode)
+The repo is configured so `npm run deploy` uses the Spark-only deploy path. Functions are intentionally not listed in `firebase.json`, and `npm run deploy:functions` exits with a billing warning.
 
-When Firebase web config is present, the app runs in **kiosk mode** by default:
+## Native Browser Setup
 
-1. **Member roster** — read from Firestore (seed once with `npm run seed:members` or console import).
-2. **Attendance, guests, activity** — stored in **localStorage on each kiosk device** (per-device, not shared across tablets).
-3. **PINs** — hashed in the browser (FNV-1a / Web Crypto) and stored locally on the device. Less secure than server-side bcrypt via Cloud Functions, but required without Blaze.
-4. **Admin tools** — shared 4-digit admin PIN configured in Settings (stored locally on the device).
+The Firebase console can be used for the free project setup:
 
-The kiosk UI shows a **“Kiosk mode”** banner when this path is active.
+1. Confirm the project is on Spark: Project overview -> Billing/Usage should show Spark or no-cost.
+2. Create/enable Cloud Firestore in production mode.
+3. Open Firestore and add/import the roster data.
+4. Open Hosting and click Get started.
 
-Set `VITE_FIREBASE_FREE_MODE=false` only if you intentionally upgrade to Blaze and deploy Cloud Functions. Use `VITE_FIREBASE_EMULATOR=true` for full-stack local testing with emulators (free, no cloud billing).
+Firebase Hosting does not upload a built website directly from the browser. The Hosting setup screen gives Firebase CLI commands. That is normal and still free as long as only Hosting and Firestore rules/indexes are deployed.
 
-### What Cloud Functions would add (Blaze only — not used today)
+Do not click Upgrade, Blaze, enable billing, or deploy Functions.
 
-Callable Functions (`createPin`, `verifyPinAndCheckIn`, etc.) require Blaze. The `functions/` directory is maintained for a possible future upgrade but is **not deployed** on Spark.
+## Spark Kiosk Architecture
 
-### What we deliberately avoid
+When Firebase web config is present, the app runs in free kiosk mode by default:
 
-- No Blaze upgrade, no billing card, no paid Google Cloud APIs
-- No Firebase Storage, Cloud Vision, Maps, SMS, or third-party paid services
-- No Firebase Auth (PIN auth is local on Spark; server-side on Blaze)
-- No Cloud Functions deploy on Spark
+1. Member roster: read from Firestore.
+2. Attendance, guests, activity, and PIN hashes: stored locally in browser localStorage on each kiosk device.
+3. Admin PIN/settings: stored locally on the kiosk device.
 
-## Prerequisites
+This keeps the live site free. The tradeoff is that attendance data is per device, not shared between multiple iPads.
 
-1. [Firebase CLI](https://firebase.google.com/docs/cli): `npm install -g firebase-tools`
-2. Firebase project `tn170-attendance` (Spark plan)
-3. Node.js 20+
+`attendance-tracker/.env.example` sets:
 
-## One-Time Firebase Console Setup
+```text
+VITE_FIREBASE_FREE_MODE=true
+```
 
-1. Create or use project `tn170-attendance` — stay on **Spark**.
-2. Enable **Cloud Firestore** (production mode; deploy rules from repo).
-3. Register a **Web app** and copy config into `attendance-tracker/.env` (see `.env.example`).
-4. Enable **Firebase Hosting**.
-5. Do **not** enable Storage, Auth, or upgrade to Blaze.
+Only set `VITE_FIREBASE_FREE_MODE=false` if the project is intentionally upgraded to Blaze and Cloud Functions are deployed. That is not the TN-170 free setup.
 
-## Local Configuration
+## Firestore Roster Setup
+
+Use the existing roster file:
 
 ```powershell
-cd C:\tn170attendance\attendance-tracker
-Copy-Item .env.example .env
-# Edit .env with your Firebase web app config
-# VITE_FIREBASE_FREE_MODE=true is the default for Spark (kiosk mode)
+node scripts/generate-import-json.js
 ```
 
-Optional emulator mode (full PIN/check-in stack locally, no cloud billing):
+This writes:
 
+```text
+data/firestore-import.json
 ```
-VITE_FIREBASE_EMULATOR=true
-VITE_FIREBASE_FREE_MODE=false
-```
 
-Run emulators: `firebase emulators:start` (Firestore + Functions locally).
+The JSON contains:
 
-## Install Dependencies
+- `members`: 52 roster records
+- `settings`: squadron display settings
+
+Firestore rules keep client writes blocked for shared cloud collections. Roster changes should be made by an admin import/seed step, not by the public kiosk UI.
+
+## Free Deploy Command
+
+From the repo root:
 
 ```powershell
-cd C:\tn170attendance
-npm install
-cd attendance-tracker; npm install
-cd ..\functions; npm install
+npm run deploy
 ```
 
-## Seed Member Roster
-
-Requires authenticated CLI (free — no Blaze):
-
-```powershell
-firebase login
-# If seed fails with auth errors:
-firebase login --reauth
-gcloud auth application-default login
-$env:FIREBASE_PROJECT_ID="tn170-attendance"
-npm run seed:members
-```
-
-Optional: place roster at `data/roster.txt` or `docs/roster.txt` (one line per member: `CAPID Grade First ... Last`).
-
-The seed script merges roster without deleting existing members and preserves PIN hashes server-side for a future Blaze migration.
-
-## Build & Deploy (Spark)
-
-```powershell
-cd C:\tn170attendance\attendance-tracker
-npm run build
-
-cd C:\tn170attendance
-firebase deploy --only firestore:rules,firestore:indexes,hosting
-```
-
-Or from repo root:
+That command is equivalent to:
 
 ```powershell
 npm run deploy:spark
 ```
 
-**Do not run** `firebase deploy --only functions` on Spark — Functions will not run.
-
-## Verify
+Which builds the app and deploys only:
 
 ```powershell
-cd C:\tn170attendance\functions; node -c index.js
-cd C:\tn170attendance\attendance-tracker; npm run preview
+firebase deploy --only firestore:rules,firestore:indexes,hosting
 ```
 
-## Architecture Summary
+If Firebase CLI auth expires, reauthenticate:
 
-| Layer | Spark (production) | Blaze (future, optional) |
-|-------|-------------------|--------------------------|
-| **Firestore** | Read-only roster for clients | Roster + attendance records |
-| **Hosting** | Static SPA | Static SPA |
-| **Cloud Functions** | Not deployed | PIN verify, check-in/out, admin |
-| **localStorage** | Attendance, PINs, guests per device | Not used |
+```powershell
+firebase login --reauth
+```
 
-### Collections (Firestore)
+Then rerun:
 
-- `members` — roster (CAPID or `TEMP-YYYYMMDD-####` for pending)
-- `memberPins` — bcrypt hashes (seed/functions only; never client-readable)
-- Other collections exist for Blaze mode but are unused on Spark kiosk
+```powershell
+npm run deploy
+```
 
-## Without Firebase
+## Commands to Avoid
 
-If `.env` is missing or has placeholder values, the app uses **mock/localStorage mode** with bundled sample data — useful for offline UI development with no cloud account.
+Do not run:
+
+```powershell
+firebase deploy --only functions
+```
+
+Do not run a bare Firebase deploy from an older checkout that still includes Functions:
+
+```powershell
+firebase deploy
+```
+
+In this repo version, `firebase.json` no longer includes Functions, but the safest habit is still to use `npm run deploy`.
+
+## Verify Locally
+
+```powershell
+cd C:\tn170attendance\attendance-tracker
+npm run build
+npm run preview
+```
+
+The kiosk should show the local clock, kiosk mode, roster search, PIN flow, guest flow, and admin routes without any paid Firebase services.
