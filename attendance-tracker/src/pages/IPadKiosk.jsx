@@ -18,6 +18,7 @@ export default function IPadKiosk({ attendance }) {
     checkOutMember,
     isFirebase,
     isKioskMode,
+    usingLocalRoster,
     memberHasPin,
     needsPinSetup,
     createMemberPin,
@@ -34,7 +35,9 @@ export default function IPadKiosk({ attendance }) {
 
   return (
     <div className="ipad-kiosk-root">
-      {isKioskMode && <KioskModeBanner settings={settings} />}
+      {isKioskMode && (
+        <KioskModeBanner settings={settings} usingLocalRoster={attendance.usingLocalRoster} />
+      )}
       <header className="ipad-kiosk-header">
         <div className="ipad-brand">
           <img src={logoSrc} alt="Squadron Logo" />

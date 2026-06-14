@@ -5,7 +5,7 @@ const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
 
 export default function Settings({ attendance }) {
   const { settings, updateSettings, resetData, isCloudBackend, isKioskMode } = attendance;
-  const [form, setForm] = useState({ ...settings });
+  const [form, setForm] = useState({ ...DEFAULT_SETTINGS, ...settings });
   const [saved, setSaved] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
 

@@ -4,6 +4,8 @@ import {
   MOCK_GUESTS,
   MOCK_ACTIVITY,
   DEFAULT_SETTINGS,
+  getEmbeddedRosterMembers,
+  buildInitialKioskLocalState,
 } from '../data/mockData';
 import { isFirebaseConfigured, isSparkKioskMode } from '../services/firebase';
 import { hashKioskPinSync, verifyKioskPin } from '../utils/kioskPin';
@@ -59,7 +61,12 @@ function mockHashPin(pin, memberId) {
 function loadMockState() {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) return JSON.parse(stored);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed.members) && parsed.members.length > 0) {
+        return parsed;
+      }
+    }
   } catch {
     /* use defaults */
   }
@@ -116,17 +123,26 @@ function adminForceNote(date = new Date()) {
 function loadKioskLocalState() {
   try {
     const stored = localStorage.getItem(KIOSK_STORAGE_KEY);
-    if (stored) return JSON.parse(stored);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (parsed.pins && Object.keys(parsed.pins).length > 0) {
+        return {
+          settings: DEFAULT_SETTINGS,
+          recurringGuests: [],
+          guests: MOCK_GUESTS,
+          activity: MOCK_ACTIVITY,
+          ...parsed,
+        };
+      }
+    }
   } catch {
-    /* use defaults */
+    /* seed fresh below */
   }
+
+  const seeded = buildInitialKioskLocalState();
   return {
-    pins: {},
-    attendance: {},
-    guests: MOCK_GUESTS,
-    activity: MOCK_ACTIVITY,
+    ...seeded,
     settings: DEFAULT_SETTINGS,
-    recurringGuests: [],
   };
 }
 
@@ -147,7 +163,8 @@ function attendanceRecordToUi(record) {
 }
 
 function useSparkKioskAttendance() {
-  const [rawMembers, setRawMembers] = useState([]);
+  const [rawMembers, setRawMembers] = useState(() => getEmbeddedRosterMembers());
+  const [usingLocalRoster, setUsingLocalRoster] = useState(true);
   const [localState, setLocalState] = useState(loadKioskLocalState);
   const [remoteSettings, setRemoteSettings] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -157,9 +174,16 @@ function useSparkKioskAttendance() {
   }, [localState]);
 
   useEffect(() => {
+    const embedded = getEmbeddedRosterMembers();
     const unsubs = [
       subscribeMembers((members) => {
-        setRawMembers(members);
+        if (members.length > 0) {
+          setRawMembers(members);
+          setUsingLocalRoster(false);
+        } else {
+          setRawMembers(embedded);
+          setUsingLocalRoster(true);
+        }
         setLoading(false);
       }),
       subscribeSettings(setRemoteSettings),
@@ -423,12 +447,11 @@ function useSparkKioskAttendance() {
   }, []);
 
   const resetData = useCallback(() => {
-    const fresh = loadKioskLocalState();
-    fresh.pins = {};
-    fresh.attendance = {};
-    fresh.guests = MOCK_GUESTS;
-    fresh.activity = MOCK_ACTIVITY;
-    fresh.recurringGuests = [];
+    const seeded = buildInitialKioskLocalState();
+    const fresh = {
+      ...seeded,
+      settings: DEFAULT_SETTINGS,
+    };
     setLocalState(fresh);
     saveKioskLocalState(fresh);
   }, []);
@@ -499,9 +522,10 @@ function useSparkKioskAttendance() {
     recurringGuests: localState.recurringGuests,
     meeting: null,
     seniorSession: null,
-    isFirebase: false,
+    isFirebase: true,
     isCloudBackend: false,
     isKioskMode: true,
+    usingLocalRoster,
     loading,
     error: null,
     checkInMember,

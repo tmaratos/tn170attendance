@@ -109,7 +109,9 @@ export default function PublicKiosk({ attendance }) {
 
   return (
     <div className="public-kiosk-page">
-      {isKioskMode && <KioskModeBanner settings={settings} />}
+      {isKioskMode && (
+        <KioskModeBanner settings={settings} usingLocalRoster={attendance.usingLocalRoster} />
+      )}
       <main className="public-kiosk-shell">
         <section className="public-kiosk-hero">
           <div className="public-brand-card">
