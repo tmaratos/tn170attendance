@@ -46,6 +46,7 @@
 html, body, #root {
   width: 100%;
   min-height: 100%;
+  min-height: 100dvh;
 }
 
 body {
@@ -54,6 +55,7 @@ body {
   color: var(--gray-800);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
 }
 
 a {
@@ -92,15 +94,21 @@ input, select, textarea {
 .public-app-layout {
   display: block;
   min-height: 100vh;
+  min-height: 100dvh;
+  width: 100%;
 }
 
 .ipad-main-content,
 .public-main-content {
   margin-left: 0;
   width: 100%;
+  max-width: none;
   min-height: 100vh;
+  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
   padding: 0;
-  overflow-y: auto;
+  overflow: hidden;
   background: #020812;
 }
 

@@ -112,49 +112,53 @@ export default function PublicKiosk({ attendance }) {
       {isKioskMode && (
         <KioskModeBanner settings={settings} usingLocalRoster={attendance.usingLocalRoster} />
       )}
-      <main className="public-kiosk-shell">
-        <section className="public-kiosk-hero">
-          <div className="public-brand-card">
-            <img src={logoSrc} alt="Oak Ridge Composite Squadron patch" />
-            <div>
-              <p>{settings.motto}</p>
-              <h1>{settings.squadronName}</h1>
-              <strong>{settings.squadronDesignator}</strong>
+      <div className="public-kiosk-body">
+        <main className="public-kiosk-shell">
+          <section className="public-kiosk-hero">
+            <div className="public-brand-card">
+              <img src={logoSrc} alt="Oak Ridge Composite Squadron patch" />
+              <div>
+                <p>{settings.motto}</p>
+                <h1>{settings.squadronName}</h1>
+                <strong>{settings.squadronDesignator}</strong>
+              </div>
             </div>
-          </div>
 
-          <div className="public-clock-card">
-            <span>{dateStr}</span>
-            <strong>{timeStr}</strong>
-            <em className={meetingStatus === 'Meeting In Progress' ? 'open' : 'closed'}>
-              {meetingStatus}
-            </em>
-          </div>
+            <div className="public-clock-card">
+              <span>{dateStr}</span>
+              <strong>{timeStr}</strong>
+              <em className={meetingStatus === 'Meeting In Progress' ? 'open' : 'closed'}>
+                {meetingStatus}
+              </em>
+            </div>
 
-          <CheckoutReminder />
+            <CheckoutReminder />
+          </section>
 
-          <div className="public-kiosk-actions">
-            <Link to="/check-in" className="public-action-button check-in">
-              <span>CHECK IN</span>
-              <small>Members and cadets</small>
-            </Link>
-            <Link to="/check-out" className="public-action-button check-out">
-              <span>CHECK OUT</span>
-              <small>End of meeting</small>
-            </Link>
-            <Link to="/guest-sign-in" className="public-action-button guest">
-              <span>GUEST SIGN IN</span>
-              <small>Parents and visitors</small>
-            </Link>
-            <Link to="/admin-login" className="public-action-button admin">
-              <span>ADMIN LOGIN</span>
-              <small>Senior member tools</small>
-            </Link>
-          </div>
-        </section>
+          <KioskStatusPanel members={members} guests={guests} now={now} />
+        </main>
+      </div>
 
-        <KioskStatusPanel members={members} guests={guests} now={now} />
-      </main>
+      <footer className="public-kiosk-footer">
+        <div className="public-kiosk-actions">
+          <Link to="/check-in" className="public-action-button check-in">
+            <span>CHECK IN</span>
+            <small>Members and cadets</small>
+          </Link>
+          <Link to="/check-out" className="public-action-button check-out">
+            <span>CHECK OUT</span>
+            <small>End of meeting</small>
+          </Link>
+          <Link to="/guest-sign-in" className="public-action-button guest">
+            <span>GUEST SIGN IN</span>
+            <small>Parents and visitors</small>
+          </Link>
+          <Link to="/admin-login" className="public-action-button admin">
+            <span>ADMIN LOGIN</span>
+            <small>Senior member tools</small>
+          </Link>
+        </div>
+      </footer>
     </div>
   );
 }

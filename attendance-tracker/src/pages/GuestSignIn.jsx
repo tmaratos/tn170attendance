@@ -128,6 +128,7 @@ export default function GuestSignIn({ attendance }) {
 
   return (
     <div className="public-flow-page guest-flow" onKeyDown={handleFlowEnter}>
+      <div className="public-flow-body">
       <div className="public-flow-shell">
         <div className="public-flow-header">
           <Link to="/" className="public-back-link">Home</Link>
@@ -305,6 +306,7 @@ export default function GuestSignIn({ attendance }) {
             </div>
           )}
         </section>
+      </div>
       </div>
     </div>
   );

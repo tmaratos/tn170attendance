@@ -193,6 +193,7 @@ export default function PublicMemberFlow({
 
   return (
     <div className={`public-flow-page ${actionClass}`} onKeyDown={handleFlowEnter}>
+      <div className="public-flow-body">
       <div className="public-flow-shell">
         <div className="public-flow-header">
           <Link to="/" className="public-back-link">Home</Link>
@@ -257,6 +258,7 @@ export default function PublicMemberFlow({
                 onDigit={addPinDigit(setPin)}
                 onBackspace={() => setPin((current) => current.slice(0, -1))}
                 onClear={() => setPin('')}
+                autoFocus={pin.length < 4}
               />
 
               {pinSetupRequired && pin.length === 4 && (
@@ -267,6 +269,7 @@ export default function PublicMemberFlow({
                     onDigit={addPinDigit(setConfirmPin)}
                     onBackspace={() => setConfirmPin((current) => current.slice(0, -1))}
                     onClear={() => setConfirmPin('')}
+                    autoFocus
                   />
                 </>
               )}
@@ -344,6 +347,7 @@ export default function PublicMemberFlow({
             </div>
           )}
         </section>
+      </div>
       </div>
     </div>
   );
