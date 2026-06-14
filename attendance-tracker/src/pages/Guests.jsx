@@ -78,7 +78,7 @@ export default function Guests({ attendance }) {
   };
 
   const handleSignOut = async (guest) => {
-    if (isFirebase) {
+    if (attendance.isFirebase) {
       setSignOutGuest(guest);
       setSignOutPin('');
       setSignOutCapid('');
@@ -141,7 +141,10 @@ export default function Guests({ attendance }) {
                     <td>{g.hostName}</td>
                     <td>{formatTime(g.checkInTime)}</td>
                     <td>
-                      <button className="btn btn-red" style={{ padding: '6px 12px', minHeight: 'auto', fontSize: '0.8rem' }} onClick={() => handleSignOut(g)}>
+                      <button
+                        className="btn btn-red btn-lg guest-sign-out-btn"
+                        onClick={() => handleSignOut(g)}
+                      >
                         Sign Out
                       </button>
                     </td>

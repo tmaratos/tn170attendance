@@ -456,27 +456,6 @@ function useSparkKioskAttendance() {
     [addActivity]
   );
 
-  const checkOutGuest = useCallback(
-    (guestId) => {
-      const now = new Date().toISOString();
-      setLocalState((prev) => {
-        const guest = prev.guests.find((g) => g.id === guestId);
-        const updatedGuests = prev.guests.map((g) =>
-          g.id === guestId ? { ...g, status: 'checked-out', checkOutTime: now } : g
-        );
-        const recurringGuests = prev.recurringGuests.map((g) =>
-          guest && g.name.toLowerCase() === guest.name.toLowerCase()
-            ? { ...g, status: 'checked-out' }
-            : g
-        );
-        return { ...prev, guests: updatedGuests, recurringGuests };
-      });
-      const guest = localState.guests.find((g) => g.id === guestId);
-      if (guest) addActivity(`${guest.name} (Guest) checked out`, 'guest-out');
-    },
-    [localState.guests, addActivity]
-  );
-
   const updateSettings = useCallback((newSettings) => {
     setLocalState((prev) => ({ ...prev, settings: { ...prev.settings, ...newSettings } }));
   }, []);
@@ -526,6 +505,62 @@ function useSparkKioskAttendance() {
       return verifyPinSpark(memberId, pin);
     },
     [memberPinHashes]
+  );
+
+  const canSignOutGuest = useCallback(
+    (guest, actorCapid) => {
+      const actorId = String(actorCapid);
+      if (ADMIN_CAPIDS.has(actorId)) return true;
+      const hostId = String(guest.hostId || '');
+      if (hostId && hostId === actorId) return true;
+      const actorMember = members.find(
+        (m) =>
+          String(m.capidRaw || m.capid || m.id) === actorId || String(m.id) === actorId
+      );
+      if (!actorMember) return false;
+      if (hostId === String(actorMember.id)) return true;
+      if (hostId === String(actorMember.capidRaw || actorMember.capid)) return true;
+      return false;
+    },
+    [members]
+  );
+
+  const checkOutGuest = useCallback(
+    async (guestId, actorCapid, actorPin) => {
+      const guest = localState.guests.find((g) => g.id === guestId);
+      if (!guest) throw new Error('Guest not found.');
+      if (guest.status !== 'checked-in') throw new Error('Guest is not currently signed in.');
+
+      if (actorCapid && actorPin) {
+        if (!canSignOutGuest(guest, actorCapid)) {
+          throw new Error('Not authorized to sign out this guest.');
+        }
+        const actorMember = members.find(
+          (m) =>
+            String(m.capidRaw || m.capid || m.id) === String(actorCapid) ||
+            String(m.id) === String(actorCapid)
+        );
+        const pinMemberId = actorMember ? actorMember.id : String(actorCapid);
+        const pinOk = await verifyPin(pinMemberId, actorPin);
+        if (!pinOk) throw new Error('Incorrect PIN.');
+      }
+
+      const now = new Date().toISOString();
+      setLocalState((prev) => {
+        const currentGuest = prev.guests.find((g) => g.id === guestId);
+        const updatedGuests = prev.guests.map((g) =>
+          g.id === guestId ? { ...g, status: 'checked-out', checkOutTime: now } : g
+        );
+        const recurringGuests = prev.recurringGuests.map((g) =>
+          currentGuest && g.name.toLowerCase() === currentGuest.name.toLowerCase()
+            ? { ...g, status: 'checked-out' }
+            : g
+        );
+        return { ...prev, guests: updatedGuests, recurringGuests };
+      });
+      addActivity(`${guest.name} (Guest) checked out`, 'guest-out');
+    },
+    [localState.guests, addActivity, canSignOutGuest, verifyPin, members]
   );
 
   const verifyAdminPin = useCallback(
@@ -846,27 +881,6 @@ function useMockAttendance() {
     [addActivity]
   );
 
-  const checkOutGuest = useCallback(
-    (guestId) => {
-      const now = new Date().toISOString();
-      setState((prev) => {
-        const guest = prev.guests.find((g) => g.id === guestId);
-        const updatedGuests = prev.guests.map((g) =>
-          g.id === guestId ? { ...g, status: 'checked-out', checkOutTime: now } : g
-        );
-        const recurringGuests = prev.recurringGuests.map((g) =>
-          guest && g.name.toLowerCase() === guest.name.toLowerCase()
-            ? { ...g, status: 'checked-out' }
-            : g
-        );
-        return { ...prev, guests: updatedGuests, recurringGuests };
-      });
-      const guest = state.guests.find((g) => g.id === guestId);
-      if (guest) addActivity(`${guest.name} (Guest) checked out`, 'guest-out');
-    },
-    [state.guests, addActivity]
-  );
-
   const updateSettings = useCallback((newSettings) => {
     setState((prev) => ({ ...prev, settings: { ...prev.settings, ...newSettings } }));
   }, []);
@@ -910,6 +924,61 @@ function useMockAttendance() {
       return member.pin === pin;
     },
     [state.members]
+  );
+
+  const canSignOutGuest = useCallback(
+    (guest, actorCapid) => {
+      const actorId = String(actorCapid);
+      if (ADMIN_CAPIDS.has(actorId)) return true;
+      const hostId = String(guest.hostId || '');
+      if (hostId && hostId === actorId) return true;
+      const actorMember = state.members.find(
+        (m) =>
+          String(m.capidRaw || m.capid || m.id) === actorId || String(m.id) === actorId
+      );
+      if (!actorMember) return false;
+      if (hostId === String(actorMember.id)) return true;
+      if (hostId === String(actorMember.capidRaw || actorMember.capid)) return true;
+      return false;
+    },
+    [state.members]
+  );
+
+  const checkOutGuest = useCallback(
+    async (guestId, actorCapid, actorPin) => {
+      const guest = state.guests.find((g) => g.id === guestId);
+      if (!guest) throw new Error('Guest not found.');
+      if (guest.status !== 'checked-in') throw new Error('Guest is not currently signed in.');
+
+      if (actorCapid && actorPin) {
+        if (!canSignOutGuest(guest, actorCapid)) {
+          throw new Error('Not authorized to sign out this guest.');
+        }
+        const actorMember = state.members.find(
+          (m) =>
+            String(m.capidRaw || m.capid || m.id) === String(actorCapid) ||
+            String(m.id) === String(actorCapid)
+        );
+        const pinOk = actorMember ? verifyPin(actorMember.id, actorPin) : false;
+        if (!pinOk) throw new Error('Incorrect PIN.');
+      }
+
+      const now = new Date().toISOString();
+      setState((prev) => {
+        const currentGuest = prev.guests.find((g) => g.id === guestId);
+        const updatedGuests = prev.guests.map((g) =>
+          g.id === guestId ? { ...g, status: 'checked-out', checkOutTime: now } : g
+        );
+        const recurringGuests = prev.recurringGuests.map((g) =>
+          currentGuest && g.name.toLowerCase() === currentGuest.name.toLowerCase()
+            ? { ...g, status: 'checked-out' }
+            : g
+        );
+        return { ...prev, guests: updatedGuests, recurringGuests };
+      });
+      addActivity(`${guest.name} (Guest) checked out`, 'guest-out');
+    },
+    [state.guests, addActivity, canSignOutGuest, verifyPin]
   );
 
   const verifyAdminPin = useCallback(

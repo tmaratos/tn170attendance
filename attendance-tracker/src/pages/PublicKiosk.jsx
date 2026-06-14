@@ -57,17 +57,19 @@ function KioskStatusPanel({ members, guests, now }) {
           ))}
           {signedInGuests.length > 0 && <div className="public-status-section-label">Guests</div>}
           {signedInGuests.map((guest) => (
-            <div
+            <Link
               key={guest.id}
-              className={`public-status-row signed-in guest ${afterReviewTime ? 'needs-review' : ''}`}
+              to={`/guest-sign-out?guestId=${encodeURIComponent(guest.id)}`}
+              className={`public-status-row signed-in guest clickable ${afterReviewTime ? 'needs-review' : ''}`}
             >
               <div>
                 <strong>{guest.name}</strong>
                 <span>Guest - {formatTime(guest.checkInTime)}</span>
               </div>
+              <em className="guest-sign-out-hint">Tap to sign out</em>
               {afterReviewTime && <em>Still checked in after 9:00 PM</em>}
               {afterForceTime && <em className="force-due">System force checkout due at 9:30 PM</em>}
-            </div>
+            </Link>
           ))}
           {signedInMembers.length === 0 && signedInGuests.length === 0 && (
             <div className="public-status-empty">No one is signed in yet.</div>
@@ -148,6 +150,10 @@ export default function PublicKiosk({ attendance }) {
           <Link to="/guest-sign-in" className="public-action-button guest">
             <span>GUEST SIGN IN</span>
             <small>Parents and visitors</small>
+          </Link>
+          <Link to="/guest-sign-out" className="public-action-button guest-out">
+            <span>GUEST SIGN OUT</span>
+            <small>End guest visit</small>
           </Link>
           <Link to="/admin-login" className="public-action-button admin">
             <span>ADMIN LOGIN</span>

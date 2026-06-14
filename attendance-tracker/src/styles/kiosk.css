@@ -1558,7 +1558,7 @@
 
 .public-kiosk-actions {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -1602,6 +1602,82 @@
 
 .public-action-button.guest small {
   color: #183052;
+}
+
+.public-action-button.guest-out {
+  background: linear-gradient(180deg, #e87820, #c45a0a);
+  color: #fff;
+}
+
+.public-action-button.guest-out small {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.public-status-row.clickable {
+  text-decoration: none;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.public-status-row.clickable:hover,
+.public-status-row.clickable:focus-visible {
+  background: rgba(232, 120, 32, 0.12);
+  outline: 2px solid rgba(232, 120, 32, 0.45);
+  outline-offset: -2px;
+}
+
+.guest-sign-out-hint {
+  display: block;
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 800;
+  color: #e87820;
+  margin-top: 2px;
+}
+
+.public-flow-alt-link {
+  margin-top: 16px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.92rem;
+}
+
+.public-flow-alt-link a {
+  color: #e87820;
+  font-weight: 800;
+}
+
+.public-flow-hint {
+  margin: 12px 0 8px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.55);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.public-member-result.disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.public-confirm-button.guest-out {
+  background: linear-gradient(180deg, #e87820, #c45a0a);
+}
+
+.public-confirm-card.guest-out {
+  border-color: rgba(232, 120, 32, 0.35);
+}
+
+.public-success-icon.guest-out {
+  background: rgba(232, 120, 32, 0.18);
+  color: #e87820;
+}
+
+.guest-sign-out-btn {
+  min-width: 110px;
+  font-weight: 800;
 }
 
 .public-action-button.admin {

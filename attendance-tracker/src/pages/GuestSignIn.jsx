@@ -197,6 +197,10 @@ export default function GuestSignIn({ attendance }) {
               >
                 Continue
               </button>
+              <p className="public-flow-alt-link">
+                Sign out a guest instead?{' '}
+                <Link to="/guest-sign-out">Go to Guest Sign Out</Link>
+              </p>
             </div>
           )}
 
