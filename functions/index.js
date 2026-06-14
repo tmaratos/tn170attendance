@@ -180,17 +180,6 @@ async function requireGuestHost(actor) {
   await requireSenior(actor);
 }
 
-async function canSignOutGuest(actor, record) {
-  if (actor.isAdmin) return true;
-  if (actor.canManageGuests && actor.isSeniorMember) return true;
-  const actorId = String(actor.memberId || actor.id);
-  const actorCapid = String(actor.capid || '');
-  if (String(record.hostMemberId) === actorId) return true;
-  if (String(record.hostCapid) === actorCapid) return true;
-  if (String(record.hostCapid) === actorId) return true;
-  return false;
-}
-
 async function getOpenAttendanceRecord(meetingId, memberId) {
   const member = await getMember(memberId);
   const memberKey = String(member?.memberId || member?.id || memberId);
@@ -624,17 +613,11 @@ exports.guestCheckIn = onCall(callableOptions, async (request) => {
 });
 
 exports.guestCheckOut = onCall(callableOptions, async (request) => {
-  const { guestAttendanceId, actorCapid, actorPin } = request.data || {};
+  const { guestAttendanceId } = request.data || {};
 
   if (!guestAttendanceId) {
     throw new HttpsError('invalid-argument', 'Guest attendance record ID is required.');
   }
-  if (!actorCapid || !actorPin) {
-    throw new HttpsError('invalid-argument', 'Host or admin CAPID and PIN are required.');
-  }
-  validatePin(actorPin);
-
-  const actor = await verifyActorPin(actorCapid, actorPin);
 
   const recordSnap = await db.collection('guestAttendanceRecords').doc(guestAttendanceId).get();
   if (!recordSnap.exists) {
@@ -646,11 +629,6 @@ exports.guestCheckOut = onCall(callableOptions, async (request) => {
     throw new HttpsError('already-exists', 'Guest is already checked out.');
   }
 
-  const allowed = await canSignOutGuest(actor, record);
-  if (!allowed) {
-    throw new HttpsError('permission-denied', 'Not authorized to sign out this guest.');
-  }
-
   const now = Timestamp.now();
   const durationMinutes = record.checkInTime
     ? Math.round((now.toMillis() - record.checkInTime.toMillis()) / 60000)
@@ -660,7 +638,7 @@ exports.guestCheckOut = onCall(callableOptions, async (request) => {
     status: 'checked_out',
     checkOutTime: now,
     durationMinutes,
-    checkedOutBy: String(actorCapid),
+    checkedOutBy: 'kiosk',
     updatedAt: FieldValue.serverTimestamp(),
   });
 
@@ -668,8 +646,7 @@ exports.guestCheckOut = onCall(callableOptions, async (request) => {
   await logActivity({
     meetingId: meeting.id,
     type: 'guest_checked_out',
-    actorCapid: actor.capid || actorCapid,
-    actorName: actor.displayName || actor.fullName,
+    actorName: 'Kiosk',
     targetName: record.guestName,
     details: { guestId: record.guestId },
   });

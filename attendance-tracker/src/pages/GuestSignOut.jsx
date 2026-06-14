@@ -1,48 +1,17 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import PinPad from '../components/PinPad';
 import { formatDateTime, formatTime } from '../data/mockData';
 import { getCallableError } from '../services/errors';
 import { useLocalTime } from '../hooks/useLocalTime';
-import { ADMIN_CAPIDS } from '../data/rosterData';
 
-const STEPS = ['Guest', 'Host', 'PIN', 'Confirm', 'Success'];
-
-function canAuthorizeGuestSignOut(guest, actorCapid, members) {
-  const actorId = String(actorCapid);
-  if (ADMIN_CAPIDS.has(actorId)) return true;
-
-  const hostId = String(guest.hostId || '');
-  if (hostId && hostId === actorId) return true;
-
-  const actorMember = members.find(
-    (m) =>
-      String(m.capidRaw || m.capid || m.id) === actorId || String(m.id) === actorId
-  );
-  if (!actorMember) return false;
-
-  if (hostId === String(actorMember.id)) return true;
-  if (hostId === String(actorMember.capidRaw || actorMember.capid)) return true;
-
-  return false;
-}
+const STEPS = ['Guest', 'Confirm', 'Success'];
 
 export default function GuestSignOut({ attendance }) {
-  const {
-    members,
-    guests,
-    recurringGuests,
-    checkOutGuest,
-    verifyPin,
-    isCloudBackend,
-  } = attendance;
+  const { guests, recurringGuests, checkOutGuest } = attendance;
   const [searchParams] = useSearchParams();
   const [step, setStep] = useState(0);
   const [guestQuery, setGuestQuery] = useState('');
   const [selectedGuest, setSelectedGuest] = useState(null);
-  const [selectedHost, setSelectedHost] = useState(null);
-  const [hostQuery, setHostQuery] = useState('');
-  const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [successTime, setSuccessTime] = useState(null);
@@ -68,32 +37,6 @@ export default function GuestSignOut({ attendance }) {
       .slice(0, 4);
   }, [guestQuery, recurringGuests, presentGuests]);
 
-  const seniorMembers = useMemo(() => {
-    const query = hostQuery.toLowerCase().trim();
-    return members
-      .filter((member) => member.role === 'Senior Member')
-      .filter(
-        (member) =>
-          !query ||
-          member.name.toLowerCase().includes(query) ||
-          String(member.capid).includes(query)
-      )
-      .slice(0, 10);
-  }, [members, hostQuery]);
-
-  const defaultHost = useMemo(() => {
-    if (!selectedGuest?.hostId) return null;
-    return (
-      members.find((m) => String(m.id) === String(selectedGuest.hostId)) ||
-      members.find(
-        (m) =>
-          String(m.capidRaw || m.capid) === String(selectedGuest.hostId) ||
-          m.name === selectedGuest.hostName
-      ) ||
-      null
-    );
-  }, [selectedGuest, members]);
-
   useEffect(() => {
     const guestId = searchParams.get('guestId');
     if (!guestId) return;
@@ -101,25 +44,13 @@ export default function GuestSignOut({ attendance }) {
     if (guest) {
       setSelectedGuest(guest);
       setGuestQuery(guest.name);
+      setStep(1);
     }
   }, [searchParams, presentGuests]);
-
-  const reset = () => {
-    setStep(0);
-    setGuestQuery('');
-    setSelectedGuest(null);
-    setSelectedHost(null);
-    setHostQuery('');
-    setPin('');
-    setError('');
-    setLoading(false);
-    setSuccessTime(null);
-  };
 
   const selectGuest = (guest) => {
     setSelectedGuest(guest);
     setGuestQuery(guest.name);
-    setSelectedHost(null);
     setError('');
   };
 
@@ -130,52 +61,18 @@ export default function GuestSignOut({ attendance }) {
     }
     setError('');
     setStep(1);
-    if (defaultHost) {
-      setSelectedHost(defaultHost);
-    }
-  };
-
-  const continueFromHost = () => {
-    if (!selectedHost) return;
-    const actorCapid = String(selectedHost.capidRaw || selectedHost.capid || selectedHost.id);
-    if (!canAuthorizeGuestSignOut(selectedGuest, actorCapid, members)) {
-      setError('Only the original host or an authorized admin can sign out this guest.');
-      return;
-    }
-    setError('');
-    setStep(2);
-  };
-
-  const verifyHostPin = async () => {
-    if (!selectedHost || pin.length !== 4) return;
-    setError('');
-
-    if (!isCloudBackend) {
-      const pinOk = await verifyPin(selectedHost.id, pin);
-      if (!pinOk) {
-        setPin('');
-        setError('Incorrect PIN. Try again.');
-        return;
-      }
-    }
-
-    setStep(3);
   };
 
   const confirmGuestSignOut = async () => {
-    if (!selectedGuest || !selectedHost) return;
+    if (!selectedGuest) return;
     setLoading(true);
     setError('');
 
-    const actorCapid = String(selectedHost.capidRaw || selectedHost.capid || selectedHost.id);
-
     try {
-      await checkOutGuest(selectedGuest.id, actorCapid, pin);
+      await checkOutGuest(selectedGuest.id);
       setSuccessTime(new Date().toISOString());
-      setStep(4);
-    } catch (err) {
-      setPin('');
       setStep(2);
+    } catch (err) {
       setError(getCallableError(err) || err.message || 'Guest sign-out failed.');
     } finally {
       setLoading(false);
@@ -191,15 +88,7 @@ export default function GuestSignOut({ attendance }) {
       continueFromGuest();
       return;
     }
-    if (step === 1) {
-      continueFromHost();
-      return;
-    }
-    if (step === 2 && pin.length === 4) {
-      verifyHostPin();
-      return;
-    }
-    if (step === 3 && !loading) {
+    if (step === 1 && !loading) {
       confirmGuestSignOut();
     }
   };
@@ -307,115 +196,15 @@ export default function GuestSignOut({ attendance }) {
 
             {step === 1 && selectedGuest && (
               <div className="public-flow-section">
-                <div className="public-selected-member">
-                  <strong>{selectedGuest.name}</strong>
-                  <span>
-                    Original host: {selectedGuest.hostName}. Host or admin authorization required.
-                  </span>
-                </div>
-                <label htmlFor="host-search">Select authorizing Senior Member</label>
-                <input
-                  id="host-search"
-                  className="public-flow-search"
-                  value={hostQuery}
-                  onChange={(event) => setHostQuery(event.target.value)}
-                  placeholder="Search host or admin name or CAPID"
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' && seniorMembers.length === 1) {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      setSelectedHost(seniorMembers[0]);
-                      setStep(2);
-                    }
-                  }}
-                />
-                {error && <div className="public-flow-error">{error}</div>}
-                <div className="public-member-results">
-                  {seniorMembers.map((member) => (
-                    <button
-                      type="button"
-                      key={member.id}
-                      className={`public-member-result ${selectedHost?.id === member.id ? 'selected' : ''}`}
-                      onClick={() => setSelectedHost(member)}
-                    >
-                      <span className="public-member-avatar">
-                        {member.name
-                          .split(' ')
-                          .map((part) => part[0])
-                          .join('')
-                          .slice(0, 2)}
-                      </span>
-                      <span>
-                        <strong>{member.name}</strong>
-                        <small>
-                          {member.grade} — CAPID {member.capid}
-                          {ADMIN_CAPIDS.has(String(member.capidRaw || member.capid || member.id))
-                            ? ' — Admin'
-                            : ''}
-                        </small>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-                <div className="public-flow-actions">
-                  <button type="button" className="btn btn-outline" onClick={() => setStep(0)}>
-                    Back
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-blue"
-                    onClick={continueFromHost}
-                    disabled={!selectedHost && seniorMembers.length !== 1}
-                  >
-                    Continue
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {step === 2 && selectedHost && (
-              <div className="public-flow-section pin-section">
-                <div className="public-selected-member">
-                  <strong>{selectedHost.name}</strong>
-                  <span>Enter PIN to authorize sign-out</span>
-                </div>
-                {error && <div className="public-flow-error">{error}</div>}
-                <PinPad
-                  pin={pin}
-                  onDigit={(digit) => {
-                    setError('');
-                    setPin((current) => (current.length < 4 ? `${current}${digit}` : current));
-                  }}
-                  onBackspace={() => setPin((current) => current.slice(0, -1))}
-                  onClear={() => setPin('')}
-                />
-                <div className="public-flow-actions">
-                  <button type="button" className="btn btn-outline" onClick={() => setStep(1)}>
-                    Back
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-blue"
-                    onClick={verifyHostPin}
-                    disabled={pin.length !== 4}
-                  >
-                    Continue
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {step === 3 && selectedGuest && selectedHost && (
-              <div className="public-flow-section">
                 <div className="public-confirm-card guest-out">
                   <span className="public-member-avatar large">{selectedGuest.name.slice(0, 1).toUpperCase()}</span>
                   <h2>{selectedGuest.name}</h2>
-                  <p>Signing out — hosted by {selectedGuest.hostName}</p>
+                  <p>Sign out this guest?</p>
                   <dl>
+                    <dt>Host</dt>
+                    <dd>{selectedGuest.hostName}</dd>
                     <dt>Signed in</dt>
                     <dd>{formatTime(selectedGuest.checkInTime)}</dd>
-                    <dt>Authorized by</dt>
-                    <dd>{selectedHost.name}</dd>
                   </dl>
                 </div>
                 {error && <div className="public-flow-error">{error}</div>}
@@ -427,13 +216,13 @@ export default function GuestSignOut({ attendance }) {
                 >
                   {loading ? 'Signing out...' : 'CONFIRM GUEST SIGN OUT'}
                 </button>
-                <button type="button" className="public-cancel-button" onClick={reset}>
-                  Cancel
+                <button type="button" className="public-cancel-button" onClick={() => setStep(0)}>
+                  Back
                 </button>
               </div>
             )}
 
-            {step === 4 && (
+            {step === 2 && (
               <div className="public-success-screen">
                 <div className="public-success-icon guest-out">
                   <svg

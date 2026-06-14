@@ -21,9 +21,7 @@ export default function Guests({ attendance }) {
   const [pin, setPin] = useState('');
   const [pinError, setPinError] = useState('');
   const [mode, setMode] = useState('sign-in');
-  const [signOutGuest, setSignOutGuest] = useState(null);
-  const [signOutPin, setSignOutPin] = useState('');
-  const [signOutCapid, setSignOutCapid] = useState('');
+  const [confirmSignOutGuest, setConfirmSignOutGuest] = useState(null);
   const [selectedGuest, setSelectedGuest] = useState(null);
   const [timestamp, setTimestamp] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -77,33 +75,20 @@ export default function Guests({ attendance }) {
     }
   };
 
-  const handleSignOut = async (guest) => {
-    if (attendance.isFirebase) {
-      setSignOutGuest(guest);
-      setSignOutPin('');
-      setSignOutCapid('');
-      setPinError('');
-      return;
-    }
-    try {
-      await checkOutGuest(guest.id);
-      setSelectedGuest(guest);
-      setTimestamp(new Date().toISOString());
-      setMode('sign-out-done');
-    } catch (err) {
-      setPinError(err.message || 'Guest sign-out failed.');
-    }
+  const handleSignOut = (guest) => {
+    setConfirmSignOutGuest(guest);
+    setPinError('');
   };
 
   const confirmGuestSignOut = async () => {
-    if (!signOutGuest || signOutPin.length !== 4 || !signOutCapid.trim()) return;
+    if (!confirmSignOutGuest) return;
     setLoading(true);
     setPinError('');
     try {
-      await checkOutGuest(signOutGuest.id, signOutCapid.trim(), signOutPin);
-      setSelectedGuest(signOutGuest);
+      await checkOutGuest(confirmSignOutGuest.id);
+      setSelectedGuest(confirmSignOutGuest);
       setTimestamp(new Date().toISOString());
-      setSignOutGuest(null);
+      setConfirmSignOutGuest(null);
       setMode('sign-out-done');
     } catch (err) {
       setPinError(err.message || 'Guest sign-out failed.');
@@ -336,37 +321,22 @@ export default function Guests({ attendance }) {
         </div>
       )}
 
-      {signOutGuest && (
+      {confirmSignOutGuest && (
         <div className="pin-modal-backdrop" role="presentation">
           <div className="pin-modal" role="dialog" aria-modal="true">
             <div className="pin-modal-header">
               <div>
                 <p>Sign Out Guest</p>
-                <h3>{signOutGuest.name}</h3>
-                <span>Host or admin CAPID + PIN required</span>
+                <h3>{confirmSignOutGuest.name}</h3>
+                <span>Sign out this guest?</span>
               </div>
             </div>
-            <div className="form-group" style={{ marginBottom: 12 }}>
-              <input
-                type="text"
-                className="form-input form-input-lg"
-                placeholder="Your CAPID"
-                value={signOutCapid}
-                onChange={(e) => setSignOutCapid(e.target.value.replace(/\D/g, ''))}
-              />
-            </div>
             {pinError && <div className="pin-error">{pinError}</div>}
-            <PinPad
-              pin={signOutPin}
-              onDigit={(d) => { setPinError(''); setSignOutPin((p) => p + d); }}
-              onBackspace={() => setSignOutPin((p) => p.slice(0, -1))}
-              onClear={() => { setSignOutPin(''); setPinError(''); }}
-            />
             <div style={{ display: 'flex', gap: 12, marginTop: 16 }}>
               <button
                 type="button"
                 className="btn btn-red"
-                disabled={loading || signOutPin.length !== 4 || !signOutCapid.trim()}
+                disabled={loading}
                 onClick={confirmGuestSignOut}
               >
                 {loading ? 'Signing out...' : 'Sign Out Guest'}
@@ -374,7 +344,7 @@ export default function Guests({ attendance }) {
               <button
                 type="button"
                 className="btn btn-outline"
-                onClick={() => { setSignOutGuest(null); setPinError(''); }}
+                onClick={() => { setConfirmSignOutGuest(null); setPinError(''); }}
               >
                 Cancel
               </button>
