@@ -4,7 +4,6 @@
   "type": "module",
   "scripts": {
     "seed:members": "node scripts/seed-members.js",
-    "seed:members:rest": "node scripts/seed-via-rest.js",
     "build:app": "npm run build --prefix attendance-tracker",
     "deploy": "npm run deploy:spark",
     "deploy:spark": "npm run build:app && firebase deploy --only firestore:rules,firestore:indexes,hosting",
