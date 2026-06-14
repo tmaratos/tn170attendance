@@ -413,14 +413,23 @@ input, select, textarea {
     print-color-adjust: exact;
   }
 
-  body * {
+  .no-print,
+  .sidebar,
+  .mobile-menu-btn,
+  .dashboard-page {
     display: none !important;
   }
 
-  .print-attendance-log,
-  .print-attendance-log * {
-    display: revert !important;
-    visibility: visible !important;
+  #root,
+  .app-layout,
+  .main-content,
+  .public-main-content {
+    display: block !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    min-height: auto;
+    overflow: visible;
   }
 
   .print-attendance-log {
@@ -431,17 +440,7 @@ input, select, textarea {
     background: white !important;
     color: #111827 !important;
     font-family: Arial, sans-serif;
-  }
-
-  .app-layout,
-  .main-content,
-  .public-main-content {
-    display: block !important;
-    margin-left: 0;
-    padding: 0;
-    background: white !important;
-    min-height: auto;
-    overflow: visible;
+    visibility: visible !important;
   }
 
   .print-log-header {

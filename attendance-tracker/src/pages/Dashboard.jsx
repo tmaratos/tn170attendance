@@ -62,7 +62,7 @@ export default function Dashboard({ attendance }) {
   return (
     <>
       <PrintableAttendanceLog members={members} guests={guests} settings={settings} />
-      <div className="dashboard-page">
+      <div className="dashboard-page no-print">
         <Header
           title="Welcome!"
           subtitle={<LocalClock />}

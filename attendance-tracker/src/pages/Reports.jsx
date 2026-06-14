@@ -1,43 +1,26 @@
 import { useMemo, useState } from 'react';
-import { formatTime, formatDuration } from '../data/mockData';
-import { exportAndDownload } from '../services/reportService';
+import { formatTime } from '../data/mockData';
+import { buildAttendanceCsv, downloadReportContent, exportAndDownload } from '../services/reportService';
 
-function exportCSV(members, guests) {
-  const headers = ['Name', 'Grade', 'CAPID', 'Role', 'Status', 'Check-In', 'Check-Out', 'Duration'];
-  const memberRows = members.map((m) => [
-    m.name,
-    m.grade,
-    m.capid,
-    m.role,
-    m.status === 'checked-in' ? 'Checked In' : m.status === 'checked-out' ? 'Checked Out' : 'Not Present',
-    formatTime(m.checkInTime),
-    formatTime(m.checkOutTime),
-    formatDuration(m.checkInTime, m.checkOutTime),
-  ]);
-  const guestRows = guests.map((g) => [
-    g.name,
-    '—',
-    '—',
-    'Guest',
-    g.status === 'checked-in' ? 'Present' : 'Signed Out',
-    formatTime(g.checkInTime),
-    formatTime(g.checkOutTime),
-    formatDuration(g.checkInTime, g.checkOutTime),
-  ]);
-
-  const rows = [headers, ...memberRows, ...guestRows];
-  const csv = rows.map((r) => r.map((c) => `"${c}"`).join(',')).join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `tn170-attendance-${new Date().toISOString().split('T')[0]}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
+function exportCSVLocal(members, guests) {
+  downloadReportContent({
+    content: buildAttendanceCsv(members, guests),
+    filename: `tn170-attendance-${new Date().toISOString().split('T')[0]}.csv`,
+    mimeType: 'text/csv',
+  });
 }
 
 export default function Reports({ attendance }) {
-  const { members, guests, getStats, isFirebase, meeting, seniorSession } = attendance;
+  const {
+    members,
+    guests,
+    getStats,
+    isFirebase,
+    isCloudBackend,
+    meeting,
+    seniorSession,
+    addActivity,
+  } = attendance;
   const stats = getStats();
   const [exportCapid, setExportCapid] = useState(seniorSession?.capid || '');
   const [exportPin, setExportPin] = useState('');
@@ -56,7 +39,7 @@ export default function Reports({ attendance }) {
     return { total: seniors.length, present };
   }, [members]);
 
-  const handleFirebaseExport = async (format) => {
+  const handleAuthorizedExport = async (format) => {
     if (!exportCapid.trim() || exportPin.length !== 4) {
       setExportError('Enter your CAPID and 4-digit PIN to export.');
       return;
@@ -64,12 +47,20 @@ export default function Reports({ attendance }) {
     setExporting(true);
     setExportError('');
     try {
-      await exportAndDownload({
+      const result = await exportAndDownload({
         actorCapid: exportCapid.trim(),
         actorPin: exportPin,
         meetingId: meeting?.id,
         format,
+        members,
+        guests,
       });
+      if (addActivity) {
+        addActivity(
+          `Attendance report exported (${format.toUpperCase()}) by ${result.exportedBy || exportCapid.trim()}`,
+          'report-export'
+        );
+      }
     } catch (err) {
       setExportError(err.message || 'Export failed.');
     } finally {
@@ -158,15 +149,15 @@ export default function Reports({ attendance }) {
             disabled={exporting}
             onClick={() =>
               isFirebase
-                ? handleFirebaseExport('csv')
-                : exportCSV(members, guests)
+                ? handleAuthorizedExport('csv')
+                : exportCSVLocal(members, guests)
             }
           >
             {exporting ? 'Exporting...' : 'Download CSV'}
           </button>
         </div>
 
-        {isFirebase && (
+        {isCloudBackend && (
           <div className="report-card">
             <div className="report-card-title">PDF / DOCX / Excel (Scaffold)</div>
             <div className="report-card-desc">
@@ -178,7 +169,7 @@ export default function Reports({ attendance }) {
                   key={fmt}
                   className="btn btn-outline"
                   disabled={exporting}
-                  onClick={() => handleFirebaseExport(fmt)}
+                  onClick={() => handleAuthorizedExport(fmt)}
                 >
                   {fmt.toUpperCase()}
                 </button>
