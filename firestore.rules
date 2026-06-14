@@ -7,15 +7,29 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/members/$(capid)).data.active == true;
     }
 
-    // Member roster — readable for kiosk search; writes only via Admin SDK (seed/functions).
-    match /members/{capid} {
-      allow read: if true;
-      allow write: if false;
+    function memberPinResetRequired(capid) {
+      return get(/databases/$(database)/documents/members/$(capid)).data.pinResetRequired == true;
     }
 
-    // PIN hashes — never exposed to clients.
+    // Member roster — readable for kiosk search; limited client updates for PIN state.
+    match /members/{capid} {
+      allow read: if true;
+      allow create, delete: if false;
+      allow update: if isActiveMember(capid)
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['pinResetRequired', 'hasPin', 'updatedAt']);
+    }
+
+    // PIN hashes — Spark kiosk reads hash for client-side verify; never stores plaintext.
     match /memberPins/{capid} {
-      allow read, write: if false;
+      allow read: if isActiveMember(capid);
+      allow delete: if false;
+      allow create: if isActiveMember(capid)
+        && !exists(/databases/$(database)/documents/memberPins/$(capid))
+        && request.resource.data.keys().hasAll(['pinHash', 'pinCreatedAt', 'pinUpdatedAt'])
+        && request.resource.data.pinHash is string
+        && request.resource.data.pinHash.size() >= 8;
+      allow update: if isActiveMember(capid) && memberPinResetRequired(capid);
     }
 
     match /meetings/{meetingId} {

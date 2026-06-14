@@ -8,15 +8,19 @@ import {
   buildInitialKioskLocalState,
 } from '../data/mockData';
 import { isFirebaseConfigured, isSparkKioskMode } from '../services/firebase';
-import { hashKioskPinSync, verifyKioskPin } from '../utils/kioskPin';
+import { verifyKioskPin } from '../services/kioskPin';
 import {
   subscribeMembers,
   searchMembers as searchMemberList,
   toUiMember,
   createPin,
+  createPinSpark,
   resetMemberPin,
+  resetMemberPinSpark,
+  verifyPinSpark,
   verifySeniorAccess,
   subscribeSettings,
+  subscribeMemberPins,
   createPendingMember,
   updatePendingMemberCapid,
   deactivateMember,
@@ -172,6 +176,7 @@ function useSparkKioskAttendance() {
   const [rawMembers, setRawMembers] = useState(() => getEmbeddedRosterMembers());
   const [usingLocalRoster, setUsingLocalRoster] = useState(true);
   const [localState, setLocalState] = useState(loadKioskLocalState);
+  const [memberPinHashes, setMemberPinHashes] = useState({});
   const [remoteSettings, setRemoteSettings] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -193,6 +198,7 @@ function useSparkKioskAttendance() {
         setLoading(false);
       }),
       subscribeSettings(setRemoteSettings),
+      subscribeMemberPins(setMemberPinHashes),
     ];
     return () => unsubs.forEach((unsub) => unsub());
   }, []);
@@ -285,14 +291,15 @@ function useSparkKioskAttendance() {
         const memberId = memberStorageKey(member);
         const record = attendanceRecordToUi(localState.attendance[memberId]);
         const uiMember = toUiMember(member, record);
-        const hasLocalPin = !!localState.pins[memberId];
+        const pinResetRequired = !!member.pinResetRequired;
+        const hasFirestorePin = !!memberPinHashes[memberId];
         return {
           ...uiMember,
-          hasPin: hasLocalPin,
-          pinResetRequired: false,
+          hasPin: hasFirestorePin && !pinResetRequired,
+          pinResetRequired,
         };
       }),
-    [rawMembers, localState.attendance, localState.pins]
+    [rawMembers, localState.attendance, memberPinHashes]
   );
 
   const adminMembers = useMemo(
@@ -314,12 +321,12 @@ function useSparkKioskAttendance() {
   }, []);
 
   const checkInMember = useCallback(
-    (memberId, pinOrForce = false) => {
+    async (memberId, pinOrForce = false) => {
       const force = pinOrForce === true;
       const id = String(memberId);
       if (!force && typeof pinOrForce === 'string') {
-        const storedHash = localState.pins[id];
-        if (!verifyKioskPin(pinOrForce, id, storedHash)) {
+        const storedHash = memberPinHashes[id];
+        if (!storedHash || !(await verifyKioskPin(pinOrForce, id, storedHash))) {
           throw new Error('Incorrect PIN.');
         }
       }
@@ -346,16 +353,16 @@ function useSparkKioskAttendance() {
         );
       }
     },
-    [members, addActivity, localState.pins]
+    [members, addActivity, memberPinHashes]
   );
 
   const checkOutMember = useCallback(
-    (memberId, pinOrForce = false, note = null) => {
+    async (memberId, pinOrForce = false, note = null) => {
       const force = pinOrForce === true;
       const id = String(memberId);
       if (!force && typeof pinOrForce === 'string') {
-        const storedHash = localState.pins[id];
-        if (!verifyKioskPin(pinOrForce, id, storedHash)) {
+        const storedHash = memberPinHashes[id];
+        if (!storedHash || !(await verifyKioskPin(pinOrForce, id, storedHash))) {
           throw new Error('Incorrect PIN.');
         }
       }
@@ -386,7 +393,7 @@ function useSparkKioskAttendance() {
         );
       }
     },
-    [members, addActivity, localState.pins]
+    [members, addActivity, memberPinHashes]
   );
 
   const checkInGuest = useCallback(
@@ -501,10 +508,17 @@ function useSparkKioskAttendance() {
         const raw = rawMembers.find(
           (rm) => String(rm.memberId || rm.capid || rm.temporaryId) === memberId
         );
-        return toUiMember(raw, record);
+        const uiMember = toUiMember(raw, record);
+        const pinResetRequired = !!raw?.pinResetRequired;
+        const hasFirestorePin = !!memberPinHashes[memberId];
+        return {
+          ...uiMember,
+          hasPin: hasFirestorePin && !pinResetRequired,
+          pinResetRequired,
+        };
       });
     },
-    [rawMembers, localState.attendance]
+    [rawMembers, localState.attendance, memberPinHashes]
   );
 
   const getStatsFn = useCallback(
@@ -513,78 +527,75 @@ function useSparkKioskAttendance() {
   );
 
   const verifyPin = useCallback(
-    (memberId, pin) => {
-      const storedHash = localState.pins[String(memberId)];
-      return verifyKioskPin(pin, String(memberId), storedHash);
+    async (memberId, pin) => {
+      const storedHash = memberPinHashes[String(memberId)];
+      if (storedHash) {
+        return verifyKioskPin(pin, String(memberId), storedHash);
+      }
+      return verifyPinSpark(memberId, pin);
     },
-    [localState.pins]
+    [memberPinHashes]
   );
 
   const verifyAdminPin = useCallback(
-    (adminIdOrPin, pinMaybe) => {
+    async (adminIdOrPin, pinMaybe) => {
       if (pinMaybe === undefined) {
         return settings.adminPin === adminIdOrPin;
       }
       const adminId = String(adminIdOrPin);
       if (!ADMIN_CAPIDS.has(adminId)) return false;
       if (pinMaybe === settings.adminPin) return true;
-      const storedHash = localState.pins[adminId];
-      if (!storedHash) return false;
-      return verifyKioskPin(pinMaybe, adminId, storedHash);
+      return verifyPinSpark(adminId, pinMaybe);
     },
-    [localState.pins, settings.adminPin]
+    [settings.adminPin]
   );
 
   const memberHasPin = useCallback(
-    (memberId) => !!localState.pins[String(memberId)],
-    [localState.pins]
+    (memberId) => {
+      const member = rawMembers.find(
+        (m) => memberStorageKey(m) === String(memberId)
+      );
+      const id = String(memberId);
+      return !!memberPinHashes[id] && !member?.pinResetRequired;
+    },
+    [memberPinHashes, rawMembers]
   );
 
   const needsPinSetup = useCallback(
-    (memberId) => !localState.pins[String(memberId)],
-    [localState.pins]
+    (memberId) => {
+      const member = rawMembers.find(
+        (m) => memberStorageKey(m) === String(memberId)
+      );
+      const id = String(memberId);
+      return !memberPinHashes[id] || !!member?.pinResetRequired;
+    },
+    [memberPinHashes, rawMembers]
   );
 
   const createMemberPin = useCallback(async (memberId, pin, confirmPin) => {
-    if (!/^\d{4}$/.test(pin) || pin !== confirmPin) {
-      throw new Error('PIN must be 4 digits and match confirmation.');
-    }
-    const id = String(memberId);
-    const pinHash = hashKioskPinSync(pin, id);
-    setLocalState((prev) => ({
-      ...prev,
-      pins: { ...prev.pins, [id]: pinHash },
-    }));
-    return true;
-  }, []);
+    const result = await createPinSpark(memberId, pin, confirmPin);
+    const member = rawMembers.find((m) => memberStorageKey(m) === String(memberId));
+    addActivity(
+      `${member?.displayName || member?.fullName || memberId} created a new PIN`,
+      'pin-created'
+    );
+    return result;
+  }, [rawMembers, addActivity]);
 
   const authenticateSenior = useCallback(async () => null, []);
   const resetMemberPinFn = useCallback(
-    async (targetCapid, actorPin) => {
-      const actorAuthorized =
-        actorPin === settings.adminPin ||
-        [...ADMIN_CAPIDS].some((adminId) => {
-          const storedHash = localState.pins[adminId];
-          return storedHash && verifyKioskPin(actorPin, adminId, storedHash);
-        });
-      if (!actorAuthorized) {
-        throw new Error('Invalid admin credentials.');
+    async (targetCapid, actorPin, actorCapid) => {
+      if (!actorCapid) {
+        throw new Error('Select your admin account before resetting a PIN.');
       }
-      const targetId = String(targetCapid);
-      const targetExists = rawMembers.some(
-        (m) => String(m.memberId || m.capid || m.temporaryId) === targetId
+      const result = await resetMemberPinSpark(actorCapid, actorPin, targetCapid);
+      addActivity(
+        `PIN reset for ${result.targetName || targetCapid} by admin ${actorCapid}`,
+        'pin-reset'
       );
-      if (!targetExists) {
-        throw new Error('Member not found.');
-      }
-      setLocalState((prev) => {
-        const nextPins = { ...prev.pins };
-        delete nextPins[targetId];
-        return { ...prev, pins: nextPins };
-      });
-      return true;
+      return result;
     },
-    [localState.pins, rawMembers, settings.adminPin]
+    [addActivity]
   );
 
   return {

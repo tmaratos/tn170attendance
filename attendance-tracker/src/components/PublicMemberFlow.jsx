@@ -114,7 +114,7 @@ export default function PublicMemberFlow({
         return;
       }
 
-      if (verifyPin && !verifyPin(selected.id, pin)) {
+      if (verifyPin && !(await verifyPin(selected.id, pin))) {
         setPin('');
         setError('Incorrect PIN. Try again.');
         return;
@@ -215,7 +215,7 @@ export default function PublicMemberFlow({
             <div className="public-flow-section">
               <p className="pin-setup-hint kiosk-pin-help">
                 New or forgot PIN? Select your name — you&apos;ll be prompted to create one if none
-                exists on this device. Each tablet or browser stores PINs locally; set yours once per device.
+                exists yet. Your PIN is stored securely in Firebase and works on any kiosk device.
               </p>
               <label htmlFor={`${mode}-search`}>Search by name or CAPID</label>
               <input
@@ -258,8 +258,8 @@ export default function PublicMemberFlow({
               <h2>{pinSetupRequired ? 'Create your PIN' : 'Enter your 4-digit PIN'}</h2>
               <p className="pin-setup-hint">
                 {pinSetupRequired
-                  ? 'First time on this device? Create your 4-digit PIN.'
-                  : 'Enter the PIN you created on this device.'}
+                  ? 'First time or after a reset? Create your 4-digit PIN.'
+                  : 'Enter your squadron PIN.'}
               </p>
               {pinSetupRequired && (
                 <p className="pin-setup-subhint">

@@ -140,8 +140,8 @@ export default function AdminLogin({ attendance, onLogin }) {
 
         {adminNeedsPinSetup && (
           <div className="admin-pin-notice create">
-            No PIN on this device yet. Create your 4-digit PIN below — you&apos;ll use it for
-            check-in, check-out, and admin login.
+            No PIN set yet. Create your 4-digit PIN below — you&apos;ll use it for
+            check-in, check-out, and admin login on any kiosk device.
           </div>
         )}
 
@@ -194,21 +194,19 @@ export default function AdminLogin({ attendance, onLogin }) {
 
         {showForgotHelp && (
           <div className="admin-forgot-pin-help">
-            <p>
-              PINs are stored on this device only. If you forgot yours:
-            </p>
+            <p>If you forgot your PIN:</p>
             <ul>
               <li>
-                Use the <strong>emergency admin PIN</strong> from Settings (default 0000) to open
-                the admin dashboard, then reset your PIN in Admin Tools.
+                Ask another admin to reset your PIN in Admin Tools — then create a new one at
+                check-in or admin login.
               </li>
               <li>
                 Or go to <Link to="/check-in">Check In</Link>, select your name, and create a new
-                PIN if none exists on this device.
+                PIN if an admin has reset yours.
               </li>
               <li>
-                Another admin with reset access can clear your PIN in Admin Tools so you can create
-                a new one at check-in.
+                Emergency access: use the shared admin PIN from Settings (default 0000) only if
+                configured for your squadron.
               </li>
             </ul>
           </div>

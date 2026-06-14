@@ -527,8 +527,8 @@ export default function CheckInWizard({
 
       <div className="kiosk-search-shell">
         <p className="pin-setup-hint kiosk-pin-help">
-          New or forgot PIN? Select your name — you&apos;ll be prompted to create one if none exists
-          on this device. Each tablet or browser stores PINs locally; set yours once per device.
+          New or forgot PIN? Select your name — you&apos;ll be prompted to create one if none
+          exists yet. Your PIN is stored in Firebase and works on any kiosk device.
         </p>
         <label className="kiosk-search-label" htmlFor={`${mode}-member-search`}>
           Name or CAPID
@@ -609,8 +609,8 @@ export default function CheckInWizard({
                 </p>
                 <p className="pin-setup-hint pin-modal-hint">
                   {pinMode === 'create'
-                    ? 'First time on this device? Create your 4-digit PIN. You\'ll use it for check-in, check-out, and admin login.'
-                    : 'Enter the PIN you created on this device.'}
+                    ? 'First time or after a reset? Create your 4-digit PIN. You\'ll use it for check-in, check-out, and admin login.'
+                    : 'Enter your squadron PIN.'}
                 </p>
               </div>
               <button

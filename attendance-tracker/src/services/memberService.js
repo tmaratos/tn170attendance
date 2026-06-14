@@ -7,6 +7,14 @@ import {
   where,
 } from 'firebase/firestore';
 import { getDb, callFunction } from './firebase';
+import {
+  createMemberPinInFirestore,
+  resetMemberPinInFirestore,
+  verifyMemberPinInFirestore,
+  subscribeMemberPins,
+} from './kioskPin';
+
+export { subscribeMemberPins, verifyMemberPinInFirestore };
 
 function normalizeStatus(status) {
   if (status === 'checked_in') return 'checked-in';
@@ -83,6 +91,21 @@ export async function createPin(capid, pin, confirmPin) {
   const fn = callFunction('createPin');
   const result = await fn({ capid: String(capid), pin, confirmPin });
   return result.data;
+}
+
+/** Spark kiosk: hash client-side and write memberPins/{id}. */
+export async function createPinSpark(capid, pin, confirmPin) {
+  return createMemberPinInFirestore(capid, pin, confirmPin);
+}
+
+/** Spark kiosk: verify against Firestore memberPins hash. */
+export async function verifyPinSpark(capid, pin) {
+  return verifyMemberPinInFirestore(capid, pin);
+}
+
+/** Spark kiosk: admin reset — clears hash and sets pinResetRequired. */
+export async function resetMemberPinSpark(actorCapid, actorPin, targetCapid) {
+  return resetMemberPinInFirestore(actorCapid, actorPin, targetCapid);
 }
 
 export async function resetMemberPin(actorCapid, actorPin, targetCapid) {
