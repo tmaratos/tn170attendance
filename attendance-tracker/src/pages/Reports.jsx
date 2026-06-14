@@ -1,14 +1,7 @@
 import { useMemo, useState } from 'react';
 import { formatTime } from '../data/mockData';
-import { buildAttendanceCsv, downloadReportContent, exportAndDownload } from '../services/reportService';
-
-function exportCSVLocal(members, guests) {
-  downloadReportContent({
-    content: buildAttendanceCsv(members, guests),
-    filename: `tn170-attendance-${new Date().toISOString().split('T')[0]}.csv`,
-    mimeType: 'text/csv',
-  });
-}
+import AttendanceCsvExport from '../components/AttendanceCsvExport';
+import { exportAndDownload } from '../services/reportService';
 
 export default function Reports({ attendance }) {
   const {
@@ -110,72 +103,66 @@ export default function Reports({ attendance }) {
       <div className="panel">
         <h3 className="panel-title" style={{ marginBottom: 16 }}>Export & Reports</h3>
 
-        {isFirebase && (
-          <div className="report-card" style={{ marginBottom: 16 }}>
-            <div className="report-card-title">Senior Member Authorization</div>
-            <div className="report-card-desc">
-              Enter your CAPID and PIN to export tonight&apos;s attendance report.
-            </div>
-            <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="CAPID"
-                value={exportCapid}
-                onChange={(e) => setExportCapid(e.target.value.replace(/\D/g, ''))}
-                style={{ maxWidth: 160 }}
-              />
-              <input
-                type="password"
-                className="form-input"
-                placeholder="4-digit PIN"
-                maxLength={4}
-                value={exportPin}
-                onChange={(e) => setExportPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                style={{ maxWidth: 160 }}
-              />
-            </div>
-            {exportError && <p style={{ color: 'var(--red)', marginBottom: 12 }}>{exportError}</p>}
-          </div>
-        )}
-
-        <div className="report-card">
-          <div className="report-card-title">Full Attendance CSV</div>
-          <div className="report-card-desc">
-            Export all member and guest attendance records for tonight&apos;s meeting.
-          </div>
-          <button
-            className="btn btn-blue"
-            disabled={exporting}
-            onClick={() =>
-              isFirebase
-                ? handleAuthorizedExport('csv')
-                : exportCSVLocal(members, guests)
-            }
-          >
-            {exporting ? 'Exporting...' : 'Download CSV'}
-          </button>
-        </div>
+        <AttendanceCsvExport
+          members={members}
+          guests={guests}
+          isFirebase={isFirebase}
+          meeting={meeting}
+          seniorSession={seniorSession}
+          addActivity={addActivity}
+          title="Full Attendance CSV"
+          description="Export all member and guest attendance records for tonight's meeting, including members not yet checked in."
+        />
 
         {isCloudBackend && (
-          <div className="report-card">
-            <div className="report-card-title">PDF / DOCX / Excel (Scaffold)</div>
-            <div className="report-card-desc">
-              Additional export formats return structured JSON until full document generation is added.
+          <>
+            <div className="report-card" style={{ marginTop: 16 }}>
+              <div className="report-card-title">Senior Member Authorization</div>
+              <div className="report-card-desc">
+                Enter your CAPID and PIN for PDF, DOCX, or Excel exports.
+              </div>
+              <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="CAPID"
+                  value={exportCapid}
+                  onChange={(e) => setExportCapid(e.target.value.replace(/\D/g, ''))}
+                  style={{ maxWidth: 160 }}
+                />
+                <input
+                  type="password"
+                  className="form-input"
+                  placeholder="4-digit PIN"
+                  maxLength={4}
+                  value={exportPin}
+                  onChange={(e) => setExportPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                  style={{ maxWidth: 160 }}
+                />
+              </div>
+              {exportError && <p style={{ color: 'var(--red)', marginBottom: 12 }}>{exportError}</p>}
             </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {['pdf', 'docx', 'xlsx'].map((fmt) => (
-                <button
-                  key={fmt}
-                  className="btn btn-outline"
-                  disabled={exporting}
-                  onClick={() => handleAuthorizedExport(fmt)}
-                >
-                  {fmt.toUpperCase()}
-                </button>
-              ))}
+
+            <div className="report-card">
+              <div className="report-card-title">PDF / DOCX / Excel (Scaffold)</div>
+              <div className="report-card-desc">
+                Additional export formats return structured JSON until full document generation is added.
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {['pdf', 'docx', 'xlsx'].map((fmt) => (
+                  <button
+                    key={fmt}
+                    type="button"
+                    className="btn btn-outline"
+                    disabled={exporting}
+                    onClick={() => handleAuthorizedExport(fmt)}
+                  >
+                    {fmt.toUpperCase()}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          </>
         )}
 
         <div className="report-card">

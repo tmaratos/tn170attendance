@@ -7,6 +7,7 @@ import ActivityFeed from '../components/ActivityFeed';
 import CheckInWizard from '../components/CheckInWizard';
 import LocalClock from '../components/LocalClock';
 import PrintableAttendanceLog from '../components/PrintableAttendanceLog';
+import AttendanceCsvExport from '../components/AttendanceCsvExport';
 import { isMeetingInProgress, formatMeetingTime } from '../data/mockData';
 import { useLocalTime } from '../hooks/useLocalTime';
 
@@ -45,6 +46,9 @@ export default function Dashboard({ attendance }) {
     searchMembers,
     verifyPin,
     isFirebase,
+    meeting,
+    seniorSession,
+    addActivity,
     memberHasPin,
     needsPinSetup,
     createMemberPin,
@@ -207,6 +211,21 @@ export default function Dashboard({ attendance }) {
             <ActionIcon type="print" />
             <span><strong>Print Sign In Sheet</strong><small>Print attendance sheet</small></span>
           </button>
+        </div>
+
+        <div className="panel" style={{ marginTop: 24 }}>
+          <h3 className="quick-actions-title">Export Attendance</h3>
+          <AttendanceCsvExport
+            members={members}
+            guests={guests}
+            isFirebase={isFirebase}
+            meeting={meeting}
+            seniorSession={seniorSession}
+            addActivity={addActivity}
+            title="Download CSV"
+            description="Senior members: enter CAPID and PIN to export tonight's full attendance roster."
+            buttonClassName="btn btn-blue"
+          />
         </div>
       </div>
       </div>

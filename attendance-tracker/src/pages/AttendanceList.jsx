@@ -4,6 +4,7 @@ import { formatTime, formatDuration, getInitials } from '../data/mockData';
 import { useLocalTime } from '../hooks/useLocalTime';
 import { isAfterSystemForceCheckoutTime } from '../utils/timeRules';
 import { getCallableError } from '../services/errors';
+import AttendanceCsvExport from '../components/AttendanceCsvExport';
 
 const FILTERS = [
   { key: 'all', label: 'All' },
@@ -19,7 +20,9 @@ export default function AttendanceList({ attendance }) {
     members,
     guests,
     isFirebase,
+    meeting,
     seniorSession,
+    addActivity,
     searchMembers,
     createPendingMember,
     updatePendingMemberCapid,
@@ -92,6 +95,19 @@ export default function AttendanceList({ attendance }) {
     <div>
       <h1 className="page-title">Attendance List</h1>
       <p className="page-subtitle">Full squadron roster with attendance status</p>
+
+      <div className="panel" style={{ marginBottom: 24 }}>
+        <AttendanceCsvExport
+          members={members}
+          guests={guests}
+          isFirebase={isFirebase}
+          meeting={meeting}
+          seniorSession={seniorSession}
+          addActivity={addActivity}
+          title="Export Attendance CSV"
+          description="Download the full roster with attendance status, check-in/out times, and guests."
+        />
+      </div>
 
       <div className="panel">
         <div className="table-filters">

@@ -220,7 +220,7 @@ async function seedMembers() {
       merged.isAdmin = member.isAdmin;
       merged.canForceAttendance = member.canForceAttendance;
       merged.canResetPins = member.canResetPins;
-      merged.canExportReports = existingData.canExportReports ?? member.canExportReports;
+      merged.canExportReports = member.canExportReports;
       merged.canManageMembers = member.canManageMembers;
       merged.canManageGuests = existingData.canManageGuests ?? member.canManageGuests;
       if (existingData.isProspective) {
