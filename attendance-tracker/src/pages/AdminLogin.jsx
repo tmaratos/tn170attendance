@@ -7,11 +7,14 @@ export default function AdminLogin({ attendance, onLogin }) {
   const [selectedAdminId, setSelectedAdminId] = useState('');
   const [capid, setCapid] = useState('');
   const [pin, setPin] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
+  const [showForgotHelp, setShowForgotHelp] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { dateStr, shortTimeStr } = useLocalTime();
   const needsCapid = attendance.isCloudBackend;
+  const isKioskMode = attendance.isKioskMode;
   const adminMembers = attendance.adminMembers || [];
   const logoSrc = `${import.meta.env.BASE_URL}squadron-logo.jpeg`;
 
@@ -20,32 +23,54 @@ export default function AdminLogin({ attendance, onLogin }) {
     [adminMembers, selectedAdminId]
   );
 
-  const adminNeedsKioskPin =
-    !needsCapid && selectedAdmin && !attendance.memberHasPin?.(selectedAdmin.id);
+  const adminNeedsPinSetup =
+    !needsCapid && selectedAdmin && attendance.needsPinSetup?.(selectedAdmin.id);
 
   const submit = async () => {
     if (pin.length !== 4) return;
     if (needsCapid && !capid.trim()) return;
     if (!needsCapid && !selectedAdminId) return;
-    if (adminNeedsKioskPin) return;
+
+    if (adminNeedsPinSetup) {
+      if (confirmPin.length !== 4) {
+        setError('Confirm your new 4-digit PIN.');
+        return;
+      }
+      if (pin !== confirmPin) {
+        setPin('');
+        setConfirmPin('');
+        setError('PINs do not match.');
+        return;
+      }
+    }
 
     setLoading(true);
     setError('');
 
     try {
+      if (adminNeedsPinSetup) {
+        await attendance.createMemberPin?.(selectedAdmin.id, pin, confirmPin);
+      }
+
       const ok = needsCapid
         ? await attendance.verifyAdminPin(capid.trim(), pin)
         : await attendance.verifyAdminPin(selectedAdminId, pin);
       if (!ok) {
         setPin('');
-        setError('Admin PIN was not accepted.');
+        setConfirmPin('');
+        setError(
+          isKioskMode
+            ? 'PIN not accepted. Use your personal kiosk PIN or the emergency admin PIN from settings.'
+            : 'Admin PIN was not accepted.'
+        );
         return;
       }
       onLogin();
       navigate('/admin/dashboard', { replace: true });
-    } catch {
+    } catch (err) {
       setPin('');
-      setError('Admin login failed.');
+      setConfirmPin('');
+      setError(err.message || 'Admin login failed.');
     } finally {
       setLoading(false);
     }
@@ -57,6 +82,13 @@ export default function AdminLogin({ attendance, onLogin }) {
     event.preventDefault();
     submit();
   };
+
+  const submitDisabled =
+    loading ||
+    pin.length !== 4 ||
+    (needsCapid && !capid.trim()) ||
+    (!needsCapid && !selectedAdminId) ||
+    (adminNeedsPinSetup && confirmPin.length !== 4);
 
   return (
     <div className="admin-login-page" onKeyDown={handleEnter}>
@@ -91,7 +123,9 @@ export default function AdminLogin({ attendance, onLogin }) {
               onChange={(event) => {
                 setSelectedAdminId(event.target.value);
                 setPin('');
+                setConfirmPin('');
                 setError('');
+                setShowForgotHelp(false);
               }}
             >
               <option value="">Choose your name...</option>
@@ -104,47 +138,89 @@ export default function AdminLogin({ attendance, onLogin }) {
           </label>
         )}
 
-        {adminNeedsKioskPin && (
-          <div className="public-flow-error admin-pin-notice">
-            Set your personal check-in PIN at the kiosk first, then return here to sign in.
+        {adminNeedsPinSetup && (
+          <div className="admin-pin-notice create">
+            No PIN on this device yet. Create your 4-digit PIN below — you&apos;ll use it for
+            check-in, check-out, and admin login.
           </div>
         )}
 
         {error && <div className="public-flow-error">{error}</div>}
 
-        {!adminNeedsKioskPin && (
+        <p className="admin-pin-label">
+          {adminNeedsPinSetup
+            ? 'Create your 4-digit PIN'
+            : needsCapid
+              ? 'Enter your senior member PIN'
+              : 'Enter your personal kiosk PIN'}
+        </p>
+        <PinPad
+          pin={pin}
+          onDigit={(digit) => {
+            setError('');
+            setPin((current) => (current.length < 4 ? `${current}${digit}` : current));
+          }}
+          onBackspace={() => setPin((current) => current.slice(0, -1))}
+          onClear={() => {
+            setPin('');
+            setError('');
+          }}
+        />
+
+        {adminNeedsPinSetup && pin.length === 4 && (
           <>
-            <p className="admin-pin-label">
-              {needsCapid ? 'Enter your senior member PIN' : 'Enter your personal kiosk PIN'}
-            </p>
+            <p className="admin-pin-label">Confirm your PIN</p>
             <PinPad
-              pin={pin}
+              pin={confirmPin}
               onDigit={(digit) => {
                 setError('');
-                setPin((current) => (current.length < 4 ? `${current}${digit}` : current));
+                setConfirmPin((current) => (current.length < 4 ? `${current}${digit}` : current));
               }}
-              onBackspace={() => setPin((current) => current.slice(0, -1))}
-              onClear={() => {
-                setPin('');
-                setError('');
-              }}
+              onBackspace={() => setConfirmPin((current) => current.slice(0, -1))}
+              onClear={() => setConfirmPin('')}
             />
           </>
+        )}
+
+        {isKioskMode && !adminNeedsPinSetup && (
+          <button
+            type="button"
+            className="admin-forgot-pin-link"
+            onClick={() => setShowForgotHelp((current) => !current)}
+          >
+            Forgot your PIN?
+          </button>
+        )}
+
+        {showForgotHelp && (
+          <div className="admin-forgot-pin-help">
+            <p>
+              PINs are stored on this device only. If you forgot yours:
+            </p>
+            <ul>
+              <li>
+                Use the <strong>emergency admin PIN</strong> from Settings (default 0000) to open
+                the admin dashboard, then reset your PIN in Admin Tools.
+              </li>
+              <li>
+                Or go to <Link to="/check-in">Check In</Link>, select your name, and create a new
+                PIN if none exists on this device.
+              </li>
+              <li>
+                Another admin with reset access can clear your PIN in Admin Tools so you can create
+                a new one at check-in.
+              </li>
+            </ul>
+          </div>
         )}
 
         <button
           type="button"
           className="public-confirm-button admin"
           onClick={submit}
-          disabled={
-            loading ||
-            pin.length !== 4 ||
-            (needsCapid && !capid.trim()) ||
-            (!needsCapid && !selectedAdminId) ||
-            adminNeedsKioskPin
-          }
+          disabled={submitDisabled}
         >
-          {loading ? 'Checking...' : 'OPEN ADMIN DASHBOARD'}
+          {loading ? 'Checking...' : adminNeedsPinSetup ? 'CREATE PIN & OPEN DASHBOARD' : 'OPEN ADMIN DASHBOARD'}
         </button>
       </div>
     </div>

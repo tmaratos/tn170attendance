@@ -1,5 +1,3 @@
-import { hashKioskPinSync } from '../utils/kioskPin';
-
 /** CAPIDs with admin permissions (matches scripts/seed-members.js). */
 export const ADMIN_CAPIDS = new Set([
   '326320', // Maj Steven C Mellard
@@ -235,15 +233,13 @@ export function buildSampleActivity() {
   ];
 }
 
-/** Initial localStorage payload for Spark kiosk mode (PINs + tonight's attendance). */
+/** Initial localStorage payload for Spark kiosk mode (attendance samples; PINs are per-device). */
 export function buildInitialKioskLocalState() {
   const members = getEmbeddedRosterMembers();
-  const pins = {};
   const attendance = {};
 
   members.forEach((member, index) => {
     const capid = String(member.capid);
-    pins[capid] = hashKioskPinSync(TEST_PIN, capid);
 
     if (index < 30) {
       attendance[capid] = {
@@ -269,7 +265,7 @@ export function buildInitialKioskLocalState() {
   const membersByCapid = Object.fromEntries(members.map((m) => [m.capid, m]));
 
   return {
-    pins,
+    pins: {},
     attendance,
     guests: buildSampleGuests(membersByCapid),
     activity: buildSampleActivity(),

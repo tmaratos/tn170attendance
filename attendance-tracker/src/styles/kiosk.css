@@ -2369,8 +2369,95 @@
   font-weight: 800;
 }
 
+.pin-setup-hint {
+  margin: 0 0 12px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}
+
+.pin-setup-subhint {
+  margin: -4px 0 14px;
+  color: rgba(255, 255, 255, 0.65);
+  font-size: 0.88rem;
+  line-height: 1.4;
+}
+
+.kiosk-pin-help {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.pin-modal-mode-label {
+  margin: 10px 0 0;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #fff;
+}
+
+.pin-modal-hint {
+  margin-top: 6px;
+  font-size: 0.88rem;
+  text-align: left;
+}
+
+.kiosk-footer-pin-help {
+  margin: 12px 0 0;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+
+.admin-forgot-pin-link {
+  display: block;
+  width: 100%;
+  margin: 8px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.92rem;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.admin-forgot-pin-help {
+  margin: 12px 0 4px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  text-align: left;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.admin-forgot-pin-help ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.admin-forgot-pin-help li + li {
+  margin-top: 6px;
+}
+
 .admin-pin-notice {
   text-align: left;
+}
+
+.admin-pin-notice.create {
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.92rem;
+  line-height: 1.45;
 }
 
 @media (min-width: 1024px) {

@@ -158,6 +158,9 @@ export default function PublicKiosk({ attendance }) {
             <small>Senior member tools</small>
           </Link>
         </div>
+        <p className="kiosk-footer-pin-help">
+          New or forgot PIN? Tap Check In, select your name, and create a PIN if none exists on this device.
+        </p>
       </footer>
     </div>
   );

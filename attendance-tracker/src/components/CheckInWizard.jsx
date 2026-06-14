@@ -526,6 +526,10 @@ export default function CheckInWizard({
       </div>
 
       <div className="kiosk-search-shell">
+        <p className="pin-setup-hint kiosk-pin-help">
+          New or forgot PIN? Select your name — you&apos;ll be prompted to create one if none exists
+          on this device. Each tablet or browser stores PINs locally; set yours once per device.
+        </p>
         <label className="kiosk-search-label" htmlFor={`${mode}-member-search`}>
           Name or CAPID
         </label>
@@ -600,6 +604,14 @@ export default function CheckInWizard({
                 <p>{actionLabel}</p>
                 <h3 id="pin-modal-title">{selected.name}</h3>
                 <span>{selected.grade} <span aria-hidden="true">&bull;</span> CAPID: {selected.capid}</span>
+                <p className="pin-modal-mode-label">
+                  {pinMode === 'create' ? 'Create your PIN' : 'Enter your PIN'}
+                </p>
+                <p className="pin-setup-hint pin-modal-hint">
+                  {pinMode === 'create'
+                    ? 'First time on this device? Create your 4-digit PIN. You\'ll use it for check-in, check-out, and admin login.'
+                    : 'Enter the PIN you created on this device.'}
+                </p>
               </div>
               <button
                 type="button"

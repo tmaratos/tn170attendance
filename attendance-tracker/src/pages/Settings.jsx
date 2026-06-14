@@ -127,6 +127,10 @@ export default function Settings({ attendance }) {
                 <p className="report-card-desc">
                   Kiosk mode stores member PINs on this device only (hashed in the browser). This is less secure than Cloud Functions but required on the free Spark plan. Set a shared admin PIN for senior tools.
                 </p>
+                <p className="report-card-desc pin-setup-hint">
+                  On first use of each tablet or browser, every member must create their PIN once at check-in.
+                  PINs do not sync across devices.
+                </p>
                 <div className="settings-grid">
                   <div className="form-group">
                     <label className="form-label">Admin PIN (4 digits)</label>

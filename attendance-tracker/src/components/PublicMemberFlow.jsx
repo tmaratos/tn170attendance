@@ -213,6 +213,10 @@ export default function PublicMemberFlow({
 
           {step === 0 && (
             <div className="public-flow-section">
+              <p className="pin-setup-hint kiosk-pin-help">
+                New or forgot PIN? Select your name — you&apos;ll be prompted to create one if none
+                exists on this device. Each tablet or browser stores PINs locally; set yours once per device.
+              </p>
               <label htmlFor={`${mode}-search`}>Search by name or CAPID</label>
               <input
                 id={`${mode}-search`}
@@ -251,7 +255,17 @@ export default function PublicMemberFlow({
                 <span>{selected.grade} - CAPID {selected.capid} - {selected.role}</span>
               </div>
 
-              <h2>{pinSetupRequired ? 'Create a 4-digit PIN' : 'Enter your 4-digit PIN'}</h2>
+              <h2>{pinSetupRequired ? 'Create your PIN' : 'Enter your 4-digit PIN'}</h2>
+              <p className="pin-setup-hint">
+                {pinSetupRequired
+                  ? 'First time on this device? Create your 4-digit PIN.'
+                  : 'Enter the PIN you created on this device.'}
+              </p>
+              {pinSetupRequired && (
+                <p className="pin-setup-subhint">
+                  You&apos;ll use this same PIN for check-in, check-out, and admin login.
+                </p>
+              )}
               {error && <div className="public-flow-error">{error}</div>}
               <PinPad
                 pin={pin}

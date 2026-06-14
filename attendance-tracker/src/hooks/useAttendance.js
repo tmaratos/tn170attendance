@@ -288,8 +288,8 @@ function useSparkKioskAttendance() {
         const hasLocalPin = !!localState.pins[memberId];
         return {
           ...uiMember,
-          hasPin: hasLocalPin || uiMember.hasPin,
-          pinResetRequired: hasLocalPin ? false : uiMember.pinResetRequired,
+          hasPin: hasLocalPin,
+          pinResetRequired: false,
         };
       }),
     [rawMembers, localState.attendance, localState.pins]
@@ -527,6 +527,7 @@ function useSparkKioskAttendance() {
       }
       const adminId = String(adminIdOrPin);
       if (!ADMIN_CAPIDS.has(adminId)) return false;
+      if (pinMaybe === settings.adminPin) return true;
       const storedHash = localState.pins[adminId];
       if (!storedHash) return false;
       return verifyKioskPin(pinMaybe, adminId, storedHash);
@@ -558,7 +559,33 @@ function useSparkKioskAttendance() {
   }, []);
 
   const authenticateSenior = useCallback(async () => null, []);
-  const resetMemberPinFn = useCallback(async () => {}, []);
+  const resetMemberPinFn = useCallback(
+    async (targetCapid, actorPin) => {
+      const actorAuthorized =
+        actorPin === settings.adminPin ||
+        [...ADMIN_CAPIDS].some((adminId) => {
+          const storedHash = localState.pins[adminId];
+          return storedHash && verifyKioskPin(actorPin, adminId, storedHash);
+        });
+      if (!actorAuthorized) {
+        throw new Error('Invalid admin credentials.');
+      }
+      const targetId = String(targetCapid);
+      const targetExists = rawMembers.some(
+        (m) => String(m.memberId || m.capid || m.temporaryId) === targetId
+      );
+      if (!targetExists) {
+        throw new Error('Member not found.');
+      }
+      setLocalState((prev) => {
+        const nextPins = { ...prev.pins };
+        delete nextPins[targetId];
+        return { ...prev, pins: nextPins };
+      });
+      return true;
+    },
+    [localState.pins, rawMembers, settings.adminPin]
+  );
 
   return {
     members,
@@ -590,6 +617,7 @@ function useSparkKioskAttendance() {
     createMemberPin,
     authenticateSenior,
     resetMemberPin: resetMemberPinFn,
+    canResetPins: true,
     addActivity,
   };
 }

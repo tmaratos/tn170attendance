@@ -13,11 +13,13 @@ export default function AdminTools({ attendance }) {
     checkInMember,
     checkOutMember,
     isCloudBackend,
+    isKioskMode,
     authenticateSenior,
     forceCheckInMember,
     forceCheckOutMember,
     resetMemberPin,
     seniorSession,
+    canResetPins,
   } = attendance;
 
   const [searchParams] = useSearchParams();
@@ -32,10 +34,14 @@ export default function AdminTools({ attendance }) {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [resetTarget, setResetTarget] = useState('');
+  const [resetQuery, setResetQuery] = useState('');
   const { now } = useLocalTime();
   const forceCheckoutDue = isAfterSystemForceCheckoutTime(now);
 
   const results = useMemo(() => searchMembers(query), [query, searchMembers]);
+  const resetResults = useMemo(() => searchMembers(resetQuery), [resetQuery, searchMembers]);
+  const showPinReset =
+    (isCloudBackend && seniorSession?.canResetPins) || (isKioskMode && canResetPins);
 
   const handleAdminAuth = async () => {
     if (adminPin.length !== 4) return;
@@ -220,41 +226,94 @@ export default function AdminTools({ attendance }) {
         </div>
       </div>
 
-      {isCloudBackend && seniorSession?.canResetPins && (
+      {showPinReset && (
         <div className="panel" style={{ marginTop: 24 }}>
           <h3 className="panel-title" style={{ marginBottom: 12 }}>PIN Reset</h3>
           <p className="report-card-desc" style={{ marginBottom: 16 }}>
-            Reset a member&apos;s PIN. They will create a new PIN at next check-in.
+            Reset a member&apos;s PIN on this device. They will create a new PIN at next check-in.
+            {isKioskMode ? ' PINs are stored locally in this browser only.' : ''}
           </p>
-          <div className="form-group">
-            <label className="form-label">Member CAPID to reset</label>
-            <input
-              type="text"
-              className="form-input"
-              placeholder="CAPID"
-              value={resetTarget}
-              onChange={(e) => setResetTarget(e.target.value.replace(/\D/g, ''))}
-            />
-          </div>
-          <button
-            className="btn btn-gold"
-            disabled={!resetTarget || loading}
-            onClick={async () => {
-              setLoading(true);
-              try {
-                await resetMemberPin(resetTarget, adminPin);
-                setMessage(`PIN reset for CAPID ${resetTarget}.`);
-                setResetTarget('');
-                setTimeout(() => setMessage(''), 3000);
-              } catch (err) {
-                setMessage(err.message || 'PIN reset failed.');
-              } finally {
-                setLoading(false);
-              }
-            }}
-          >
-            Reset PIN
-          </button>
+          {isCloudBackend ? (
+            <>
+              <div className="form-group">
+                <label className="form-label">Member CAPID to reset</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="CAPID"
+                  value={resetTarget}
+                  onChange={(e) => setResetTarget(e.target.value.replace(/\D/g, ''))}
+                />
+              </div>
+              <button
+                className="btn btn-gold"
+                disabled={!resetTarget || loading}
+                onClick={async () => {
+                  setLoading(true);
+                  try {
+                    await resetMemberPin(resetTarget, adminPin);
+                    setMessage(`PIN reset for CAPID ${resetTarget}.`);
+                    setResetTarget('');
+                    setTimeout(() => setMessage(''), 3000);
+                  } catch (err) {
+                    setMessage(err.message || 'PIN reset failed.');
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+              >
+                Reset PIN
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="form-group">
+                <label className="form-label">Search member to reset</label>
+                <input
+                  type="text"
+                  className="form-input form-input-lg"
+                  placeholder="Search by name or CAPID..."
+                  value={resetQuery}
+                  onChange={(e) => setResetQuery(e.target.value)}
+                />
+              </div>
+              <div className="admin-search-results">
+                {(resetQuery ? resetResults : members).slice(0, 12).map((member) => (
+                  <div key={`reset-${member.id}`} className="admin-member-row">
+                    <div className="member-cell">
+                      <div className="avatar">{getInitials(member.name)}</div>
+                      <div className="member-info">
+                        <span className="member-name">{member.name}</span>
+                        <span className="member-meta">
+                          {member.grade} • CAPID {member.capid}
+                          {member.hasPin ? ' • PIN set on this device' : ' • No PIN on this device'}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      className="btn btn-gold"
+                      style={{ minHeight: 'auto', padding: '8px 16px', fontSize: '0.85rem' }}
+                      disabled={loading}
+                      onClick={async () => {
+                        setLoading(true);
+                        try {
+                          await resetMemberPin(member.id, adminPin);
+                          setMessage(`PIN reset for ${member.name}. They can create a new PIN at check-in.`);
+                          setTimeout(() => setMessage(''), 4000);
+                        } catch (err) {
+                          setMessage(err.message || 'PIN reset failed.');
+                        } finally {
+                          setLoading(false);
+                        }
+                      }}
+                    >
+                      Reset PIN
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
