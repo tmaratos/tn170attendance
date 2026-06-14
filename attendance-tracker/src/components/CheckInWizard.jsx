@@ -98,8 +98,7 @@ export default function CheckInWizard({
     if (!member) return 'verify';
     if (needsPinSetup?.(member.id)) return 'create';
     if (memberHasPin?.(member.id)) return 'verify';
-    if (member.hasPin === false || member.pinResetRequired) return 'create';
-    return member.pin ? 'verify' : 'create';
+    return 'create';
   };
 
   const handleSelect = (member) => {

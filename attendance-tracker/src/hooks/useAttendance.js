@@ -42,6 +42,7 @@ import {
   guestCheckOut,
 } from '../services/guestService';
 import { isAfterSystemForceCheckoutTime } from '../utils/timeRules';
+import { ADMIN_CAPIDS } from '../data/rosterData';
 
 const STORAGE_KEY = 'tn170-attendance';
 const KIOSK_STORAGE_KEY = 'tn170-kiosk-local';
@@ -120,20 +121,25 @@ function adminForceNote(date = new Date()) {
   })} local time.`;
 }
 
+function memberStorageKey(memberDoc) {
+  return String(memberDoc?.capid || memberDoc?.memberId || memberDoc?.temporaryId);
+}
+
 function loadKioskLocalState() {
   try {
     const stored = localStorage.getItem(KIOSK_STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      if (parsed.pins && Object.keys(parsed.pins).length > 0) {
-        return {
-          settings: DEFAULT_SETTINGS,
-          recurringGuests: [],
-          guests: MOCK_GUESTS,
-          activity: MOCK_ACTIVITY,
-          ...parsed,
-        };
-      }
+      return {
+        settings: DEFAULT_SETTINGS,
+        recurringGuests: [],
+        guests: MOCK_GUESTS,
+        activity: MOCK_ACTIVITY,
+        pins: {},
+        attendance: {},
+        ...parsed,
+        settings: { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) },
+      };
     }
   } catch {
     /* seed fresh below */
@@ -276,11 +282,25 @@ function useSparkKioskAttendance() {
   const members = useMemo(
     () =>
       rawMembers.map((member) => {
-        const memberId = String(member.memberId || member.capid || member.temporaryId);
+        const memberId = memberStorageKey(member);
         const record = attendanceRecordToUi(localState.attendance[memberId]);
-        return toUiMember(member, record);
+        const uiMember = toUiMember(member, record);
+        const hasLocalPin = !!localState.pins[memberId];
+        return {
+          ...uiMember,
+          hasPin: hasLocalPin || uiMember.hasPin,
+          pinResetRequired: hasLocalPin ? false : uiMember.pinResetRequired,
+        };
       }),
-    [rawMembers, localState.attendance]
+    [rawMembers, localState.attendance, localState.pins]
+  );
+
+  const adminMembers = useMemo(
+    () =>
+      members
+        .filter((member) => ADMIN_CAPIDS.has(String(member.capidRaw || member.id)))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [members]
   );
 
   const addActivity = useCallback((message, type) => {
@@ -294,7 +314,15 @@ function useSparkKioskAttendance() {
   }, []);
 
   const checkInMember = useCallback(
-    (memberId, force = false) => {
+    (memberId, pinOrForce = false) => {
+      const force = pinOrForce === true;
+      const id = String(memberId);
+      if (!force && typeof pinOrForce === 'string') {
+        const storedHash = localState.pins[id];
+        if (!verifyKioskPin(pinOrForce, id, storedHash)) {
+          throw new Error('Incorrect PIN.');
+        }
+      }
       const now = new Date().toISOString();
       setLocalState((prev) => ({
         ...prev,
@@ -318,18 +346,26 @@ function useSparkKioskAttendance() {
         );
       }
     },
-    [members, addActivity]
+    [members, addActivity, localState.pins]
   );
 
   const checkOutMember = useCallback(
-    (memberId, force = false, note = null) => {
+    (memberId, pinOrForce = false, note = null) => {
+      const force = pinOrForce === true;
+      const id = String(memberId);
+      if (!force && typeof pinOrForce === 'string') {
+        const storedHash = localState.pins[id];
+        if (!verifyKioskPin(pinOrForce, id, storedHash)) {
+          throw new Error('Incorrect PIN.');
+        }
+      }
       const now = new Date().toISOString();
       setLocalState((prev) => ({
         ...prev,
         attendance: {
           ...prev.attendance,
-          [String(memberId)]: {
-            ...prev.attendance[String(memberId)],
+          [id]: {
+            ...prev.attendance[id],
             status: 'checked-out',
             checkOutTime: now,
             ...(force
@@ -342,7 +378,7 @@ function useSparkKioskAttendance() {
           },
         },
       }));
-      const member = members.find((m) => String(m.id) === String(memberId));
+      const member = members.find((m) => String(m.id) === id);
       if (member) {
         addActivity(
           force ? `${member.name} force checked out by admin` : `${member.name} checked out`,
@@ -350,7 +386,7 @@ function useSparkKioskAttendance() {
         );
       }
     },
-    [members, addActivity]
+    [members, addActivity, localState.pins]
   );
 
   const checkInGuest = useCallback(
@@ -485,8 +521,17 @@ function useSparkKioskAttendance() {
   );
 
   const verifyAdminPin = useCallback(
-    (pin) => settings.adminPin === pin,
-    [settings.adminPin]
+    (adminIdOrPin, pinMaybe) => {
+      if (pinMaybe === undefined) {
+        return settings.adminPin === adminIdOrPin;
+      }
+      const adminId = String(adminIdOrPin);
+      if (!ADMIN_CAPIDS.has(adminId)) return false;
+      const storedHash = localState.pins[adminId];
+      if (!storedHash) return false;
+      return verifyKioskPin(pinMaybe, adminId, storedHash);
+    },
+    [localState.pins, settings.adminPin]
   );
 
   const memberHasPin = useCallback(
@@ -503,10 +548,11 @@ function useSparkKioskAttendance() {
     if (!/^\d{4}$/.test(pin) || pin !== confirmPin) {
       throw new Error('PIN must be 4 digits and match confirmation.');
     }
-    const pinHash = hashKioskPinSync(pin, String(memberId));
+    const id = String(memberId);
+    const pinHash = hashKioskPinSync(pin, id);
     setLocalState((prev) => ({
       ...prev,
-      pins: { ...prev.pins, [String(memberId)]: pinHash },
+      pins: { ...prev.pins, [id]: pinHash },
     }));
     return true;
   }, []);
@@ -526,6 +572,7 @@ function useSparkKioskAttendance() {
     isCloudBackend: false,
     isKioskMode: true,
     usingLocalRoster,
+    adminMembers,
     loading,
     error: null,
     checkInMember,
@@ -836,8 +883,23 @@ function useMockAttendance() {
   );
 
   const verifyAdminPin = useCallback(
-    (pin) => state.settings.adminPin === pin,
-    [state.settings.adminPin]
+    (adminIdOrPin, pinMaybe) => {
+      if (pinMaybe === undefined) {
+        return state.settings.adminPin === adminIdOrPin;
+      }
+      const adminId = String(adminIdOrPin);
+      if (!ADMIN_CAPIDS.has(adminId)) return false;
+      return verifyPin(adminId, pinMaybe);
+    },
+    [state.settings.adminPin, verifyPin]
+  );
+
+  const adminMembers = useMemo(
+    () =>
+      state.members
+        .filter((member) => ADMIN_CAPIDS.has(String(member.capidRaw || member.id || member.capid)))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [state.members]
   );
 
   const memberHasPin = useCallback(
@@ -884,6 +946,7 @@ function useMockAttendance() {
     isFirebase: false,
     isCloudBackend: false,
     isKioskMode: false,
+    adminMembers,
     loading: false,
     error: null,
     checkInMember,
@@ -1151,6 +1214,14 @@ function useFirebaseAttendance() {
 
   const verifyPin = useCallback(() => false, []);
 
+  const adminMembers = useMemo(
+    () =>
+      members
+        .filter((member) => member.isAdmin || ADMIN_CAPIDS.has(String(member.capidRaw || member.id)))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    [members]
+  );
+
   return {
     members,
     guests,
@@ -1162,6 +1233,7 @@ function useFirebaseAttendance() {
     isFirebase: true,
     isCloudBackend: true,
     isKioskMode: false,
+    adminMembers,
     loading,
     error,
     checkInMember,

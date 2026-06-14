@@ -69,10 +69,7 @@ export default function PublicMemberFlow({
   }, [query, searchMembers]);
 
   const pinSetupRequired = selected
-    ? Boolean(needsPinSetup?.(selected.id)) ||
-      selected.hasPin === false ||
-      selected.pinResetRequired ||
-      (!memberHasPin?.(selected.id) && !selected.pin)
+    ? Boolean(needsPinSetup?.(selected.id))
     : false;
 
   const reset = () => {
@@ -117,7 +114,7 @@ export default function PublicMemberFlow({
         return;
       }
 
-      if (!isFirebase && !verifyPin(selected.id, pin)) {
+      if (verifyPin && !verifyPin(selected.id, pin)) {
         setPin('');
         setError('Incorrect PIN. Try again.');
         return;
