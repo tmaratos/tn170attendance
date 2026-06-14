@@ -251,7 +251,11 @@ exports.createPin = onCall(callableOptions, async (request) => {
   }
 
   const existingPin = await getMemberPin(memberId);
-  if (existingPin?.pinHash && !member.pinResetRequired) {
+  const existingValidPin =
+    typeof existingPin?.pinHash === 'string'
+    && existingPin.pinHash.length >= 8
+    && (existingPin.pinHash.startsWith('sha256:') || existingPin.pinHash.startsWith('fnv1a:'));
+  if (existingValidPin && !member.pinResetRequired) {
     throw new HttpsError('already-exists', 'PIN already exists. Use your PIN to check in.');
   }
 

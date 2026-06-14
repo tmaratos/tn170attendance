@@ -20,6 +20,12 @@ import { ADMIN_CAPIDS } from '../data/rosterData';
 
 const KIOSK_PIN_SALT = 'tn170-kiosk-v1';
 
+/** True only for non-empty hashes written by this app (sha256 or legacy fnv1a). */
+export function isValidStoredPinHash(pinHash) {
+  if (typeof pinHash !== 'string' || pinHash.length < 8) return false;
+  return pinHash.startsWith('sha256:') || pinHash.startsWith('fnv1a:');
+}
+
 function validatePinInput(pin, confirmPin) {
   if (!/^\d{4}$/.test(pin)) {
     throw new Error('PIN must be exactly 4 digits.');
@@ -80,7 +86,7 @@ export function subscribeMemberPins(callback) {
     const pins = {};
     snap.docs.forEach((pinDoc) => {
       const pinHash = pinDoc.data().pinHash;
-      if (pinHash) pins[pinDoc.id] = pinHash;
+      if (isValidStoredPinHash(pinHash)) pins[pinDoc.id] = pinHash;
     });
     callback(pins);
   });
@@ -101,13 +107,22 @@ export async function createMemberPinInFirestore(memberId, pin, confirmPin) {
   const pinRef = doc(db, 'memberPins', id);
   const pinSnap = await getDoc(pinRef);
   const existingData = pinSnap.exists() ? pinSnap.data() : null;
+  const existingValidPin = isValidStoredPinHash(existingData?.pinHash);
 
-  if (existingData?.pinHash && !member.pinResetRequired) {
+  if (existingValidPin && !member.pinResetRequired) {
     throw new Error('PIN already exists. Enter your PIN to check in.');
   }
 
   const pinHash = await hashKioskPin(pin, id);
   const now = serverTimestamp();
+
+  if (pinSnap.exists() && !existingValidPin && !member.pinResetRequired) {
+    await updateDoc(doc(db, 'members', id), {
+      pinResetRequired: true,
+      hasPin: false,
+      updatedAt: now,
+    });
+  }
 
   if (!pinSnap.exists()) {
     await setDoc(pinRef, {
@@ -134,7 +149,7 @@ export async function createMemberPinInFirestore(memberId, pin, confirmPin) {
 
 export async function verifyMemberPinInFirestore(memberId, pin) {
   const pinDoc = await fetchMemberPinDoc(memberId);
-  if (!pinDoc?.pinHash) return false;
+  if (!isValidStoredPinHash(pinDoc?.pinHash)) return false;
   return verifyKioskPin(pin, String(memberId), pinDoc.pinHash);
 }
 
