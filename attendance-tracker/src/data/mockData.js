@@ -1,13 +1,16 @@
 import {
-  buildMockMembersFromRoster,
-  buildSampleGuests,
-  buildSampleActivity,
-  buildInitialKioskLocalState,
+  buildEmptyMembersFromRoster,
+  buildEmptyKioskLocalState,
   getEmbeddedRosterMembers,
   ROSTER_MEMBER_COUNT,
 } from './rosterData';
 
-export { getEmbeddedRosterMembers, buildInitialKioskLocalState, ROSTER_MEMBER_COUNT };
+export {
+  getEmbeddedRosterMembers,
+  buildEmptyKioskLocalState,
+  buildEmptyMembersFromRoster,
+  ROSTER_MEMBER_COUNT,
+};
 
 export const DEFAULT_SETTINGS = {
   squadronName: 'Oak Ridge Composite Squadron',
@@ -20,15 +23,7 @@ export const DEFAULT_SETTINGS = {
   meetingEnd: '21:30',
 };
 
-export const MOCK_MEMBERS = buildMockMembersFromRoster();
-
-const membersByCapid = Object.fromEntries(
-  getEmbeddedRosterMembers().map((m) => [m.capid, m])
-);
-
-export const MOCK_GUESTS = buildSampleGuests(membersByCapid);
-
-export const MOCK_ACTIVITY = buildSampleActivity();
+export const MOCK_MEMBERS = buildEmptyMembersFromRoster();
 
 export function formatTime(isoString) {
   if (!isoString) return '—';

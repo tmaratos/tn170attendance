@@ -8,8 +8,6 @@ export const ADMIN_CAPIDS = new Set([
   '729204', // 2d Lt Tristan G Maratos
 ]);
 
-export const TEST_PIN = '1234';
-
 const ROSTER_LINES = `
 362254 Maj Lemont T Adrian
 706279 2d Lt Janelle C Allison
@@ -134,141 +132,34 @@ function parseRosterLine(line) {
   };
 }
 
-function meetingIso(hour, minute, minuteOffset = 0) {
-  const now = new Date();
-  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hour, minute + minuteOffset, 0);
-  return d.toISOString();
-}
-
 /** Firestore-shaped member docs for kiosk fallback when cloud roster is empty. */
 export function getEmbeddedRosterMembers() {
   return ROSTER_LINES.map(parseRosterLine);
 }
 
-/** UI-shaped members with sample attendance for mock / offline mode. */
-export function buildMockMembersFromRoster() {
-  const firestoreMembers = getEmbeddedRosterMembers();
-  return firestoreMembers.map((member, index) => {
-    let status = 'absent';
-    let checkInTime = null;
-    let checkOutTime = null;
-
-    if (index < 30) {
-      status = 'checked-in';
-      checkInTime = meetingIso(18, 25 + (index % 25));
-    } else if (index < 40) {
-      status = 'checked-out';
-      checkInTime = meetingIso(18, 15 + (index % 15));
-      checkOutTime = meetingIso(19, 5 + (index % 20));
-    }
-
-    return {
-      id: member.capid,
-      name: member.displayName,
-      grade: member.grade,
-      capid: member.capid,
-      role: member.role,
-      pin: TEST_PIN,
-      isAdmin: member.isAdmin,
-      status,
-      checkInTime,
-      checkOutTime,
-    };
-  });
+/** UI-shaped roster members with no attendance (offline / mock mode). */
+export function buildEmptyMembersFromRoster() {
+  return getEmbeddedRosterMembers().map((member) => ({
+    id: member.capid,
+    name: member.displayName,
+    grade: member.grade,
+    capid: member.capid,
+    role: member.role,
+    pin: '',
+    isAdmin: member.isAdmin,
+    status: 'absent',
+    checkInTime: null,
+    checkOutTime: null,
+  }));
 }
 
-export function buildSampleGuests(membersByCapid) {
-  const host1 = membersByCapid['326320'];
-  const host2 = membersByCapid['249023'];
-  const host3 = membersByCapid['740617'];
-  const today = new Date().toISOString().split('T')[0];
-
-  return [
-    {
-      id: 'g1',
-      name: 'Alex Rivera',
-      hostId: '326320',
-      hostName: host1?.displayName || 'Steven C Mellard',
-      checkInTime: meetingIso(18, 50),
-      checkOutTime: null,
-      status: 'checked-in',
-      firstVisit: '2025-04-15',
-      lastVisit: today,
-      totalVisits: 3,
-    },
-    {
-      id: 'g2',
-      name: 'Jordan Kim',
-      hostId: '249023',
-      hostName: host2?.displayName || 'Ernest E Burchell',
-      checkInTime: meetingIso(19, 0),
-      checkOutTime: null,
-      status: 'checked-in',
-      firstVisit: '2025-05-01',
-      lastVisit: today,
-      totalVisits: 2,
-    },
-    {
-      id: 'g3',
-      name: 'Taylor Brooks',
-      hostId: '740617',
-      hostName: host3?.displayName || 'Tyler M Thomas',
-      checkInTime: meetingIso(19, 5),
-      checkOutTime: null,
-      status: 'checked-in',
-      firstVisit: today,
-      lastVisit: today,
-      totalVisits: 1,
-    },
-  ];
-}
-
-export function buildSampleActivity() {
-  return [
-    { id: 'a1', message: 'Steven C Mellard checked in', timestamp: meetingIso(18, 32), type: 'check-in' },
-    { id: 'a2', message: 'Tucker Reed Wilkie checked out', timestamp: meetingIso(19, 10), type: 'check-out' },
-    { id: 'a3', message: 'Alex Rivera (Guest) checked in', timestamp: meetingIso(18, 50), type: 'guest-in' },
-    { id: 'a4', message: 'Hope Mariah Johnson checked in', timestamp: meetingIso(18, 45), type: 'check-in' },
-    { id: 'a5', message: 'Jordan Kim (Guest) checked in', timestamp: meetingIso(19, 0), type: 'guest-in' },
-  ];
-}
-
-/** Initial localStorage payload for Spark kiosk mode (attendance samples; PINs in Firestore). */
-export function buildInitialKioskLocalState() {
-  const members = getEmbeddedRosterMembers();
-  const attendance = {};
-
-  members.forEach((member, index) => {
-    const capid = String(member.capid);
-
-    if (index < 30) {
-      attendance[capid] = {
-        status: 'checked-in',
-        checkInTime: meetingIso(18, 25 + (index % 25)),
-        checkOutTime: null,
-        forceAction: false,
-        forceType: null,
-        forceNote: null,
-      };
-    } else if (index < 40) {
-      attendance[capid] = {
-        status: 'checked-out',
-        checkInTime: meetingIso(18, 15 + (index % 15)),
-        checkOutTime: meetingIso(19, 5 + (index % 20)),
-        forceAction: false,
-        forceType: null,
-        forceNote: null,
-      };
-    }
-  });
-
-  const membersByCapid = Object.fromEntries(members.map((m) => [m.capid, m]));
-
+/** Empty localStorage payload for Spark kiosk mode (PINs live in Firestore). */
+export function buildEmptyKioskLocalState() {
   return {
     pins: {},
-    attendance,
-    guests: buildSampleGuests(membersByCapid),
-    activity: buildSampleActivity(),
+    attendance: {},
+    guests: [],
+    activity: [],
     recurringGuests: [],
   };
 }
