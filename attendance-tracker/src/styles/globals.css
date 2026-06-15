@@ -96,6 +96,7 @@ input, select, textarea {
   min-height: 100vh;
   min-height: 100dvh;
   width: 100%;
+  max-width: 100%;
 }
 
 .ipad-main-content,
@@ -108,6 +109,13 @@ input, select, textarea {
   padding: 0;
   overflow: hidden;
   background: #020812;
+}
+
+.main-content.public-main-content,
+.main-content.ipad-main-content {
+  margin-left: 0;
+  padding: 0;
+  overflow: hidden;
 }
 
 .page-header {
@@ -366,6 +374,12 @@ input, select, textarea {
     margin-left: 0;
     padding: 72px 12px 12px;
   }
+
+  .main-content.public-main-content,
+  .main-content.ipad-main-content {
+    padding: 0;
+    overflow: hidden;
+  }
 }
 
 @media (pointer: coarse) and (max-width: 1366px) {
@@ -389,6 +403,12 @@ input, select, textarea {
   .main-content {
     margin-left: 0;
     padding: 72px 12px 12px;
+  }
+
+  .main-content.public-main-content,
+  .main-content.ipad-main-content {
+    padding: 0;
+    overflow: hidden;
   }
 }
 
