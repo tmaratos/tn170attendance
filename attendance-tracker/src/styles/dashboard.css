@@ -438,7 +438,7 @@
   }
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 1200px), (pointer: coarse) and (max-width: 1366px) {
   .sidebar {
     transform: translateX(-110%);
     transition: transform 0.3s ease;

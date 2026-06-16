@@ -369,37 +369,7 @@ input, select, textarea {
   display: none;
 }
 
-@media (max-width: 1024px) {
-  .main-content {
-    margin-left: 0;
-    padding: 72px 12px 12px;
-  }
-
-  .main-content.public-main-content,
-  .main-content.ipad-main-content {
-    padding: 0;
-    overflow: hidden;
-  }
-}
-
-@media (pointer: coarse) and (max-width: 1366px) {
-  .sidebar {
-    transform: translateX(-110%);
-    transition: transform 0.3s ease;
-    top: 0;
-    left: 0;
-    height: 100vh;
-    border-radius: 0;
-  }
-
-  .sidebar.open {
-    transform: translateX(0);
-  }
-
-  .mobile-menu-btn {
-    display: block;
-  }
-
+@media (max-width: 1200px), (pointer: coarse) and (max-width: 1366px) {
   .main-content {
     margin-left: 0;
     padding: 72px 12px 12px;
