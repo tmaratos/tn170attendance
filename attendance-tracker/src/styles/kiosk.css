@@ -2559,6 +2559,13 @@
   line-height: 1.45;
 }
 
+@media (min-width: 1024px) and (orientation: landscape) {
+  .public-kiosk-shell {
+    grid-template-columns: minmax(0, 1fr) minmax(380px, 440px);
+    gap: 24px;
+  }
+}
+
 @media (min-width: 1024px) {
   .public-kiosk-page,
   .public-flow-page,
@@ -2570,11 +2577,6 @@
       max(var(--kiosk-gutter), env(safe-area-inset-right))
       0
       max(var(--kiosk-gutter), env(safe-area-inset-left));
-  }
-
-  .public-kiosk-shell {
-    grid-template-columns: minmax(0, 1fr) minmax(380px, 440px);
-    gap: 24px;
   }
 
   .public-kiosk-footer {
@@ -2608,14 +2610,7 @@
   }
 }
 
-@media (min-width: 640px) and (max-width: 1023px) {
-  .public-kiosk-page,
-  .public-flow-page,
-  .admin-login-page {
-    --kiosk-gutter: 20px;
-    --kiosk-content-max: 1100px;
-  }
-
+@media (min-width: 640px) and (max-width: 1023px) and (orientation: landscape) {
   .public-kiosk-shell {
     grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
     gap: 16px;
@@ -2623,6 +2618,15 @@
 
   .public-kiosk-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 640px) and (max-width: 1023px) {
+  .public-kiosk-page,
+  .public-flow-page,
+  .admin-login-page {
+    --kiosk-gutter: 20px;
+    --kiosk-content-max: 1100px;
   }
 
   .public-action-button {
@@ -2830,6 +2834,67 @@
 
   .public-clock-card strong {
     grid-row: auto;
+  }
+}
+
+/* Portrait tablet & phone kiosk — full width, single column */
+@media (orientation: portrait) and (min-width: 600px) and (max-width: 1024px) {
+  .public-kiosk-page {
+    --kiosk-gutter: 14px;
+    --kiosk-content-max: 100%;
+    width: 100%;
+    max-width: none;
+    padding-left: max(14px, env(safe-area-inset-left));
+    padding-right: max(14px, env(safe-area-inset-right));
+  }
+
+  .public-kiosk-body {
+    width: 100%;
+    max-width: none;
+  }
+
+  .public-kiosk-shell {
+    width: 100%;
+    max-width: none;
+    grid-template-columns: 1fr;
+    gap: 14px;
+    align-items: stretch;
+  }
+
+  .public-kiosk-hero,
+  .public-status-panel {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .public-status-panel {
+    max-height: min(320px, 38dvh);
+  }
+
+  .public-kiosk-footer {
+    width: 100%;
+  }
+
+  .public-kiosk-footer .public-kiosk-actions {
+    width: 100%;
+    max-width: none;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .public-kiosk-footer .public-action-button {
+    min-height: 76px;
+    padding: 10px 6px;
+  }
+
+  .public-kiosk-footer .public-action-button span {
+    font-size: clamp(0.68rem, 1.6vw, 0.95rem);
+    line-height: 1.1;
+  }
+
+  .public-kiosk-footer .public-action-button small {
+    display: block;
+    font-size: clamp(0.58rem, 1.2vw, 0.72rem);
   }
 }
 
