@@ -631,10 +631,7 @@ function useSparkKioskAttendance() {
     async (targetCapid, actorPin, actorCapid) => {
       const actorId = actorCapid || kioskAdminSession?.capid || kioskAdminSession?.memberId;
       if (!actorId) {
-        throw new Error('Select your admin account before resetting your PIN.');
-      }
-      if (String(actorId) !== String(targetCapid)) {
-        throw new Error('Admins can only reset their own PIN.');
+        throw new Error('Select your admin account before resetting a PIN.');
       }
       const result = await resetMemberPinSpark(actorId, actorPin, targetCapid);
       addActivity(
@@ -1227,11 +1224,7 @@ function useFirebaseAttendance() {
   const resetMemberPinFn = useCallback(
     async (targetCapid, actorPin) => {
       if (!seniorSession) throw new Error('Senior authentication required.');
-      const actorId = seniorSession.memberId || seniorSession.capid;
-      if (String(actorId) !== String(targetCapid)) {
-        throw new Error('Admins can only reset their own PIN.');
-      }
-      return resetMemberPin(actorId, actorPin, targetCapid);
+      return resetMemberPin(seniorSession.memberId || seniorSession.capid, actorPin, targetCapid);
     },
     [seniorSession]
   );

@@ -41,6 +41,8 @@ export default function AdminTools({ attendance }) {
   const [action, setAction] = useState(initialAction);
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resetTarget, setResetTarget] = useState('');
+  const [resetQuery, setResetQuery] = useState('');
   const { now } = useLocalTime();
   const forceCheckoutDue = isAfterSystemForceCheckoutTime(now);
 
@@ -53,6 +55,7 @@ export default function AdminTools({ attendance }) {
   }, [seniorSession]);
 
   const results = useMemo(() => searchMembers(query), [query, searchMembers]);
+  const resetResults = useMemo(() => searchMembers(resetQuery), [resetQuery, searchMembers]);
   const showPinReset =
     authenticated &&
     ((isCloudBackend && seniorSession?.canResetPins) ||
@@ -64,33 +67,30 @@ export default function AdminTools({ attendance }) {
     adminMemberId ||
     adminCapid;
 
-  const adminDisplayName =
-    seniorSession?.displayName ||
-    members.find((m) => String(m.id) === String(actorCapid))?.name ||
-    'Your account';
-  const adminCapidDisplay =
-    seniorSession?.capid ||
-    members.find((m) => String(m.id) === String(actorCapid))?.capid ||
-    actorCapid;
-
-  const handleResetMyPin = async () => {
+  const handlePinReset = async (targetCapid, targetName) => {
     if (adminPin.length !== 4) {
       setMessage('Enter your 4-digit admin PIN to confirm reset.');
       return;
     }
-    if (!actorCapid) return;
     setLoading(true);
     setMessage('');
     try {
       if (isCloudBackend) {
-        await resetMemberPin(actorCapid, adminPin);
+        await resetMemberPin(targetCapid, adminPin);
       } else {
-        await resetMemberPin(actorCapid, adminPin, actorCapid);
+        await resetMemberPin(targetCapid, adminPin, actorCapid);
       }
-      clearSeniorSession?.();
-      setAuthenticated(false);
-      setAdminPin('');
-      setMessage('Your PIN has been reset. Create a new one at your next check-in.');
+      const isSelfReset = String(targetCapid) === String(actorCapid);
+      if (isSelfReset) {
+        clearSeniorSession?.();
+        setAuthenticated(false);
+        setAdminPin('');
+        setMessage(
+          'Your PIN has been reset. Create a new one at check-in or log in to Admin again.'
+        );
+      } else {
+        setMessage(`PIN reset for ${targetName}. They can create a new PIN at check-in.`);
+      }
       setTimeout(() => setMessage(''), 5000);
     } catch (err) {
       setMessage(getCallableError(err) || err.message || 'PIN reset failed.');
@@ -328,20 +328,11 @@ export default function AdminTools({ attendance }) {
 
       {showPinReset ? (
         <div className="panel" style={{ marginTop: 24 }}>
-          <h3 className="panel-title" style={{ marginBottom: 12 }}>Reset My PIN</h3>
+          <h3 className="panel-title" style={{ marginBottom: 12 }}>PIN Reset</h3>
           <p className="report-card-desc" style={{ marginBottom: 16 }}>
-            Clears your PIN. You will create a new one at your next check-in.
+            Reset a member&apos;s PIN (including your own). They will create a new PIN at next check-in.
             {isKioskMode ? ' PINs are stored in Firebase and sync across all kiosks.' : ''}
           </p>
-          <div className="admin-member-row" style={{ marginBottom: 16 }}>
-            <div className="member-cell">
-              <div className="avatar">{getInitials(adminDisplayName)}</div>
-              <div className="member-info">
-                <span className="member-name">{adminDisplayName}</span>
-                <span className="member-meta">CAPID {adminCapidDisplay}</span>
-              </div>
-            </div>
-          </div>
           <div className="form-group" style={{ marginBottom: 16 }}>
             <label className="form-label">Your admin PIN (required to confirm reset)</label>
             <PinPad
@@ -351,13 +342,67 @@ export default function AdminTools({ attendance }) {
               onClear={() => setAdminPin('')}
             />
           </div>
-          <button
-            className="btn btn-gold"
-            disabled={!actorCapid || adminPin.length !== 4 || loading}
-            onClick={handleResetMyPin}
-          >
-            Reset My PIN
-          </button>
+          {isCloudBackend ? (
+            <>
+              <div className="form-group">
+                <label className="form-label">Member CAPID to reset</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="CAPID"
+                  value={resetTarget}
+                  onChange={(e) => setResetTarget(e.target.value.replace(/\D/g, ''))}
+                />
+              </div>
+              <button
+                className="btn btn-gold"
+                disabled={!resetTarget || adminPin.length !== 4 || loading}
+                onClick={async () => {
+                  await handlePinReset(resetTarget, `CAPID ${resetTarget}`);
+                  setResetTarget('');
+                }}
+              >
+                Reset PIN
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="form-group">
+                <label className="form-label">Search member to reset</label>
+                <input
+                  type="text"
+                  className="form-input form-input-lg"
+                  placeholder="Search by name or CAPID..."
+                  value={resetQuery}
+                  onChange={(e) => setResetQuery(e.target.value)}
+                />
+              </div>
+              <div className="admin-search-results">
+                {(resetQuery ? resetResults : members).slice(0, 12).map((member) => (
+                  <div key={`reset-${member.id}`} className="admin-member-row">
+                    <div className="member-cell">
+                      <div className="avatar">{getInitials(member.name)}</div>
+                      <div className="member-info">
+                        <span className="member-name">{member.name}</span>
+                        <span className="member-meta">
+                          {member.grade} • CAPID {member.capid}
+                          {member.hasPin ? ' • PIN set' : ' • No PIN / reset required'}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      className="btn btn-gold"
+                      style={{ minHeight: 'auto', padding: '8px 16px', fontSize: '0.85rem' }}
+                      disabled={adminPin.length !== 4 || loading}
+                      onClick={() => handlePinReset(member.id, member.name)}
+                    >
+                      Reset PIN
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       ) : (
         authenticated && isKioskMode && (

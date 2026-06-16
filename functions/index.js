@@ -154,9 +154,8 @@ async function requireForceAttendance(actor) {
 
 async function requirePinResetAuth(actor) {
   await requireSenior(actor);
-  // canResetPins grants self-service PIN reset only (not other members).
   if (!actor.canResetPins && !actor.isAdmin) {
-    throw new HttpsError('permission-denied', 'Not authorized to reset your PIN.');
+    throw new HttpsError('permission-denied', 'Not authorized to reset PINs.');
   }
 }
 
@@ -391,11 +390,7 @@ exports.resetMemberPin = onCall(callableOptions, async (request) => {
     throw new HttpsError('not-found', 'Target member not found.');
   }
 
-  const actorId = String(actor.memberId || actor.id || actorCapid);
-  const targetId = String(target.memberId || target.id);
-  if (actorId !== targetId) {
-    throw new HttpsError('permission-denied', 'Admins can only reset their own PIN.');
-  }
+  const targetId = target.memberId || target.id;
 
   await db.collection('memberPins').doc(String(targetId)).delete();
   await db.collection('members').doc(String(targetId)).update({

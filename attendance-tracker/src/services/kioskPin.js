@@ -166,9 +166,8 @@ async function requireAdminPin(actorCapid, actorPin) {
   if (!valid) {
     throw new Error('Invalid admin credentials.');
   }
-  // canResetPins grants self-service PIN reset only (not other members).
   if (!perms.canResetPins) {
-    throw new Error('You do not have permission to reset your PIN.');
+    throw new Error('You do not have permission to reset PINs.');
   }
   return member;
 }
@@ -176,15 +175,10 @@ async function requireAdminPin(actorCapid, actorPin) {
 export async function resetMemberPinInFirestore(actorCapid, actorPin, targetCapid) {
   await requireAdminPin(actorCapid, actorPin);
 
-  const actorId = String(actorCapid);
-  const targetId = String(targetCapid);
-  if (actorId !== targetId) {
-    throw new Error('Admins can only reset their own PIN.');
-  }
-
   const db = getDb();
   if (!db) throw new Error('Firebase is not configured.');
 
+  const targetId = String(targetCapid);
   const targetSnap = await getDoc(doc(db, 'members', targetId));
   if (!targetSnap.exists() || targetSnap.data().active === false) {
     throw new Error('Member not found.');
