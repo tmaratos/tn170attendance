@@ -1,9 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import PinPad from '../components/PinPad';
 import { getInitials } from '../data/mockData';
 import { useLocalTime } from '../hooks/useLocalTime';
 import { isAfterSystemForceCheckoutTime } from '../utils/timeRules';
+import { getCallableError } from '../services/errors';
 
 export default function AdminTools({ attendance }) {
   const {
@@ -15,19 +16,24 @@ export default function AdminTools({ attendance }) {
     isCloudBackend,
     isKioskMode,
     authenticateSenior,
+    authenticateKioskAdmin,
     forceCheckInMember,
     forceCheckOutMember,
     resetMemberPin,
     seniorSession,
     canResetPins,
+    loading: attendanceLoading,
+    adminMembers,
   } = attendance;
 
   const [searchParams] = useSearchParams();
   const initialAction = searchParams.get('action') || 'check-in';
 
   const [authenticated, setAuthenticated] = useState(!!seniorSession);
-  const [adminCapid, setAdminCapid] = useState('');
-  const [adminMemberId, setAdminMemberId] = useState('');
+  const [adminCapid, setAdminCapid] = useState(seniorSession?.capid || '');
+  const [adminMemberId, setAdminMemberId] = useState(
+    seniorSession?.memberId || seniorSession?.capid || ''
+  );
   const [adminPin, setAdminPin] = useState('');
   const [pinError, setPinError] = useState('');
   const [query, setQuery] = useState('');
@@ -39,11 +45,26 @@ export default function AdminTools({ attendance }) {
   const { now } = useLocalTime();
   const forceCheckoutDue = isAfterSystemForceCheckoutTime(now);
 
+  useEffect(() => {
+    if (seniorSession) {
+      setAuthenticated(true);
+      setAdminMemberId(seniorSession.memberId || seniorSession.capid || '');
+      setAdminCapid(seniorSession.capid || '');
+    }
+  }, [seniorSession]);
+
   const results = useMemo(() => searchMembers(query), [query, searchMembers]);
   const resetResults = useMemo(() => searchMembers(resetQuery), [resetQuery, searchMembers]);
   const showPinReset =
-    (isCloudBackend && seniorSession?.canResetPins) || (isKioskMode && canResetPins);
-  const adminMembers = attendance.adminMembers || [];
+    authenticated &&
+    ((isCloudBackend && seniorSession?.canResetPins) ||
+      (isKioskMode && (seniorSession?.canResetPins || canResetPins)));
+
+  const actorCapid =
+    seniorSession?.memberId ||
+    seniorSession?.capid ||
+    adminMemberId ||
+    adminCapid;
 
   const handleAdminAuth = async () => {
     if (adminPin.length !== 4) return;
@@ -62,12 +83,8 @@ export default function AdminTools({ attendance }) {
           setPinError('Select your admin account.');
           return;
         }
-        const ok = await verifyAdminPin(adminMemberId, adminPin);
-        if (!ok) {
-          setPinError('Incorrect admin PIN.');
-          setAdminPin('');
-          return;
-        }
+        const authFn = authenticateKioskAdmin || authenticateSenior;
+        await authFn(adminMemberId, adminPin);
         setAuthenticated(true);
       } else if (verifyAdminPin(adminPin)) {
         setAuthenticated(true);
@@ -76,7 +93,7 @@ export default function AdminTools({ attendance }) {
         setAdminPin('');
       }
     } catch (err) {
-      setPinError(err.message || 'Authentication failed.');
+      setPinError(getCallableError(err) || err.message || 'Authentication failed.');
       setAdminPin('');
     } finally {
       setLoading(false);
@@ -108,11 +125,20 @@ export default function AdminTools({ attendance }) {
       }
       setTimeout(() => setMessage(''), 3000);
     } catch (err) {
-      setMessage(err.message || 'Force action failed.');
+      setMessage(getCallableError(err) || err.message || 'Force action failed.');
     } finally {
       setLoading(false);
     }
   };
+
+  if (attendanceLoading) {
+    return (
+      <div>
+        <h1 className="page-title">Admin Tools</h1>
+        <p className="page-subtitle">Loading admin permissions...</p>
+      </div>
+    );
+  }
 
   if (!authenticated) {
     return (
@@ -267,7 +293,7 @@ export default function AdminTools({ attendance }) {
         </div>
       </div>
 
-      {showPinReset && (
+      {showPinReset ? (
         <div className="panel" style={{ marginTop: 24 }}>
           <h3 className="panel-title" style={{ marginBottom: 12 }}>PIN Reset</h3>
           <p className="report-card-desc" style={{ marginBottom: 16 }}>
@@ -297,7 +323,7 @@ export default function AdminTools({ attendance }) {
                     setResetTarget('');
                     setTimeout(() => setMessage(''), 3000);
                   } catch (err) {
-                    setMessage(err.message || 'PIN reset failed.');
+                    setMessage(getCallableError(err) || err.message || 'PIN reset failed.');
                   } finally {
                     setLoading(false);
                   }
@@ -338,15 +364,11 @@ export default function AdminTools({ attendance }) {
                       onClick={async () => {
                         setLoading(true);
                         try {
-                          await resetMemberPin(
-                            member.id,
-                            adminPin,
-                            isKioskMode ? adminMemberId : seniorSession?.memberId || seniorSession?.capid
-                          );
+                          await resetMemberPin(member.id, adminPin, actorCapid);
                           setMessage(`PIN reset for ${member.name}. They can create a new PIN at check-in.`);
                           setTimeout(() => setMessage(''), 4000);
                         } catch (err) {
-                          setMessage(err.message || 'PIN reset failed.');
+                          setMessage(getCallableError(err) || err.message || 'PIN reset failed.');
                         } finally {
                           setLoading(false);
                         }
@@ -360,6 +382,14 @@ export default function AdminTools({ attendance }) {
             </>
           )}
         </div>
+      ) : (
+        authenticated && isKioskMode && (
+          <div className="panel" style={{ marginTop: 24 }}>
+            <p className="report-card-desc">
+              Your account does not have PIN reset permission. Contact a squadron admin if you need access.
+            </p>
+          </div>
+        )
       )}
     </div>
   );

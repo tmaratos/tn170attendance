@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import PinPad from '../components/PinPad';
-import { useLocalTime } from '../hooks/useLocalTime';
+import { getCallableError } from '../services/errors';
 
 export default function AdminLogin({ attendance, onLogin }) {
   const [selectedAdminId, setSelectedAdminId] = useState('');
@@ -52,25 +52,35 @@ export default function AdminLogin({ attendance, onLogin }) {
         await attendance.createMemberPin?.(selectedAdmin.id, pin, confirmPin);
       }
 
-      const ok = needsCapid
-        ? await attendance.verifyAdminPin(capid.trim(), pin)
-        : await attendance.verifyAdminPin(selectedAdminId, pin);
-      if (!ok) {
-        setPin('');
-        setConfirmPin('');
-        setError(
-          isKioskMode
-            ? 'PIN not accepted. Use your personal kiosk PIN or the emergency admin PIN from settings.'
-            : 'Admin PIN was not accepted.'
-        );
-        return;
+      if (isKioskMode && attendance.authenticateKioskAdmin) {
+        await attendance.authenticateKioskAdmin(selectedAdminId, pin);
+      } else if (needsCapid) {
+        const ok = await attendance.verifyAdminPin(capid.trim(), pin);
+        if (!ok) {
+          setPin('');
+          setConfirmPin('');
+          setError('Admin PIN was not accepted.');
+          return;
+        }
+      } else {
+        const ok = await attendance.verifyAdminPin(selectedAdminId, pin);
+        if (!ok) {
+          setPin('');
+          setConfirmPin('');
+          setError(
+            isKioskMode
+              ? 'PIN not accepted. Use your personal kiosk PIN or the emergency admin PIN from settings.'
+              : 'Admin PIN was not accepted.'
+          );
+          return;
+        }
       }
       onLogin();
       navigate('/admin/dashboard', { replace: true });
     } catch (err) {
       setPin('');
       setConfirmPin('');
-      setError(err.message || 'Admin login failed.');
+      setError(getCallableError(err) || err.message || 'Admin login failed.');
     } finally {
       setLoading(false);
     }

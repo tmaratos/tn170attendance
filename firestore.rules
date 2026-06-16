@@ -31,7 +31,8 @@ service cloud.firestore {
 
     match /memberPins/{capid} {
       allow read: if true;
-      allow delete: if false;
+      // Spark kiosk admin reset deletes the doc after marking pinResetRequired on members/{capid}.
+      allow delete: if isActiveMember(capid);
       allow create: if isActiveMember(capid)
         && !exists(/databases/$(database)/documents/memberPins/$(capid))
         && request.resource.data.keys().hasAll(['pinHash', 'pinCreatedAt', 'pinUpdatedAt'])

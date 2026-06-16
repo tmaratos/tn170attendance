@@ -13,6 +13,7 @@ import {
   verifyMemberPinInFirestore,
   subscribeMemberPins,
 } from './kioskPin';
+import { resolveMemberAdminPermissions } from '../data/rosterData';
 
 export { subscribeMemberPins, verifyMemberPinInFirestore };
 
@@ -32,6 +33,7 @@ export function formatCapidDisplay(memberDoc) {
 export function toUiMember(memberDoc, attendanceRecord = null) {
   const status = normalizeStatus(attendanceRecord?.status);
   const memberId = memberDoc.memberId || memberDoc.capid || memberDoc.temporaryId;
+  const perms = resolveMemberAdminPermissions(memberDoc);
   return {
     id: memberId,
     memberId,
@@ -43,12 +45,12 @@ export function toUiMember(memberDoc, attendanceRecord = null) {
     isProspective: !!memberDoc.isProspective,
     hasPin: !!memberDoc.hasPin,
     pinResetRequired: !!memberDoc.pinResetRequired,
-    canResetPins: !!memberDoc.canResetPins || !!memberDoc.isAdmin,
-    canExportReports: !!memberDoc.canExportReports || !!memberDoc.isAdmin,
-    canForceAttendance: !!memberDoc.canForceAttendance || !!memberDoc.isAdmin,
-    canManageMembers: !!memberDoc.canManageMembers || !!memberDoc.isAdmin,
-    canManageGuests: !!memberDoc.canManageGuests || !!memberDoc.isAdmin,
-    isAdmin: !!memberDoc.isAdmin,
+    canResetPins: perms.canResetPins,
+    canExportReports: perms.canExportReports,
+    canForceAttendance: perms.canForceAttendance,
+    canManageMembers: perms.canManageMembers,
+    canManageGuests: perms.canManageGuests,
+    isAdmin: perms.isAdmin,
     isSeniorMember: !!memberDoc.isSeniorMember,
     isCadet: !!memberDoc.isCadet,
     status,

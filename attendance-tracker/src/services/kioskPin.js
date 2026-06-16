@@ -7,7 +7,7 @@
  */
 import {
   collection,
-  deleteField,
+  deleteDoc,
   doc,
   getDoc,
   onSnapshot,
@@ -16,7 +16,7 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 import { getDb } from './firebase';
-import { ADMIN_CAPIDS } from '../data/rosterData';
+import { resolveMemberAdminPermissions } from '../data/rosterData';
 
 const KIOSK_PIN_SALT = 'tn170-kiosk-v1';
 
@@ -155,16 +155,18 @@ export async function verifyMemberPinInFirestore(memberId, pin) {
 
 async function requireAdminPin(actorCapid, actorPin) {
   const actorId = String(actorCapid);
-  if (!ADMIN_CAPIDS.has(actorId)) {
+  const memberSnap = await getDoc(doc(getDb(), 'members', actorId));
+  const member = memberSnap.exists() ? memberSnap.data() : null;
+  const perms = resolveMemberAdminPermissions({ ...member, capid: actorId, memberId: actorId });
+
+  if (!perms.isAdmin) {
     throw new Error('Invalid admin credentials.');
   }
   const valid = await verifyMemberPinInFirestore(actorId, actorPin);
   if (!valid) {
     throw new Error('Invalid admin credentials.');
   }
-  const memberSnap = await getDoc(doc(getDb(), 'members', actorId));
-  const member = memberSnap.exists() ? memberSnap.data() : null;
-  if (member && member.canResetPins === false && !member.isAdmin) {
+  if (!perms.canResetPins) {
     throw new Error('You do not have permission to reset PINs.');
   }
   return member;
@@ -191,10 +193,7 @@ export async function resetMemberPinInFirestore(actorCapid, actorPin, targetCapi
 
   const pinSnap = await getDoc(doc(db, 'memberPins', targetId));
   if (pinSnap.exists()) {
-    await updateDoc(doc(db, 'memberPins', targetId), {
-      pinHash: deleteField(),
-      pinUpdatedAt: now,
-    });
+    await deleteDoc(doc(db, 'memberPins', targetId));
   }
 
   const target = targetSnap.data();

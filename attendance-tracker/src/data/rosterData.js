@@ -104,6 +104,20 @@ function buildPermissions(capid, isSenior) {
   };
 }
 
+/** Merge Firestore member fields with embedded ADMIN_CAPIDS fallback (Spark kiosk). */
+export function resolveMemberAdminPermissions(memberDoc) {
+  const capid = String(memberDoc?.capid || memberDoc?.memberId || '');
+  const isAdmin = ADMIN_CAPIDS.has(capid) || !!memberDoc?.isAdmin;
+  return {
+    isAdmin,
+    canForceAttendance: isAdmin || !!memberDoc?.canForceAttendance,
+    canResetPins: isAdmin || !!memberDoc?.canResetPins,
+    canExportReports: isAdmin || !!memberDoc?.canExportReports,
+    canManageMembers: isAdmin || !!memberDoc?.canManageMembers,
+    canManageGuests: isAdmin || !!memberDoc?.canManageGuests,
+  };
+}
+
 function parseRosterLine(line) {
   const tokens = line.split(/\s+/);
   const capid = tokens[0];

@@ -44,11 +44,12 @@ import {
   guestCheckOut,
 } from '../services/guestService';
 import { isAfterSystemForceCheckoutTime } from '../utils/timeRules';
-import { ADMIN_CAPIDS } from '../data/rosterData';
+import { ADMIN_CAPIDS, resolveMemberAdminPermissions } from '../data/rosterData';
 
 const STORAGE_KEY = 'tn170-attendance-v2';
 const KIOSK_STORAGE_KEY = 'tn170-kiosk-local-v3';
 const SENIOR_SESSION_KEY = 'tn170-senior-session';
+const KIOSK_ADMIN_SESSION_KEY = 'tn170-kiosk-admin-session';
 const SYSTEM_FORCE_KEY_PREFIX = 'tn170-system-force-checkout';
 
 function mockHashPin(pin, memberId) {
@@ -101,6 +102,40 @@ function saveSeniorSession(session) {
   } else {
     sessionStorage.removeItem(SENIOR_SESSION_KEY);
   }
+}
+
+function loadKioskAdminSession() {
+  try {
+    const raw = sessionStorage.getItem(KIOSK_ADMIN_SESSION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveKioskAdminSession(session) {
+  if (session) {
+    sessionStorage.setItem(KIOSK_ADMIN_SESSION_KEY, JSON.stringify(session));
+  } else {
+    sessionStorage.removeItem(KIOSK_ADMIN_SESSION_KEY);
+  }
+}
+
+function buildKioskAdminSession(memberDoc, memberId) {
+  const capid = String(memberId);
+  const perms = resolveMemberAdminPermissions({ ...memberDoc, capid, memberId: capid });
+  if (!perms.isAdmin) return null;
+  return {
+    capid,
+    memberId: capid,
+    displayName: memberDoc?.displayName || memberDoc?.fullName || capid,
+    ...perms,
+  };
+}
+
+function enrichMemberDoc(member) {
+  const capid = String(member.capid || member.memberId || member.temporaryId);
+  return { ...member, ...resolveMemberAdminPermissions({ ...member, capid }) };
 }
 
 function forceCheckoutDateKey(date = new Date()) {
@@ -165,11 +200,12 @@ function attendanceRecordToUi(record) {
 }
 
 function useSparkKioskAttendance() {
-  const [rawMembers, setRawMembers] = useState(() => getEmbeddedRosterMembers());
+  const [rawMembers, setRawMembers] = useState(() => getEmbeddedRosterMembers().map(enrichMemberDoc));
   const [usingLocalRoster, setUsingLocalRoster] = useState(true);
   const [localState, setLocalState] = useState(loadKioskLocalState);
   const [memberPinHashes, setMemberPinHashes] = useState({});
   const [remoteSettings, setRemoteSettings] = useState(null);
+  const [kioskAdminSession, setKioskAdminSession] = useState(loadKioskAdminSession);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -181,10 +217,10 @@ function useSparkKioskAttendance() {
     const unsubs = [
       subscribeMembers((members) => {
         if (members.length > 0) {
-          setRawMembers(members);
+          setRawMembers(members.map(enrichMemberDoc));
           setUsingLocalRoster(false);
         } else {
-          setRawMembers(embedded);
+          setRawMembers(embedded.map(enrichMemberDoc));
           setUsingLocalRoster(true);
         }
         setLoading(false);
@@ -297,7 +333,7 @@ function useSparkKioskAttendance() {
   const adminMembers = useMemo(
     () =>
       members
-        .filter((member) => ADMIN_CAPIDS.has(String(member.capidRaw || member.id)))
+        .filter((member) => member.isAdmin || ADMIN_CAPIDS.has(String(member.capidRaw || member.id)))
         .sort((a, b) => a.name.localeCompare(b.name)),
     [members]
   );
@@ -531,11 +567,31 @@ function useSparkKioskAttendance() {
         return settings.adminPin === adminIdOrPin;
       }
       const adminId = String(adminIdOrPin);
-      if (!ADMIN_CAPIDS.has(adminId)) return false;
+      const member = rawMembers.find((m) => memberStorageKey(m) === adminId);
+      const perms = resolveMemberAdminPermissions({ ...member, capid: adminId, memberId: adminId });
+      if (!perms.isAdmin) return false;
       if (pinMaybe === settings.adminPin) return true;
       return verifyPinSpark(adminId, pinMaybe);
     },
-    [settings.adminPin]
+    [settings.adminPin, rawMembers]
+  );
+
+  const authenticateKioskAdmin = useCallback(
+    async (adminId, pin) => {
+      const ok = await verifyAdminPin(adminId, pin);
+      if (!ok) {
+        throw new Error('Invalid admin credentials.');
+      }
+      const member = rawMembers.find((m) => memberStorageKey(m) === String(adminId));
+      const session = buildKioskAdminSession(member, adminId);
+      if (!session) {
+        throw new Error('You do not have admin access.');
+      }
+      setKioskAdminSession(session);
+      saveKioskAdminSession(session);
+      return session;
+    },
+    [verifyAdminPin, rawMembers]
   );
 
   const memberHasPin = useCallback(
@@ -573,18 +629,24 @@ function useSparkKioskAttendance() {
   const authenticateSenior = useCallback(async () => null, []);
   const resetMemberPinFn = useCallback(
     async (targetCapid, actorPin, actorCapid) => {
-      if (!actorCapid) {
+      const actorId = actorCapid || kioskAdminSession?.capid || kioskAdminSession?.memberId;
+      if (!actorId) {
         throw new Error('Select your admin account before resetting a PIN.');
       }
-      const result = await resetMemberPinSpark(actorCapid, actorPin, targetCapid);
+      const result = await resetMemberPinSpark(actorId, actorPin, targetCapid);
       addActivity(
-        `PIN reset for ${result.targetName || targetCapid} by admin ${actorCapid}`,
+        `PIN reset for ${result.targetName || targetCapid} by admin ${actorId}`,
         'pin-reset'
       );
       return result;
     },
-    [addActivity]
+    [addActivity, kioskAdminSession]
   );
+
+  const clearKioskAdminSession = useCallback(() => {
+    setKioskAdminSession(null);
+    saveKioskAdminSession(null);
+  }, []);
 
   return {
     members,
@@ -593,7 +655,7 @@ function useSparkKioskAttendance() {
     settings,
     recurringGuests: localState.recurringGuests,
     meeting: null,
-    seniorSession: null,
+    seniorSession: kioskAdminSession,
     isFirebase: true,
     isCloudBackend: false,
     isKioskMode: true,
@@ -611,12 +673,14 @@ function useSparkKioskAttendance() {
     getStats: getStatsFn,
     verifyPin,
     verifyAdminPin,
+    authenticateKioskAdmin,
     memberHasPin,
     needsPinSetup,
     createMemberPin,
-    authenticateSenior,
+    authenticateSenior: authenticateKioskAdmin,
     resetMemberPin: resetMemberPinFn,
-    canResetPins: true,
+    canResetPins: kioskAdminSession?.canResetPins ?? false,
+    clearSeniorSession: clearKioskAdminSession,
     addActivity,
   };
 }
