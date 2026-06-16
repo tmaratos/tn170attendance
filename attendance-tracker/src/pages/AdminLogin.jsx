@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import PinPad from '../components/PinPad';
+import { useLocalTime } from '../hooks/useLocalTime';
 import { getCallableError } from '../services/errors';
 
 export default function AdminLogin({ attendance, onLogin }) {
