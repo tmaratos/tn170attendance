@@ -706,13 +706,14 @@ export default function CheckInWizard({
               <button
                 type="button"
                 className="pin-modal-key secondary"
+                aria-label="Backspace"
                 onClick={() => {
                   setPin((current) => current.slice(0, -1));
                   setPinError('');
                 }}
                 disabled={loading || pin.length === 0}
               >
-                Backspace
+                ⌫
               </button>
             </div>
 

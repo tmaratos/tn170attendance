@@ -96,9 +96,10 @@ export default function PinPad({
             key={key}
             type="button"
             className={`pin-key ${key === 'clear' || key === 'back' ? 'action' : ''}`}
+            aria-label={key === 'back' ? 'Backspace' : key === 'clear' ? 'Clear' : `Digit ${key}`}
             onClick={() => handleKey(key)}
           >
-            {key === 'back' ? 'Backspace' : key === 'clear' ? 'Clear' : key}
+            {key === 'back' ? '⌫' : key === 'clear' ? 'Clear' : key}
           </button>
         ))}
       </div>

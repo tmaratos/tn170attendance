@@ -348,9 +348,10 @@
 
 .pin-display {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 7px;
-  margin: 0 7px 12px;
+  margin: 0 0 12px;
+  width: 100%;
 }
 
 .pin-dot {
@@ -379,8 +380,11 @@
 
 .pin-pad {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  width: 100%;
+  max-width: min(100%, 360px);
+  margin-inline: auto;
 }
 
 .pin-pad-compact .pin-key {
@@ -390,6 +394,7 @@
 
 .pin-key {
   aspect-ratio: 1;
+  min-width: 0;
   min-height: 48px;
   display: flex;
   align-items: center;
@@ -401,6 +406,8 @@
   font-size: 1rem;
   font-weight: 900;
   transition: all 0.15s ease;
+  padding: 4px;
+  text-align: center;
 }
 
 .pin-key:hover {
@@ -409,10 +416,11 @@
 
 .pin-key.action {
   aspect-ratio: auto;
-  font-size: clamp(0.62rem, 2.8vw, 0.75rem);
+  min-height: 48px;
+  font-size: clamp(0.72rem, 2.2vw, 0.88rem);
   font-weight: 800;
   line-height: 1.1;
-  padding: 4px 2px;
+  padding: 4px 6px;
 }
 
 .confirm-member {
@@ -1232,11 +1240,15 @@
 
 .pin-modal-pad {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+  width: 100%;
+  max-width: min(100%, 360px);
+  margin-inline: auto;
 }
 
 .pin-modal-key {
+  min-width: 0;
   min-height: 78px;
   border-radius: 12px;
   background: linear-gradient(180deg, #ffffff, #eaf0f8);
@@ -1423,7 +1435,7 @@
   min-height: 0;
   width: 100%;
   overflow-y: auto;
-  overflow-x: hidden;
+  overflow-x: clip;
   -webkit-overflow-scrolling: touch;
 }
 
@@ -1912,7 +1924,8 @@
   margin-inline: auto;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-x: clip;
+  overflow-y: hidden;
   padding: clamp(12px, 2vw, 30px);
 }
 
@@ -1970,6 +1983,9 @@
 
 .pin-pad-wrapper {
   position: relative;
+  width: 100%;
+  max-width: min(100%, 360px);
+  margin-inline: auto;
 }
 
 .pin-keyboard-input {
@@ -2142,15 +2158,22 @@
 }
 
 .pin-section {
-  width: min(560px, 100%);
+  width: 100%;
+  max-width: min(100%, 520px);
   margin-inline: auto;
+}
+
+.pin-section .pin-pad-wrapper {
+  max-width: min(100%, 360px);
 }
 
 .pin-section .pin-pad {
   gap: 10px;
+  max-width: 100%;
 }
 
 .pin-section .pin-key {
+  min-width: 0;
   min-height: 72px;
   font-size: 1.55rem;
   background: rgba(255, 255, 255, 0.96);
@@ -2399,11 +2422,17 @@
   font-weight: 700;
 }
 
+.admin-login-card .pin-pad-wrapper {
+  max-width: min(100%, 360px);
+}
+
 .admin-login-card .pin-pad {
   gap: 10px;
+  max-width: 100%;
 }
 
 .admin-login-card .pin-key {
+  min-width: 0;
   min-height: 70px;
   background: rgba(255, 255, 255, 0.96);
   color: #071a3a;
@@ -2570,7 +2599,8 @@
   }
 
   .pin-section {
-    width: min(640px, 100%);
+    width: 100%;
+    max-width: min(100%, 520px);
   }
 
   .admin-login-card {
@@ -2800,5 +2830,98 @@
 
   .public-clock-card strong {
     grid-row: auto;
+  }
+}
+
+/* iPad portrait & landscape tablet layout */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .public-flow-card,
+  .admin-login-card {
+    max-width: min(100%, 520px);
+    padding: clamp(14px, 2vw, 24px);
+  }
+
+  .pin-section {
+    width: 100%;
+    max-width: min(100%, 520px);
+  }
+
+  .pin-pad-wrapper,
+  .pin-section .pin-pad-wrapper,
+  .admin-login-card .pin-pad-wrapper {
+    max-width: min(100%, 360px);
+  }
+
+  .pin-pad,
+  .pin-section .pin-pad,
+  .admin-login-card .pin-pad {
+    max-width: 100%;
+    gap: 10px;
+  }
+
+  .pin-section .pin-key,
+  .admin-login-card .pin-key {
+    min-height: 64px;
+    font-size: 1.35rem;
+  }
+
+  .pin-section .pin-key.action,
+  .admin-login-card .pin-key.action {
+    font-size: 1.1rem;
+  }
+
+  .public-flow-section {
+    overflow-x: visible;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 900px) {
+  .public-flow-card,
+  .admin-login-card {
+    padding: clamp(10px, 1.5vh, 18px);
+  }
+
+  .pin-section h2 {
+    margin: 10px 0 8px;
+    font-size: 1.15rem;
+  }
+
+  .pin-setup-hint,
+  .pin-setup-subhint {
+    margin-bottom: 8px;
+    font-size: 0.88rem;
+  }
+
+  .pin-section .pin-key,
+  .admin-login-card .pin-key {
+    min-height: 52px;
+    font-size: 1.2rem;
+  }
+
+  .pin-section .pin-key.action,
+  .admin-login-card .pin-key.action {
+    font-size: 1rem;
+  }
+
+  .public-selected-member {
+    padding: 12px;
+  }
+
+  .public-flow-actions {
+    margin-top: 12px;
+  }
+
+  .public-flow-actions .btn {
+    min-height: 54px;
+  }
+
+  .pin-modal {
+    max-height: calc(100dvh - 24px);
+    padding: 16px;
+  }
+
+  .pin-modal-key {
+    min-height: 62px;
+    font-size: 1.6rem;
   }
 }
