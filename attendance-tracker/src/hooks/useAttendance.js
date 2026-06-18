@@ -3,7 +3,6 @@ import {
   MOCK_MEMBERS,
   DEFAULT_SETTINGS,
   getEmbeddedRosterMembers,
-  buildEmptyKioskLocalState,
 } from '../data/mockData';
 import { isFirebaseConfigured, isSparkKioskMode } from '../services/firebase';
 import { verifyKioskPin } from '../services/kioskPin';
@@ -25,6 +24,7 @@ import {
   reactivateMember,
 } from '../services/memberService';
 import {
+  subscribeToActiveMeeting,
   subscribeTodaysMeeting,
   subscribeAttendanceRecords,
   subscribeActivityLog,
@@ -36,18 +36,29 @@ import {
   startMeeting,
   closeMeeting,
   getStats,
+  checkInMemberFirestore,
+  checkOutMemberFirestore,
+  forceCheckInFirestore,
+  forceCheckOutFirestore,
+  systemForceCheckoutFirestore,
+  appendActivityLogSpark,
+  ensureActiveMeeting,
+  SYNC_UNAVAILABLE,
 } from '../services/attendanceService';
 import {
   subscribeGuestAttendance,
   subscribeRecurringGuests,
   guestCheckIn,
   guestCheckOut,
+  guestCheckInFirestore,
+  guestCheckOutFirestore,
 } from '../services/guestService';
 import { isAfterSystemForceCheckoutTime } from '../utils/timeRules';
 import { ADMIN_CAPIDS, resolveMemberAdminPermissions } from '../data/rosterData';
 
 const STORAGE_KEY = 'tn170-attendance-v2';
-const KIOSK_STORAGE_KEY = 'tn170-kiosk-local-v3';
+const KIOSK_UI_PREFS_KEY = 'tn170-kiosk-ui-prefs';
+const KIOSK_OFFLINE_CACHE_KEY = 'tn170-kiosk-offline-cache';
 const SENIOR_SESSION_KEY = 'tn170-senior-session';
 const KIOSK_ADMIN_SESSION_KEY = 'tn170-kiosk-admin-session';
 const SYSTEM_FORCE_KEY_PREFIX = 'tn170-system-force-checkout';
@@ -162,172 +173,244 @@ function memberStorageKey(memberDoc) {
   return String(memberDoc?.capid || memberDoc?.memberId || memberDoc?.temporaryId);
 }
 
-function loadKioskLocalState() {
+function loadKioskUiPrefs() {
   try {
-    const stored = localStorage.getItem(KIOSK_STORAGE_KEY);
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      return {
-        ...buildEmptyKioskLocalState(),
-        ...parsed,
-        settings: { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) },
-      };
-    }
+    const stored = localStorage.getItem(KIOSK_UI_PREFS_KEY);
+    return stored ? JSON.parse(stored) : {};
   } catch {
-    /* seed fresh below */
+    return {};
   }
-
-  return {
-    ...buildEmptyKioskLocalState(),
-    settings: DEFAULT_SETTINGS,
-  };
 }
 
-function saveKioskLocalState(state) {
-  localStorage.setItem(KIOSK_STORAGE_KEY, JSON.stringify(state));
+function saveKioskUiPrefs(prefs) {
+  localStorage.setItem(KIOSK_UI_PREFS_KEY, JSON.stringify(prefs));
 }
 
-function attendanceRecordToUi(record) {
-  if (!record) return null;
-  return {
-    status: record.status,
-    checkInTime: record.checkInTime || null,
-    checkOutTime: record.checkOutTime || null,
-    forceAction: !!record.forceAction,
-    forceType: record.forceType || null,
-    notes: record.forceNote || null,
-  };
+function loadOfflineCache() {
+  try {
+    const stored = localStorage.getItem(KIOSK_OFFLINE_CACHE_KEY);
+    return stored ? JSON.parse(stored) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveOfflineCache(payload) {
+  try {
+    localStorage.setItem(KIOSK_OFFLINE_CACHE_KEY, JSON.stringify({ ...payload, savedAt: Date.now() }));
+  } catch {
+    /* ignore quota errors */
+  }
 }
 
 function useSparkKioskAttendance() {
+  const offlineCache = loadOfflineCache();
   const [rawMembers, setRawMembers] = useState(() => getEmbeddedRosterMembers().map(enrichMemberDoc));
   const [usingLocalRoster, setUsingLocalRoster] = useState(true);
-  const [localState, setLocalState] = useState(loadKioskLocalState);
+  const [attendanceRecords, setAttendanceRecords] = useState(offlineCache?.attendanceRecords || []);
+  const [guestRecords, setGuestRecords] = useState(offlineCache?.guestRecords || []);
+  const [recurringGuests, setRecurringGuests] = useState(offlineCache?.recurringGuests || []);
+  const [activity, setActivity] = useState(offlineCache?.activity || []);
+  const [meeting, setMeeting] = useState(offlineCache?.meeting || null);
   const [memberPinHashes, setMemberPinHashes] = useState({});
   const [remoteSettings, setRemoteSettings] = useState(null);
+  const [localUiPrefs, setLocalUiPrefs] = useState(loadKioskUiPrefs);
   const [kioskAdminSession, setKioskAdminSession] = useState(loadKioskAdminSession);
   const [loading, setLoading] = useState(true);
+  const [isSyncAvailable, setIsSyncAvailable] = useState(true);
+  const [syncError, setSyncError] = useState(null);
 
-  useEffect(() => {
-    saveKioskLocalState(localState);
-  }, [localState]);
+  const markSyncUnavailable = useCallback(() => {
+    setIsSyncAvailable(false);
+    setSyncError(SYNC_UNAVAILABLE);
+  }, []);
+
+  const markSyncAvailable = useCallback(() => {
+    setIsSyncAvailable(true);
+    setSyncError(null);
+  }, []);
+
+  const persistOfflineCache = useCallback((payload) => {
+    saveOfflineCache(payload);
+  }, []);
 
   useEffect(() => {
     const embedded = getEmbeddedRosterMembers();
     const unsubs = [
-      subscribeMembers((members) => {
-        if (members.length > 0) {
-          setRawMembers(members.map(enrichMemberDoc));
-          setUsingLocalRoster(false);
-        } else {
-          setRawMembers(embedded.map(enrichMemberDoc));
-          setUsingLocalRoster(true);
+      subscribeMembers(
+        (members) => {
+          if (members.length > 0) {
+            setRawMembers(members.map(enrichMemberDoc));
+            setUsingLocalRoster(false);
+          } else {
+            setRawMembers(embedded.map(enrichMemberDoc));
+            setUsingLocalRoster(true);
+          }
+          setLoading(false);
+          markSyncAvailable();
+        },
+        () => {
+          markSyncUnavailable();
+          setLoading(false);
         }
-        setLoading(false);
-      }),
-      subscribeSettings(setRemoteSettings),
-      subscribeMemberPins(setMemberPinHashes),
+      ),
+      subscribeSettings(
+        (settingsDoc) => {
+          setRemoteSettings(settingsDoc);
+          markSyncAvailable();
+        },
+        () => markSyncUnavailable()
+      ),
+      subscribeMemberPins(
+        (pins) => {
+          setMemberPinHashes(pins);
+          markSyncAvailable();
+        },
+        () => markSyncUnavailable()
+      ),
+      subscribeToActiveMeeting(
+        (activeMeeting) => {
+          setMeeting(activeMeeting);
+          markSyncAvailable();
+        },
+        () => markSyncUnavailable()
+      ),
+      subscribeRecurringGuests(
+        (guests) => {
+          setRecurringGuests(guests);
+          markSyncAvailable();
+        },
+        () => markSyncUnavailable()
+      ),
     ];
     return () => unsubs.forEach((unsub) => unsub());
-  }, []);
+  }, [markSyncAvailable, markSyncUnavailable]);
 
   useEffect(() => {
-    const runSystemForceCheckout = () => {
+    if (!meeting?.id) {
+      setAttendanceRecords([]);
+      setGuestRecords([]);
+      setActivity([]);
+      return undefined;
+    }
+
+    const unsubAttendance = subscribeAttendanceRecords(
+      meeting.id,
+      (records) => {
+        setAttendanceRecords(records);
+        markSyncAvailable();
+      },
+      () => markSyncUnavailable()
+    );
+    const unsubGuests = subscribeGuestAttendance(
+      meeting.id,
+      (records) => {
+        setGuestRecords(records);
+        markSyncAvailable();
+      },
+      () => markSyncUnavailable()
+    );
+    const unsubActivity = subscribeActivityLog(
+      meeting.id,
+      (items) => {
+        setActivity(items);
+        markSyncAvailable();
+      },
+      50,
+      () => markSyncUnavailable()
+    );
+
+    return () => {
+      unsubAttendance();
+      unsubGuests();
+      unsubActivity();
+    };
+  }, [meeting?.id, markSyncAvailable, markSyncUnavailable]);
+
+  useEffect(() => {
+    if (!isSyncAvailable) return;
+    persistOfflineCache({
+      meeting,
+      attendanceRecords,
+      guestRecords,
+      recurringGuests,
+      activity,
+    });
+  }, [
+    isSyncAvailable,
+    meeting,
+    attendanceRecords,
+    guestRecords,
+    recurringGuests,
+    activity,
+    persistOfflineCache,
+  ]);
+
+  useEffect(() => {
+    const runSystemForceCheckout = async () => {
       const now = new Date();
       if (!isAfterSystemForceCheckoutTime(now)) return;
+      if (!meeting?.id) return;
+      if (meeting.systemForceCompletedDate === forceCheckoutDateKey(now)) return;
 
       const forceKey = `${SYSTEM_FORCE_KEY_PREFIX}-${forceCheckoutDateKey(now)}`;
       if (localStorage.getItem(forceKey) === 'done') return;
 
-      setLocalState((prev) => {
-        const openMemberIds = Object.entries(prev.attendance)
-          .filter(([, record]) => record.status === 'checked-in')
-          .map(([id]) => id);
-        const openGuests = prev.guests.filter((g) => g.status === 'checked-in');
-        if (!openMemberIds.length && !openGuests.length) {
-          localStorage.setItem(forceKey, 'done');
-          return prev;
-        }
-
-        const checkOutTime = now.toISOString();
-        const note = systemForceNote(now);
+      const openMembers = attendanceRecords.filter((record) => record.status === 'checked_in');
+      const openGuests = guestRecords.filter((record) => record.status === 'checked_in');
+      if (!openMembers.length && !openGuests.length) {
         localStorage.setItem(forceKey, 'done');
-        const attendance = { ...prev.attendance };
-        for (const id of openMemberIds) {
-          attendance[id] = {
-            ...attendance[id],
-            status: 'checked-out',
-            checkOutTime,
-            forceAction: true,
-            forceType: 'system',
-            forceNote: note,
-          };
-        }
+        return;
+      }
 
-        return {
-          ...prev,
-          attendance,
-          guests: prev.guests.map((guest) =>
-            guest.status === 'checked-in'
-              ? {
-                  ...guest,
-                  status: 'checked-out',
-                  checkOutTime,
-                  forceAction: true,
-                  forceType: 'system',
-                  forceNote: note,
-                }
-              : guest
-          ),
-          activity: [
-            ...openMemberIds.map((id, index) => {
-              const member = rawMembers.find(
-                (m) => String(m.memberId || m.capid || m.temporaryId) === String(id)
-              );
-              return {
-                id: `sfm${Date.now()}-${index}`,
-                message: `${member?.displayName || member?.fullName || id} system force logged out`,
-                timestamp: checkOutTime,
-                type: 'force-out',
-              };
-            }),
-            ...openGuests.map((guest, index) => ({
-              id: `sfg${Date.now()}-${index}`,
-              message: `${guest.name} (Guest) system force logged out`,
-              timestamp: checkOutTime,
-              type: 'force-out',
-            })),
-            ...prev.activity,
-          ].slice(0, 50),
-        };
-      });
+      try {
+        await systemForceCheckoutFirestore({
+          meetingId: meeting.id,
+          attendanceRecords,
+          guestRecords,
+          note: systemForceNote(now),
+        });
+        localStorage.setItem(forceKey, 'done');
+        markSyncAvailable();
+      } catch {
+        markSyncUnavailable();
+      }
     };
 
     runSystemForceCheckout();
     const interval = window.setInterval(runSystemForceCheckout, 30000);
     return () => window.clearInterval(interval);
-  }, [rawMembers]);
+  }, [meeting, attendanceRecords, guestRecords, markSyncAvailable, markSyncUnavailable]);
 
   const settings = useMemo(
-    () => ({ ...DEFAULT_SETTINGS, ...localState.settings, ...(remoteSettings || {}) }),
-    [localState.settings, remoteSettings]
+    () => ({ ...DEFAULT_SETTINGS, ...(remoteSettings || {}), ...localUiPrefs }),
+    [remoteSettings, localUiPrefs]
   );
 
-  const members = useMemo(
+  const members = useMemo(() => {
+    const merged = mergeMembersWithAttendance(rawMembers, attendanceRecords);
+    return merged.map((member) => {
+      const memberId = String(member.id);
+      const pinResetRequired = !!member.pinResetRequired;
+      const hasFirestorePin = !!memberPinHashes[memberId];
+      return {
+        ...member,
+        hasPin: hasFirestorePin && !pinResetRequired,
+        pinResetRequired,
+      };
+    });
+  }, [rawMembers, attendanceRecords, memberPinHashes]);
+
+  const guests = useMemo(
     () =>
-      rawMembers.map((member) => {
-        const memberId = memberStorageKey(member);
-        const record = attendanceRecordToUi(localState.attendance[memberId]);
-        const uiMember = toUiMember(member, record);
-        const pinResetRequired = !!member.pinResetRequired;
-        const hasFirestorePin = !!memberPinHashes[memberId];
-        return {
-          ...uiMember,
-          hasPin: hasFirestorePin && !pinResetRequired,
-          pinResetRequired,
-        };
-      }),
-    [rawMembers, localState.attendance, memberPinHashes]
+      guestRecords.map((guest) => ({
+        ...guest,
+        status: guest.status === 'checked_in' ? 'checked-in' : 'checked-out',
+        forceAction: !!guest.forceAction,
+        forceType: guest.forceType || null,
+        forceNote: guest.forceNote || guest.notes || null,
+      })),
+    [guestRecords]
   );
 
   const adminMembers = useMemo(
@@ -338,177 +421,112 @@ function useSparkKioskAttendance() {
     [members]
   );
 
-  const addActivity = useCallback((message, type) => {
-    setLocalState((prev) => ({
-      ...prev,
-      activity: [
-        { id: `a${Date.now()}`, message, timestamp: new Date().toISOString(), type },
-        ...prev.activity,
-      ].slice(0, 50),
-    }));
-  }, []);
-
   const checkInMember = useCallback(
     async (memberId, pinOrForce = false) => {
       const force = pinOrForce === true;
       const id = String(memberId);
+      const member = rawMembers.find((m) => memberStorageKey(m) === id);
+      if (!member) throw new Error('Member not found.');
+
       if (!force && typeof pinOrForce === 'string') {
         const storedHash = memberPinHashes[id];
         if (!storedHash || !(await verifyKioskPin(pinOrForce, id, storedHash))) {
           throw new Error('Incorrect PIN.');
         }
       }
-      const now = new Date().toISOString();
-      setLocalState((prev) => ({
-        ...prev,
-        attendance: {
-          ...prev.attendance,
-          [String(memberId)]: {
-            status: 'checked-in',
-            checkInTime: now,
-            checkOutTime: null,
-            forceAction: false,
-            forceType: null,
-            forceNote: null,
-          },
-        },
-      }));
-      const member = members.find((m) => String(m.id) === String(memberId));
-      if (member) {
-        addActivity(
-          force ? `${member.name} force checked in by admin` : `${member.name} checked in`,
-          force ? 'force-in' : 'check-in'
-        );
+
+      try {
+        if (force) {
+          const actorId = kioskAdminSession?.capid || kioskAdminSession?.memberId || 'admin';
+          await forceCheckInFirestore(actorId, member, null, meeting?.id);
+        } else {
+          await checkInMemberFirestore(id, member, meeting?.id);
+        }
+        markSyncAvailable();
+      } catch (err) {
+        markSyncUnavailable();
+        throw err;
       }
     },
-    [members, addActivity, memberPinHashes]
+    [rawMembers, memberPinHashes, meeting?.id, kioskAdminSession, markSyncAvailable, markSyncUnavailable]
   );
 
   const checkOutMember = useCallback(
     async (memberId, pinOrForce = false, note = null) => {
       const force = pinOrForce === true;
       const id = String(memberId);
-      const now = new Date().toISOString();
-      setLocalState((prev) => ({
-        ...prev,
-        attendance: {
-          ...prev.attendance,
-          [id]: {
-            ...prev.attendance[id],
-            status: 'checked-out',
-            checkOutTime: now,
-            ...(force
-              ? {
-                  forceAction: true,
-                  forceType: 'admin',
-                  forceNote: note || adminForceNote(new Date()),
-                }
-              : {}),
-          },
-        },
-      }));
-      const member = members.find((m) => String(m.id) === id);
-      if (member) {
-        addActivity(
-          force ? `${member.name} force checked out by admin` : `${member.name} checked out`,
-          force ? 'force-out' : 'check-out'
-        );
+      const member = rawMembers.find((m) => memberStorageKey(m) === id);
+
+      try {
+        if (force) {
+          const actorId = kioskAdminSession?.capid || kioskAdminSession?.memberId || 'admin';
+          await forceCheckOutFirestore(
+            actorId,
+            id,
+            note || adminForceNote(new Date()),
+            meeting?.id,
+            member?.displayName || member?.fullName
+          );
+        } else {
+          await checkOutMemberFirestore(id, meeting?.id);
+        }
+        markSyncAvailable();
+      } catch (err) {
+        markSyncUnavailable();
+        throw err;
       }
     },
-    [members, addActivity, memberPinHashes]
+    [rawMembers, meeting?.id, kioskAdminSession, markSyncAvailable, markSyncUnavailable]
   );
 
   const checkInGuest = useCallback(
-    (guestData) => {
-      const now = new Date().toISOString();
-      const today = now.split('T')[0];
-      setLocalState((prev) => {
-        const existing = prev.recurringGuests.find(
-          (g) => g.name.toLowerCase() === guestData.name.toLowerCase()
-        );
-        let recurringGuests = prev.recurringGuests;
-        if (existing) {
-          recurringGuests = prev.recurringGuests.map((g) =>
-            g.name.toLowerCase() === guestData.name.toLowerCase()
-              ? {
-                  ...g,
-                  hostId: guestData.hostId,
-                  hostName: guestData.hostName,
-                  lastVisit: today,
-                  totalVisits: g.totalVisits + 1,
-                  status: 'checked-in',
-                }
-              : g
-          );
-        } else {
-          recurringGuests = [
-            ...prev.recurringGuests,
-            {
-              id: `rg${Date.now()}`,
-              name: guestData.name,
-              hostId: guestData.hostId,
-              hostName: guestData.hostName,
-              firstVisit: today,
-              lastVisit: today,
-              totalVisits: 1,
-              status: 'checked-in',
-            },
-          ];
-        }
-        const newGuest = {
-          id: `g${Date.now()}`,
-          name: guestData.name,
-          hostId: guestData.hostId,
-          hostName: guestData.hostName,
-          checkInTime: now,
-          checkOutTime: null,
-          status: 'checked-in',
-          forceAction: false,
-          forceType: null,
-          forceNote: null,
-          firstVisit: existing?.firstVisit || today,
-          lastVisit: today,
-          totalVisits: existing ? existing.totalVisits + 1 : 1,
-        };
-        return {
-          ...prev,
-          guests: [
-            ...prev.guests.filter(
-              (g) => g.status !== 'checked-in' || g.name !== guestData.name
-            ),
-            newGuest,
-          ],
-          recurringGuests,
-        };
-      });
-      addActivity(`${guestData.name} (Guest) checked in`, 'guest-in');
+    async (guestData) => {
+      const host = rawMembers.find((m) => memberStorageKey(m) === String(guestData.hostId));
+      try {
+        await guestCheckInFirestore({
+          hostCapid: guestData.hostCapid || guestData.hostId,
+          hostPin: guestData.hostPin,
+          guestName: guestData.name,
+          guestId: guestData.guestId || null,
+          hostMemberDoc: host,
+          meetingId: meeting?.id,
+        });
+        markSyncAvailable();
+      } catch (err) {
+        markSyncUnavailable();
+        throw err;
+      }
     },
-    [addActivity]
+    [rawMembers, meeting?.id, markSyncAvailable, markSyncUnavailable]
   );
 
   const updateSettings = useCallback((newSettings) => {
-    setLocalState((prev) => ({ ...prev, settings: { ...prev.settings, ...newSettings } }));
+    setLocalUiPrefs((prev) => {
+      const next = { ...prev, ...newSettings };
+      saveKioskUiPrefs(next);
+      return next;
+    });
   }, []);
 
   const resetData = useCallback(() => {
-    const fresh = {
-      ...buildEmptyKioskLocalState(),
-      settings: DEFAULT_SETTINGS,
-    };
-    setLocalState(fresh);
-    saveKioskLocalState(fresh);
+    setLocalUiPrefs({});
+    saveKioskUiPrefs({});
+    setKioskAdminSession(null);
+    saveKioskAdminSession(null);
   }, []);
 
   const searchMembers = useCallback(
-    (query) => {
-      const filtered = searchMemberList(rawMembers, query);
+    (queryText) => {
+      const filtered = searchMemberList(rawMembers, queryText);
+      const byKey = new Map(
+        attendanceRecords.map((record) => [String(record.memberId || record.capid), record])
+      );
       return filtered.map((member) => {
         const memberId = String(member.id);
-        const record = attendanceRecordToUi(localState.attendance[memberId]);
         const raw = rawMembers.find(
           (rm) => String(rm.memberId || rm.capid || rm.temporaryId) === memberId
         );
-        const uiMember = toUiMember(raw, record);
+        const uiMember = toUiMember(raw, byKey.get(memberId));
         const pinResetRequired = !!raw?.pinResetRequired;
         const hasFirestorePin = !!memberPinHashes[memberId];
         return {
@@ -518,13 +536,10 @@ function useSparkKioskAttendance() {
         };
       });
     },
-    [rawMembers, localState.attendance, memberPinHashes]
+    [rawMembers, attendanceRecords, memberPinHashes]
   );
 
-  const getStatsFn = useCallback(
-    () => getStats(members, localState.guests),
-    [members, localState.guests]
-  );
+  const getStatsFn = useCallback(() => getStats(members, guests), [members, guests]);
 
   const verifyPin = useCallback(
     async (memberId, pin) => {
@@ -539,26 +554,19 @@ function useSparkKioskAttendance() {
 
   const checkOutGuest = useCallback(
     async (guestId) => {
-      const guest = localState.guests.find((g) => g.id === guestId);
+      const guest = guestRecords.find((g) => g.id === guestId);
       if (!guest) throw new Error('Guest not found.');
-      if (guest.status !== 'checked-in') throw new Error('Guest is not currently signed in.');
+      if (guest.status !== 'checked_in') throw new Error('Guest is not currently signed in.');
 
-      const now = new Date().toISOString();
-      setLocalState((prev) => {
-        const currentGuest = prev.guests.find((g) => g.id === guestId);
-        const updatedGuests = prev.guests.map((g) =>
-          g.id === guestId ? { ...g, status: 'checked-out', checkOutTime: now } : g
-        );
-        const recurringGuests = prev.recurringGuests.map((g) =>
-          currentGuest && g.name.toLowerCase() === currentGuest.name.toLowerCase()
-            ? { ...g, status: 'checked-out' }
-            : g
-        );
-        return { ...prev, guests: updatedGuests, recurringGuests };
-      });
-      addActivity(`Kiosk: ${guest.name} checked out`, 'guest-out');
+      try {
+        await guestCheckOutFirestore(guestId);
+        markSyncAvailable();
+      } catch (err) {
+        markSyncUnavailable();
+        throw err;
+      }
     },
-    [localState.guests, addActivity]
+    [guestRecords, markSyncAvailable, markSyncUnavailable]
   );
 
   const verifyAdminPin = useCallback(
@@ -596,9 +604,7 @@ function useSparkKioskAttendance() {
 
   const memberHasPin = useCallback(
     (memberId) => {
-      const member = rawMembers.find(
-        (m) => memberStorageKey(m) === String(memberId)
-      );
+      const member = rawMembers.find((m) => memberStorageKey(m) === String(memberId));
       const id = String(memberId);
       return !!memberPinHashes[id] && !member?.pinResetRequired;
     },
@@ -607,26 +613,35 @@ function useSparkKioskAttendance() {
 
   const needsPinSetup = useCallback(
     (memberId) => {
-      const member = rawMembers.find(
-        (m) => memberStorageKey(m) === String(memberId)
-      );
+      const member = rawMembers.find((m) => memberStorageKey(m) === String(memberId));
       const id = String(memberId);
       return !memberPinHashes[id] || !!member?.pinResetRequired;
     },
     [memberPinHashes, rawMembers]
   );
 
-  const createMemberPin = useCallback(async (memberId, pin, confirmPin) => {
-    const result = await createPinSpark(memberId, pin, confirmPin);
-    const member = rawMembers.find((m) => memberStorageKey(m) === String(memberId));
-    addActivity(
-      `${member?.displayName || member?.fullName || memberId} created a new PIN`,
-      'pin-created'
-    );
-    return result;
-  }, [rawMembers, addActivity]);
+  const createMemberPin = useCallback(
+    async (memberId, pin, confirmPin) => {
+      const result = await createPinSpark(memberId, pin, confirmPin);
+      const member = rawMembers.find((m) => memberStorageKey(m) === String(memberId));
+      try {
+        const activeMeeting = meeting || (await ensureActiveMeeting());
+        await appendActivityLogSpark({
+          meetingId: activeMeeting.id,
+          type: 'pin_created',
+          targetMemberId: String(memberId),
+          targetCapid: member?.capid || memberId,
+          targetName: member?.displayName || member?.fullName || memberId,
+        });
+        markSyncAvailable();
+      } catch {
+        markSyncUnavailable();
+      }
+      return result;
+    },
+    [rawMembers, meeting, markSyncAvailable, markSyncUnavailable]
+  );
 
-  const authenticateSenior = useCallback(async () => null, []);
   const resetMemberPinFn = useCallback(
     async (targetCapid, actorPin, actorCapid) => {
       const actorId = actorCapid || kioskAdminSession?.capid || kioskAdminSession?.memberId;
@@ -634,13 +649,22 @@ function useSparkKioskAttendance() {
         throw new Error('Select your admin account before resetting a PIN.');
       }
       const result = await resetMemberPinSpark(actorId, actorPin, targetCapid);
-      addActivity(
-        `PIN reset for ${result.targetName || targetCapid} by admin ${actorId}`,
-        'pin-reset'
-      );
+      try {
+        const activeMeeting = meeting || (await ensureActiveMeeting());
+        await appendActivityLogSpark({
+          meetingId: activeMeeting.id,
+          type: 'pin_reset',
+          actorCapid: String(actorId),
+          targetCapid: String(targetCapid),
+          targetName: result.targetName || String(targetCapid),
+        });
+        markSyncAvailable();
+      } catch {
+        markSyncUnavailable();
+      }
       return result;
     },
-    [addActivity, kioskAdminSession]
+    [kioskAdminSession, meeting, markSyncAvailable, markSyncUnavailable]
   );
 
   const clearKioskAdminSession = useCallback(() => {
@@ -650,19 +674,21 @@ function useSparkKioskAttendance() {
 
   return {
     members,
-    guests: localState.guests,
-    activity: localState.activity,
+    guests,
+    activity,
     settings,
-    recurringGuests: localState.recurringGuests,
-    meeting: null,
+    recurringGuests,
+    meeting,
     seniorSession: kioskAdminSession,
     isFirebase: true,
     isCloudBackend: false,
     isKioskMode: true,
+    isSyncAvailable,
+    syncError,
     usingLocalRoster,
     adminMembers,
     loading,
-    error: null,
+    error: syncError,
     checkInMember,
     checkOutMember,
     checkInGuest,
@@ -681,7 +707,7 @@ function useSparkKioskAttendance() {
     resetMemberPin: resetMemberPinFn,
     canResetPins: kioskAdminSession?.canResetPins ?? false,
     clearSeniorSession: clearKioskAdminSession,
-    addActivity,
+    addActivity: () => {},
   };
 }
 

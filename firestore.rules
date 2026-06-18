@@ -11,6 +11,21 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/members/$(capid)).data.pinResetRequired == true;
     }
 
+    function memberPinDocHasValidHash(data) {
+      return data.keys().hasAll(['pinHash'])
+        && data.pinHash is string
+        && data.pinHash.size() >= 8
+        && (data.pinHash.matches('^sha256:.*') || data.pinHash.matches('^fnv1a:.*'));
+    }
+
+    function isValidMeetingDate(dateStr) {
+      return dateStr is string && dateStr.matches('^\\d{4}-\\d{2}-\\d{2}$');
+    }
+
+    function validAttendanceStatus(status) {
+      return status in ['checked_in', 'checked_out'];
+    }
+
     // Member roster — readable for kiosk search; limited client updates for PIN state.
     match /members/{capid} {
       allow read: if true;
@@ -21,17 +36,8 @@ service cloud.firestore {
     }
 
     // PIN hashes — Spark kiosk reads hash for client-side verify; never stores plaintext.
-    // Read is open so collection queries (subscribeMemberPins) work for all active kiosks.
-    function memberPinDocHasValidHash(data) {
-      return data.keys().hasAll(['pinHash'])
-        && data.pinHash is string
-        && data.pinHash.size() >= 8
-        && (data.pinHash.matches('^sha256:.*') || data.pinHash.matches('^fnv1a:.*'));
-    }
-
     match /memberPins/{capid} {
       allow read: if true;
-      // Spark kiosk admin reset deletes the doc after marking pinResetRequired on members/{capid}.
       allow delete: if isActiveMember(capid);
       allow create: if isActiveMember(capid)
         && !exists(/databases/$(database)/documents/memberPins/$(capid))
@@ -45,29 +51,75 @@ service cloud.firestore {
         && request.resource.data.pinHash.size() >= 8;
     }
 
+    // Meetings — Spark kiosk creates/updates today's active meeting.
     match /meetings/{meetingId} {
       allow read: if true;
-      allow write: if false;
+      allow create: if request.resource.data.keys().hasAll(['meetingDate', 'status'])
+        && isValidMeetingDate(request.resource.data.meetingDate)
+        && request.resource.data.status == 'in_progress';
+      allow update: if request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'endTime', 'updatedAt', 'systemForceCompletedDate'])
+        && request.resource.data.status == 'in_progress';
+      allow delete: if false;
     }
 
+    // Member attendance — Spark kiosk check-in/out (no Auth).
     match /attendanceRecords/{recordId} {
       allow read: if true;
-      allow write: if false;
+      allow create: if request.resource.data.keys().hasAll([
+          'meetingId', 'memberId', 'memberName', 'status', 'checkInTime'
+        ])
+        && validAttendanceStatus(request.resource.data.status)
+        && request.resource.data.status == 'checked_in'
+        && isActiveMember(request.resource.data.memberId);
+      allow update: if validAttendanceStatus(resource.data.status)
+        && validAttendanceStatus(request.resource.data.status)
+        && resource.data.status == 'checked_in'
+        && request.resource.data.status == 'checked_out'
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly([
+            'status', 'checkOutTime', 'durationMinutes', 'checkedOutBy',
+            'forceAction', 'forceActionBy', 'forceType', 'notes', 'updatedAt'
+          ]);
+      allow delete: if false;
     }
 
+    // Recurring guest profiles.
     match /guests/{guestId} {
       allow read: if true;
-      allow write: if false;
+      allow create: if request.resource.data.keys().hasAll(['fullName', 'normalizedName', 'active'])
+        && request.resource.data.active == true;
+      allow update: if request.resource.data.diff(resource.data).affectedKeys()
+        .hasOnly([
+          'fullName', 'normalizedName', 'hostCapid', 'hostName',
+          'lastVisitDate', 'totalVisits', 'active', 'updatedAt'
+        ]);
+      allow delete: if false;
     }
 
+    // Guest attendance per meeting.
     match /guestAttendanceRecords/{recordId} {
       allow read: if true;
-      allow write: if false;
+      allow create: if request.resource.data.keys().hasAll([
+          'meetingId', 'guestId', 'guestName', 'status', 'checkInTime'
+        ])
+        && request.resource.data.status == 'checked_in';
+      allow update: if resource.data.status == 'checked_in'
+        && request.resource.data.status == 'checked_out'
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly([
+            'status', 'checkOutTime', 'durationMinutes', 'checkedOutBy',
+            'forceAction', 'forceType', 'notes', 'updatedAt'
+          ]);
+      allow delete: if false;
     }
 
+    // Activity feed — append-only from kiosk.
     match /activityLog/{logId} {
       allow read: if true;
-      allow write: if false;
+      allow create: if request.resource.data.keys().hasAll(['activityType', 'timestamp'])
+        && request.resource.data.activityType is string;
+      allow update, delete: if false;
     }
 
     match /reportExports/{exportId} {

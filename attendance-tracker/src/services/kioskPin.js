@@ -78,18 +78,25 @@ export async function fetchMemberPinDoc(memberId) {
 }
 
 /** Live map of memberId -> pinHash for kiosk hasPin derivation. */
-export function subscribeMemberPins(callback) {
+export function subscribeMemberPins(callback, onError) {
   const db = getDb();
   if (!db) return () => {};
 
-  return onSnapshot(collection(db, 'memberPins'), (snap) => {
-    const pins = {};
-    snap.docs.forEach((pinDoc) => {
-      const pinHash = pinDoc.data().pinHash;
-      if (isValidStoredPinHash(pinHash)) pins[pinDoc.id] = pinHash;
-    });
-    callback(pins);
-  });
+  return onSnapshot(
+    collection(db, 'memberPins'),
+    (snap) => {
+      const pins = {};
+      snap.docs.forEach((pinDoc) => {
+        const pinHash = pinDoc.data().pinHash;
+        if (isValidStoredPinHash(pinHash)) pins[pinDoc.id] = pinHash;
+      });
+      callback(pins);
+    },
+    () => {
+      if (onError) onError();
+      else callback({});
+    }
+  );
 }
 
 export async function createMemberPinInFirestore(memberId, pin, confirmPin) {

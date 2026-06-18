@@ -14,6 +14,7 @@ import AttendanceList from './pages/AttendanceList';
 import Reports from './pages/Reports';
 import AdminTools from './pages/AdminTools';
 import Settings from './pages/Settings';
+import SyncWarningBanner from './components/SyncWarningBanner';
 import { useAttendance } from './hooks/useAttendance';
 
 import './styles/globals.css';
@@ -60,6 +61,10 @@ function AppShell({ attendance }) {
 
   return (
     <div className={`app-layout ${isPublicFullScreen ? 'public-app-layout' : ''}`}>
+      <SyncWarningBanner
+        isSyncAvailable={attendance.isSyncAvailable}
+        syncError={attendance.syncError}
+      />
       {!isPublicFullScreen && <Sidebar settings={attendance.settings} />}
       <main className={`main-content ${isPublicFullScreen ? 'public-main-content' : ''}`}>
         <Routes>

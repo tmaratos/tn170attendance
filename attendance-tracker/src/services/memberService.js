@@ -64,16 +64,23 @@ export function toUiMember(memberDoc, attendanceRecord = null) {
   };
 }
 
-export function subscribeMembers(callback, { includeInactive = false } = {}) {
+export function subscribeMembers(callback, onError, { includeInactive = false } = {}) {
   const db = getDb();
   if (!db) return () => {};
 
-  return onSnapshot(collection(db, 'members'), (snap) => {
-    const members = snap.docs
-      .map((d) => ({ memberId: d.id, ...d.data() }))
-      .filter((m) => includeInactive || m.active !== false);
-    callback(members);
-  });
+  return onSnapshot(
+    collection(db, 'members'),
+    (snap) => {
+      const members = snap.docs
+        .map((d) => ({ memberId: d.id, ...d.data() }))
+        .filter((m) => includeInactive || m.active !== false);
+      callback(members);
+    },
+    () => {
+      if (onError) onError();
+      else callback([]);
+    }
+  );
 }
 
 export function searchMembers(members, queryText) {
@@ -178,11 +185,18 @@ export async function fetchSeniorMembers() {
   return snap.docs.map((d) => ({ memberId: d.id, ...d.data() }));
 }
 
-export function subscribeSettings(callback) {
+export function subscribeSettings(callback, onError) {
   const db = getDb();
   if (!db) return () => {};
 
-  return onSnapshot(doc(db, 'settings', 'squadron'), (snap) => {
-    callback(snap.exists() ? snap.data() : null);
-  }, () => callback(null));
+  return onSnapshot(
+    doc(db, 'settings', 'squadron'),
+    (snap) => {
+      callback(snap.exists() ? snap.data() : null);
+    },
+    () => {
+      if (onError) onError();
+      else callback(null);
+    }
+  );
 }
