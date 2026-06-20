@@ -2837,6 +2837,110 @@
   }
 }
 
+/* Phone-only public kiosk (exclude iPad portrait at 600px+) */
+@media (max-width: 599px) {
+  .public-kiosk-page {
+    max-height: none;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .public-kiosk-body {
+    flex: none;
+    overflow: visible;
+    padding-bottom: 12px;
+  }
+
+  .public-kiosk-shell {
+    gap: 16px;
+    align-items: stretch;
+  }
+
+  .public-kiosk-hero {
+    gap: 14px;
+    overflow: visible;
+  }
+
+  .public-clock-card {
+    padding: 14px 16px;
+  }
+
+  .checkout-reminder {
+    margin-bottom: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-height: auto;
+    padding: 10px 14px;
+    text-align: left;
+  }
+
+  .checkout-reminder strong,
+  .checkout-reminder span {
+    width: 100%;
+    white-space: normal;
+  }
+
+  .public-status-panel {
+    position: relative;
+    z-index: 1;
+    max-height: none;
+    min-height: 0;
+    flex: none;
+  }
+
+  .public-status-list {
+    max-height: min(280px, 42dvh);
+  }
+
+  .public-kiosk-footer {
+    position: relative;
+    z-index: 2;
+    flex-shrink: 0;
+    margin-top: 4px;
+    padding-top: 10px;
+    background: linear-gradient(
+      180deg,
+      rgba(6, 31, 67, 0) 0%,
+      rgba(6, 31, 67, 0.96) 12%,
+      rgba(2, 9, 20, 1) 100%
+    );
+  }
+
+  .public-kiosk-footer .public-kiosk-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .public-kiosk-footer .public-action-button {
+    min-height: 64px;
+    padding: 10px 8px;
+  }
+
+  .public-kiosk-footer .public-action-button span {
+    font-size: 0.78rem;
+    line-height: 1.15;
+  }
+
+  .public-kiosk-footer .public-action-button small {
+    display: block;
+    font-size: 0.62rem;
+    line-height: 1.2;
+  }
+
+  .public-kiosk-footer .public-action-button.admin {
+    grid-column: 1 / -1;
+    min-height: 56px;
+  }
+
+  .kiosk-footer-pin-help {
+    margin-top: 10px;
+    padding: 0 4px;
+    font-size: 0.85rem;
+  }
+}
+
 /* Portrait tablet & phone kiosk — full width, single column */
 @media (orientation: portrait) and (min-width: 600px) and (max-width: 1024px) {
   .public-kiosk-page {

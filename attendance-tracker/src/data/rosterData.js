@@ -1,4 +1,4 @@
-/** CAPIDs with admin permissions (matches scripts/seed-members.js). */
+/** Legacy fallback CAPIDs for offline Spark kiosk (all seniors are admins via isSeniorMember). */
 export const ADMIN_CAPIDS = new Set([
   '326320', // Maj Steven C Mellard
   '249023', // 1st Lt Ernest E Burchell
@@ -92,22 +92,32 @@ function parseRole(grade) {
   return { role: 'Senior Member', isCadet: false, isSeniorMember: true };
 }
 
-function buildPermissions(capid, isSenior) {
-  const isAdmin = ADMIN_CAPIDS.has(capid);
+function buildPermissions(_capid, isSenior) {
   return {
-    isAdmin,
-    canForceAttendance: isAdmin,
-    canResetPins: isAdmin,
-    canExportReports: isSenior || isAdmin,
-    canManageMembers: isAdmin,
-    canManageGuests: isSenior || isAdmin,
+    isAdmin: isSenior,
+    canForceAttendance: isSenior,
+    canResetPins: isSenior,
+    canExportReports: isSenior,
+    canManageMembers: isSenior,
+    canManageGuests: isSenior,
   };
 }
 
-/** Merge Firestore member fields with embedded ADMIN_CAPIDS fallback (Spark kiosk). */
+function memberIsSenior(memberDoc) {
+  if (!memberDoc) return false;
+  if (memberDoc.isProspective) return false;
+  if (memberDoc.isSeniorMember) return true;
+  if (memberDoc.role === 'Senior Member') return true;
+  if (memberDoc.isCadet || memberDoc.role === 'Cadet') return false;
+  const grade = String(memberDoc.grade || '').toUpperCase();
+  return !grade.startsWith('C/') && grade !== 'CADET';
+}
+
+/** Merge Firestore member fields with senior-member admin defaults (Spark kiosk fallback). */
 export function resolveMemberAdminPermissions(memberDoc) {
   const capid = String(memberDoc?.capid || memberDoc?.memberId || '');
-  const isAdmin = ADMIN_CAPIDS.has(capid) || !!memberDoc?.isAdmin;
+  const isSenior = memberIsSenior(memberDoc);
+  const isAdmin = isSenior || ADMIN_CAPIDS.has(capid) || !!memberDoc?.isAdmin;
   return {
     isAdmin,
     canForceAttendance: isAdmin || !!memberDoc?.canForceAttendance,

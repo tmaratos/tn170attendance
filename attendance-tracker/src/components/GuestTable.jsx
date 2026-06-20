@@ -2,10 +2,10 @@ import { formatTime } from '../data/mockData';
 import { useLocalTime } from '../hooks/useLocalTime';
 import { isAfterSignOutReviewTime, isAfterSystemForceCheckoutTime } from '../utils/timeRules';
 
-export default function GuestTable({ guests, compact = false }) {
+export default function GuestTable({ guests, compact = false, meetingEnd }) {
   const { now } = useLocalTime();
-  const afterReviewTime = isAfterSignOutReviewTime(now);
-  const afterForceTime = isAfterSystemForceCheckoutTime(now);
+  const afterReviewTime = isAfterSignOutReviewTime(now, meetingEnd);
+  const afterForceTime = isAfterSystemForceCheckoutTime(now, meetingEnd);
 
   if (!guests.length) {
     return <div className="empty-state">No guests present</div>;

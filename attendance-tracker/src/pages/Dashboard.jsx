@@ -123,7 +123,11 @@ export default function Dashboard({ attendance }) {
             </h3>
           </div>
           <div className="panel-body">
-            <AttendanceTable members={checkedInMembers.slice(0, 8)} compact />
+            <AttendanceTable
+              members={checkedInMembers.slice(0, 8)}
+              compact
+              meetingEnd={settings.meetingEnd}
+            />
           </div>
           <div className="panel-footer">
             <Link to="/admin/members?filter=checked-in" className="panel-footer-link">
@@ -139,7 +143,12 @@ export default function Dashboard({ attendance }) {
             </h3>
           </div>
           <div className="panel-body">
-            <AttendanceTable members={checkedOutMembers.slice(0, 8)} showCheckOut compact />
+            <AttendanceTable
+              members={checkedOutMembers.slice(0, 8)}
+              showCheckOut
+              compact
+              meetingEnd={settings.meetingEnd}
+            />
           </div>
           <div className="panel-footer">
             <Link to="/admin/members?filter=checked-out" className="panel-footer-link">
@@ -156,7 +165,7 @@ export default function Dashboard({ attendance }) {
               </h3>
             </div>
             <div className="panel-body">
-              <GuestTable guests={presentGuests} compact />
+              <GuestTable guests={presentGuests} compact meetingEnd={settings.meetingEnd} />
             </div>
             <div className="panel-footer">
               <Link to="/admin/guests" className="panel-footer-link">

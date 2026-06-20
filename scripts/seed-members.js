@@ -19,15 +19,6 @@ import { dirname, join } from 'path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 
-const ADMIN_CAPIDS = new Set([
-  '326320', // Maj Steven C Mellard
-  '249023', // 1st Lt Ernest E Burchell
-  '757794', // 2d Lt Tonya M Osborne
-  '702226', // 1st Lt Mel W Osborne
-  '740617', // 2d Lt Tyler M Thomas
-  '729204', // 2d Lt Tristan G Maratos
-]);
-
 const DEFAULT_ROSTER = `
 362254 Maj Lemont T Adrian
 706279 2d Lt Janelle C Allison
@@ -133,15 +124,14 @@ function parseRole(grade) {
   return { role: 'Senior Member', isCadet: false, isSeniorMember: true };
 }
 
-function buildPermissions(capid, isSenior) {
-  const isAdmin = ADMIN_CAPIDS.has(capid);
+function buildPermissions(_capid, isSenior) {
   return {
-    isAdmin,
-    canForceAttendance: isAdmin,
-    canResetPins: isAdmin,
-    canExportReports: isSenior || isAdmin,
-    canManageMembers: isAdmin,
-    canManageGuests: isSenior || isAdmin,
+    isAdmin: isSenior,
+    canForceAttendance: isSenior,
+    canResetPins: isSenior,
+    canExportReports: isSenior,
+    canManageMembers: isSenior,
+    canManageGuests: isSenior,
   };
 }
 

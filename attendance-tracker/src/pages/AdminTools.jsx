@@ -25,6 +25,7 @@ export default function AdminTools({ attendance }) {
     clearSeniorSession,
     loading: attendanceLoading,
     adminMembers,
+    settings,
   } = attendance;
 
   const [searchParams] = useSearchParams();
@@ -44,7 +45,7 @@ export default function AdminTools({ attendance }) {
   const [resetTarget, setResetTarget] = useState('');
   const [resetQuery, setResetQuery] = useState('');
   const { now } = useLocalTime();
-  const forceCheckoutDue = isAfterSystemForceCheckoutTime(now);
+  const forceCheckoutDue = isAfterSystemForceCheckoutTime(now, settings.meetingEnd);
 
   useEffect(() => {
     if (seniorSession) {

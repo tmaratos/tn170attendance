@@ -9,10 +9,10 @@ import {
 } from '../utils/timeRules';
 import { useState } from 'react';
 
-function KioskStatusPanel({ members, guests, now }) {
+function KioskStatusPanel({ members, guests, now, meetingEnd }) {
   const [view, setView] = useState('in');
-  const afterReviewTime = isAfterSignOutReviewTime(now);
-  const afterForceTime = isAfterSystemForceCheckoutTime(now);
+  const afterReviewTime = isAfterSignOutReviewTime(now, meetingEnd);
+  const afterForceTime = isAfterSystemForceCheckoutTime(now, meetingEnd);
   const signedInMembers = members.filter((member) => member.status === 'checked-in');
   const signedInGuests = guests.filter((guest) => guest.status === 'checked-in');
   const signedOutMembers = members.filter((member) => member.status !== 'checked-in');
@@ -133,7 +133,12 @@ export default function PublicKiosk({ attendance }) {
             <CheckoutReminder />
           </section>
 
-          <KioskStatusPanel members={members} guests={guests} now={now} />
+          <KioskStatusPanel
+            members={members}
+            guests={guests}
+            now={now}
+            meetingEnd={settings.meetingEnd}
+          />
         </main>
       </div>
 

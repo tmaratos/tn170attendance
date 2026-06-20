@@ -24,6 +24,29 @@ const ADMIN_CAPIDS = new Set([
   '729204', // 2d Lt Tristan G Maratos
 ]);
 
+function memberIsSenior(member) {
+  if (!member) return false;
+  if (member.isProspective) return false;
+  if (member.isSeniorMember) return true;
+  if (member.role === 'Senior Member') return true;
+  if (member.isCadet || member.role === 'Cadet') return false;
+  const grade = String(member.grade || '').toUpperCase();
+  return !grade.startsWith('C/') && grade !== 'CADET';
+}
+
+function resolveActorPermissions(member) {
+  const isSenior = memberIsSenior(member);
+  const isAdmin = isSenior || !!member.isAdmin || ADMIN_CAPIDS.has(String(member.capid || member.memberId || member.id));
+  return {
+    isAdmin,
+    canForceAttendance: isAdmin || !!member.canForceAttendance,
+    canResetPins: isAdmin || !!member.canResetPins,
+    canExportReports: isAdmin || !!member.canExportReports,
+    canManageMembers: isAdmin || !!member.canManageMembers,
+    canManageGuests: isAdmin || !!member.canManageGuests,
+  };
+}
+
 function todayDateString() {
   return new Date().toISOString().split('T')[0];
 }
@@ -130,7 +153,7 @@ async function verifyActorPin(memberId, pin) {
   if (!valid) {
     throw new HttpsError('permission-denied', 'Incorrect PIN.');
   }
-  return member;
+  return { ...member, ...resolveActorPermissions(member) };
 }
 
 function validatePin(pin) {
@@ -920,18 +943,19 @@ exports.verifySeniorAccess = onCall(callableOptions, async (request) => {
 
   const member = await verifyActorPin(capid, pin);
   await requireSenior(member);
+  const perms = resolveActorPermissions(member);
 
   return {
     success: true,
     capid: String(member.capid || capid),
     memberId: String(member.memberId || capid),
     displayName: member.displayName || member.fullName,
-    isAdmin: !!member.isAdmin,
-    canForceAttendance: !!(member.canForceAttendance || member.isAdmin),
-    canResetPins: !!(member.canResetPins || member.isAdmin),
-    canExportReports: !!(member.canExportReports || member.isAdmin),
-    canManageMembers: !!(member.canManageMembers || member.isAdmin),
-    canManageGuests: !!(member.canManageGuests || member.isAdmin),
+    isAdmin: !!perms.isAdmin,
+    canForceAttendance: !!perms.canForceAttendance,
+    canResetPins: !!perms.canResetPins,
+    canExportReports: !!perms.canExportReports,
+    canManageMembers: !!perms.canManageMembers,
+    canManageGuests: !!perms.canManageGuests,
   };
 });
 

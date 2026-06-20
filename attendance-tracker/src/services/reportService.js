@@ -103,12 +103,15 @@ async function loadExportMember(memberId) {
     const memberSnap = await getDoc(doc(db, 'members', memberId));
     if (memberSnap.exists() && memberSnap.data().active !== false) {
       const firestoreMember = memberSnap.data();
-      const isAdmin =
-        !!firestoreMember.isAdmin || !!rosterMember?.isAdmin || ADMIN_CAPIDS.has(memberId);
       const isSeniorMember =
         firestoreMember.isSeniorMember ??
         rosterMember?.isSeniorMember ??
         (!firestoreMember.isCadet && firestoreMember.role !== 'Cadet');
+      const isAdmin =
+        isSeniorMember ||
+        !!firestoreMember.isAdmin ||
+        !!rosterMember?.isAdmin ||
+        ADMIN_CAPIDS.has(memberId);
       const canExportReports =
         !!firestoreMember.canExportReports ||
         isAdmin ||
@@ -131,11 +134,11 @@ async function loadExportMember(memberId) {
 }
 
 function assertExportPermission(member, memberId) {
-  const isAdmin = !!member.isAdmin || ADMIN_CAPIDS.has(memberId);
   const isSenior =
     !!member.isSeniorMember ||
     member.role === 'Senior Member' ||
     (!member.isCadet && member.role !== 'Cadet');
+  const isAdmin = isSenior || !!member.isAdmin || ADMIN_CAPIDS.has(memberId);
 
   if (member.isCadet && !isAdmin) {
     throw new Error('Only senior members can export reports.');

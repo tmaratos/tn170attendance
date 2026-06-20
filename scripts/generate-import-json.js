@@ -9,10 +9,6 @@ import { dirname, join } from 'path';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
 
-const ADMIN_CAPIDS = new Set([
-  '326320', '249023', '757794', '702226', '740617', '729204',
-]);
-
 const DEFAULT_ROSTER = readFileSync(join(ROOT, 'data', 'roster.txt'), 'utf8')
   .split('\n')
   .map((l) => l.trim())
@@ -47,15 +43,14 @@ function parseRole(grade) {
   return { role: 'Senior Member', isCadet: false, isSeniorMember: true };
 }
 
-function buildPermissions(capid, isSenior) {
-  const isAdmin = ADMIN_CAPIDS.has(capid);
+function buildPermissions(_capid, isSenior) {
   return {
-    isAdmin,
-    canForceAttendance: isAdmin,
-    canResetPins: isAdmin,
-    canExportReports: isSenior || isAdmin,
-    canManageMembers: isAdmin,
-    canManageGuests: isSenior || isAdmin,
+    isAdmin: isSenior,
+    canForceAttendance: isSenior,
+    canResetPins: isSenior,
+    canExportReports: isSenior,
+    canManageMembers: isSenior,
+    canManageGuests: isSenior,
   };
 }
 

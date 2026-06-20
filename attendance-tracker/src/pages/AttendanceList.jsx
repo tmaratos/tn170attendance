@@ -28,6 +28,7 @@ export default function AttendanceList({ attendance }) {
     updatePendingMemberCapid,
     deactivateMember,
     reactivateMember,
+    settings,
   } = attendance;
   const [searchParams] = useSearchParams();
   const initialFilter = searchParams.get('filter') || 'all';
@@ -43,7 +44,7 @@ export default function AttendanceList({ attendance }) {
   const [mgmtError, setMgmtError] = useState('');
   const [mgmtLoading, setMgmtLoading] = useState(false);
   const { now } = useLocalTime();
-  const forceCheckoutDue = isAfterSystemForceCheckoutTime(now);
+  const forceCheckoutDue = isAfterSystemForceCheckoutTime(now, settings.meetingEnd);
 
   const canManage = isFirebase && seniorSession?.canManageMembers;
   const pendingMembers = useMemo(

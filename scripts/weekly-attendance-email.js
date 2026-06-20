@@ -1,0 +1,338 @@
+/**
+ * Weekly attendance email — run from GitHub Actions or locally.
+ *
+ * Required env:
+ *   FIREBASE_PROJECT_ID (default: tn170-attendance)
+ *   FIREBASE_SERVICE_ACCOUNT_JSON — full service account JSON string
+ *   EMAIL_RECIPIENTS — comma/semicolon-separated addresses
+ *
+ * Email transport (pick one):
+ *   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, EMAIL_FROM
+ *   — or —
+ *   RESEND_API_KEY, EMAIL_FROM
+ *
+ * Optional:
+ *   SCHEDULE_TIMEZONE (default America/New_York — Oak Ridge, TN)
+ *   MEETING_DAY (default Tuesday)
+ *   SEND_HOUR (default 22 — 10 PM local)
+ *   FORCE_SEND=true — skip schedule gate (manual runs)
+ */
+
+import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
+import { readFileSync, existsSync } from 'fs';
+import nodemailer from 'nodemailer';
+
+const DEFAULT_PROJECT_ID = 'tn170-attendance';
+const CSV_HEADERS = [
+  'Type',
+  'Name',
+  'CAPID/Pending CAPID',
+  'Role',
+  'Hosted By',
+  'Check-In',
+  'Check-Out',
+  'Duration',
+  'Status',
+  'Force Action Note',
+];
+
+function env(name, fallback = '') {
+  return process.env[name]?.trim() || fallback;
+}
+
+function parseRecipients(raw) {
+  return String(raw || '')
+    .split(/[,;\s]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function timestampToIso(value) {
+  if (!value) return null;
+  if (typeof value === 'string') return value;
+  if (value.toDate) return value.toDate().toISOString();
+  if (value._seconds) return new Date(value._seconds * 1000).toISOString();
+  return null;
+}
+
+function formatTime(isoString) {
+  if (!isoString) return '—';
+  return new Date(isoString).toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZone: env('SCHEDULE_TIMEZONE', 'America/New_York'),
+  });
+}
+
+function formatDuration(checkIn, checkOut) {
+  if (!checkIn || !checkOut) return '—';
+  const ms = new Date(checkOut) - new Date(checkIn);
+  const hours = Math.floor(ms / 3600000);
+  const minutes = Math.floor((ms % 3600000) / 60000);
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
+function escapeCsvCell(value) {
+  return `"${String(value ?? '').replace(/"/g, '""')}"`;
+}
+
+function forceActionNote(record) {
+  if (!record?.forceAction) return record?.notes || '';
+  const type = record.forceType === 'system' ? 'System force logout' : 'Admin force logout';
+  const note = record.notes || record.forceNote || '';
+  return note ? `${type}: ${note}` : type;
+}
+
+function buildCsv(attendanceRecords, guestRecords) {
+  const memberRows = attendanceRecords.map((record) => [
+    'Member',
+    record.memberName || '',
+    record.capid || record.temporaryId || record.memberId || '',
+    record.role || '',
+    '',
+    formatTime(timestampToIso(record.checkInTime)),
+    formatTime(timestampToIso(record.checkOutTime)),
+    formatDuration(timestampToIso(record.checkInTime), timestampToIso(record.checkOutTime)),
+    record.status === 'checked_in' ? 'Checked In' : 'Checked Out',
+    forceActionNote(record),
+  ]);
+
+  const guestRows = guestRecords.map((record) => [
+    'Guest',
+    record.guestName || record.name || '',
+    '',
+    '',
+    record.hostName || record.host || '',
+    formatTime(timestampToIso(record.checkInTime)),
+    formatTime(timestampToIso(record.checkOutTime)),
+    formatDuration(timestampToIso(record.checkInTime), timestampToIso(record.checkOutTime)),
+    record.status === 'checked_in' ? 'Present' : 'Signed Out',
+    forceActionNote(record),
+  ]);
+
+  const rows = [CSV_HEADERS, ...memberRows, ...guestRows];
+  return rows.map((row) => row.map(escapeCsvCell).join(',')).join('\n');
+}
+
+function meetingDateInTimezone(timeZone) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone }).format(new Date());
+}
+
+function shouldSendNow() {
+  if (env('FORCE_SEND') === 'true') return true;
+
+  const timeZone = env('SCHEDULE_TIMEZONE', 'America/New_York');
+  const meetingDay = env('MEETING_DAY', 'Tuesday');
+  const sendHour = Number(env('SEND_HOUR', '22'));
+
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    weekday: 'long',
+    hour: 'numeric',
+    hour12: false,
+  }).formatToParts(new Date());
+
+  const weekday = parts.find((part) => part.type === 'weekday')?.value;
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value);
+
+  return weekday === meetingDay && hour === sendHour;
+}
+
+function initFirebaseAdmin() {
+  const projectId = env('FIREBASE_PROJECT_ID', DEFAULT_PROJECT_ID);
+  const json = env('FIREBASE_SERVICE_ACCOUNT_JSON');
+  const keyPath = env('GOOGLE_APPLICATION_CREDENTIALS');
+
+  if (json) {
+    initializeApp({
+      credential: cert(JSON.parse(json)),
+      projectId,
+    });
+    return;
+  }
+
+  if (keyPath && existsSync(keyPath)) {
+    initializeApp({
+      credential: cert(JSON.parse(readFileSync(keyPath, 'utf8'))),
+      projectId,
+    });
+    return;
+  }
+
+  initializeApp({
+    credential: applicationDefault(),
+    projectId,
+  });
+}
+
+async function fetchMeetingBundle(db, meetingDate) {
+  const meetingsSnap = await db
+    .collection('meetings')
+    .where('meetingDate', '==', meetingDate)
+    .limit(1)
+    .get();
+
+  if (meetingsSnap.empty) {
+    return { meeting: null, attendanceRecords: [], guestRecords: [] };
+  }
+
+  const meetingDoc = meetingsSnap.docs[0];
+  const meeting = { id: meetingDoc.id, ...meetingDoc.data() };
+
+  const [attendanceSnap, guestSnap] = await Promise.all([
+    db.collection('attendanceRecords').where('meetingId', '==', meeting.id).get(),
+    db.collection('guestAttendanceRecords').where('meetingId', '==', meeting.id).get(),
+  ]);
+
+  return {
+    meeting,
+    attendanceRecords: attendanceSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+    guestRecords: guestSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+  };
+}
+
+async function sendViaSmtp({ to, subject, text, csv, filename }) {
+  const host = env('SMTP_HOST');
+  const user = env('SMTP_USER');
+  const pass = env('SMTP_PASS');
+  const from = env('EMAIL_FROM');
+
+  if (!host || !from) {
+    throw new Error('SMTP_HOST and EMAIL_FROM are required for SMTP delivery.');
+  }
+
+  const transporter = nodemailer.createTransport({
+    host,
+    port: Number(env('SMTP_PORT', '587')),
+    secure: env('SMTP_SECURE') === 'true',
+    auth: user ? { user, pass } : undefined,
+  });
+
+  await transporter.sendMail({
+    from,
+    to,
+    subject,
+    text,
+    attachments: [{ filename, content: csv, contentType: 'text/csv' }],
+  });
+}
+
+async function sendViaResend({ to, subject, text, csv, filename }) {
+  const apiKey = env('RESEND_API_KEY');
+  const from = env('EMAIL_FROM');
+
+  if (!apiKey || !from) {
+    throw new Error('RESEND_API_KEY and EMAIL_FROM are required for Resend delivery.');
+  }
+
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from,
+      to,
+      subject,
+      text,
+      attachments: [
+        {
+          filename,
+          content: Buffer.from(csv, 'utf8').toString('base64'),
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Resend API error (${response.status}): ${body}`);
+  }
+}
+
+async function sendEmail({ to, subject, text, csv, filename }) {
+  if (env('RESEND_API_KEY')) {
+    await sendViaResend({ to, subject, text, csv, filename });
+    return 'resend';
+  }
+  await sendViaSmtp({ to, subject, text, csv, filename });
+  return 'smtp';
+}
+
+function buildSummaryText({ meetingDate, meeting, attendanceRecords, guestRecords, timeZone }) {
+  const checkedIn = attendanceRecords.filter((r) => r.status === 'checked_in').length;
+  const checkedOut = attendanceRecords.filter((r) => r.status === 'checked_out').length;
+  const guestsPresent = guestRecords.filter((r) => r.status === 'checked_in').length;
+  const guestsTotal = guestRecords.length;
+
+  const lines = [
+    'TN-170 Oak Ridge Composite Squadron — weekly attendance report',
+    '',
+    `Meeting date: ${meetingDate}`,
+    meeting?.meetingTitle ? `Meeting: ${meeting.meetingTitle}` : null,
+    `Timezone: ${timeZone}`,
+    '',
+    `Members checked in (still open): ${checkedIn}`,
+    `Members checked out: ${checkedOut}`,
+    `Total member attendance records: ${attendanceRecords.length}`,
+    `Guests present (still open): ${guestsPresent}`,
+    `Total guest records: ${guestsTotal}`,
+    '',
+    'CSV attachment includes member and guest rows for tonight\'s meeting.',
+  ].filter(Boolean);
+
+  return lines.join('\n');
+}
+
+async function main() {
+  if (!shouldSendNow()) {
+    console.log('Skipping send — outside configured Tuesday send window.');
+    console.log('Set FORCE_SEND=true to run immediately (manual test).');
+    return;
+  }
+
+  const recipients = parseRecipients(env('EMAIL_RECIPIENTS'));
+  if (!recipients.length) {
+    throw new Error('EMAIL_RECIPIENTS is empty. Add comma-separated addresses in GitHub Secrets.');
+  }
+
+  const timeZone = env('SCHEDULE_TIMEZONE', 'America/New_York');
+  const meetingDate = meetingDateInTimezone(timeZone);
+
+  initFirebaseAdmin();
+  const db = getFirestore();
+
+  const { meeting, attendanceRecords, guestRecords } = await fetchMeetingBundle(db, meetingDate);
+  const csv = buildCsv(attendanceRecords, guestRecords);
+  const filename = `tn170-attendance-${meetingDate}.csv`;
+  const subject = `TN-170 Attendance — ${meetingDate}`;
+  const text = buildSummaryText({
+    meetingDate,
+    meeting,
+    attendanceRecords,
+    guestRecords,
+    timeZone,
+  });
+
+  const provider = await sendEmail({
+    to: recipients,
+    subject,
+    text,
+    csv,
+    filename,
+  });
+
+  console.log(`Sent ${filename} to ${recipients.join(', ')} via ${provider}.`);
+  if (!meeting) {
+    console.log('Note: no Firestore meeting document found for this date — email contains headers only.');
+  }
+}
+
+main().catch((err) => {
+  console.error('Weekly attendance email failed:', err.message);
+  process.exit(1);
+});

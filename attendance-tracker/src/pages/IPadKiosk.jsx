@@ -22,8 +22,8 @@ export default function IPadKiosk({ attendance }) {
   } = attendance;
   const [mode, setMode] = useState('check-in');
   const { now } = useLocalTime();
-  const afterReviewTime = isAfterSignOutReviewTime(now);
-  const afterForceTime = isAfterSystemForceCheckoutTime(now);
+  const afterReviewTime = isAfterSignOutReviewTime(now, settings.meetingEnd);
+  const afterForceTime = isAfterSystemForceCheckoutTime(now, settings.meetingEnd);
   const logoSrc = `${import.meta.env.BASE_URL}squadron-logo.jpeg`;
 
   const checkedInMembers = members.filter((member) => member.status === 'checked-in');

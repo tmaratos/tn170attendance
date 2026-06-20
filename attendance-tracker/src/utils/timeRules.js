@@ -1,13 +1,20 @@
-export function isAfterSignOutReviewTime(date = new Date()) {
-  const reviewTime = new Date(date);
-  reviewTime.setHours(21, 0, 0, 0);
+export function parseMeetingClockTime(timeStr, date = new Date()) {
+  const [hour, minute] = String(timeStr || '21:30').split(':').map(Number);
+  const result = new Date(date);
+  result.setHours(hour, minute, 0, 0);
+  return result;
+}
+
+export function isAfterSignOutReviewTime(date = new Date(), meetingEnd = '21:30') {
+  const endTime = parseMeetingClockTime(meetingEnd, date);
+  const reviewTime = new Date(endTime);
+  reviewTime.setMinutes(reviewTime.getMinutes() - 30);
   return date >= reviewTime;
 }
 
-export function isAfterSystemForceCheckoutTime(date = new Date()) {
-  const forceTime = new Date(date);
-  forceTime.setHours(21, 30, 0, 0);
-  return date >= forceTime;
+/** True at or after configured meeting end (default 9:30 PM local device time). */
+export function isAfterSystemForceCheckoutTime(date = new Date(), meetingEnd = '21:30') {
+  return date >= parseMeetingClockTime(meetingEnd, date);
 }
 
 export function getMeetingStatus(settings, date = new Date()) {

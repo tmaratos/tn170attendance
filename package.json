@@ -5,6 +5,7 @@
   "scripts": {
     "seed:members": "node scripts/seed-members.js",
     "clear:pins": "node scripts/clear-all-pins.js",
+    "email:weekly": "node scripts/weekly-attendance-email.js",
     "build:app": "npm run build --prefix attendance-tracker",
     "build:pages": "npm run build:app && node scripts/sync-github-pages.js",
     "deploy": "npm run deploy:spark",
@@ -14,6 +15,7 @@
     "deploy:rules": "firebase deploy --only firestore:rules,firestore:indexes"
   },
   "dependencies": {
-    "firebase-admin": "^12.7.0"
+    "firebase-admin": "^12.7.0",
+    "nodemailer": "^6.10.1"
   }
 }

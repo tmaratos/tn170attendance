@@ -54,7 +54,7 @@ import {
   guestCheckOutFirestore,
 } from '../services/guestService';
 import { isAfterSystemForceCheckoutTime } from '../utils/timeRules';
-import { ADMIN_CAPIDS, resolveMemberAdminPermissions } from '../data/rosterData';
+import { resolveMemberAdminPermissions } from '../data/rosterData';
 
 const STORAGE_KEY = 'tn170-attendance-v2';
 const KIOSK_UI_PREFS_KEY = 'tn170-kiosk-ui-prefs';
@@ -159,6 +159,33 @@ function systemForceNote(date = new Date()) {
     minute: '2-digit',
     hour12: true,
   })} local time.`;
+}
+
+function clearStoredAdminSessions() {
+  try {
+    sessionStorage.removeItem(SENIOR_SESSION_KEY);
+    sessionStorage.removeItem(KIOSK_ADMIN_SESSION_KEY);
+    sessionStorage.removeItem('tn170-admin-auth');
+  } catch {
+    /* ignore storage errors */
+  }
+}
+
+function applyLocalForceCheckoutRecords(records, now, note) {
+  const checkOutTime = now.toISOString();
+  return records.map((record) =>
+    record.status === 'checked_in'
+      ? {
+          ...record,
+          status: 'checked_out',
+          checkOutTime,
+          forceAction: true,
+          forceType: 'system',
+          forceNote: note,
+          notes: note,
+        }
+      : record
+  );
 }
 
 function adminForceNote(date = new Date()) {
@@ -346,10 +373,17 @@ function useSparkKioskAttendance() {
     persistOfflineCache,
   ]);
 
+  const settings = useMemo(
+    () => ({ ...DEFAULT_SETTINGS, ...(remoteSettings || {}), ...localUiPrefs }),
+    [remoteSettings, localUiPrefs]
+  );
+
   useEffect(() => {
+    const meetingEnd = settings.meetingEnd || DEFAULT_SETTINGS.meetingEnd;
+
     const runSystemForceCheckout = async () => {
       const now = new Date();
-      if (!isAfterSystemForceCheckoutTime(now)) return;
+      if (!isAfterSystemForceCheckoutTime(now, meetingEnd)) return;
       if (!meeting?.id) return;
       if (meeting.systemForceCompletedDate === forceCheckoutDateKey(now)) return;
 
@@ -363,16 +397,25 @@ function useSparkKioskAttendance() {
         return;
       }
 
+      const note = systemForceNote(now);
+
       try {
         await systemForceCheckoutFirestore({
           meetingId: meeting.id,
           attendanceRecords,
           guestRecords,
-          note: systemForceNote(now),
+          note,
         });
         localStorage.setItem(forceKey, 'done');
+        clearStoredAdminSessions();
+        setKioskAdminSession(null);
         markSyncAvailable();
       } catch {
+        setAttendanceRecords((prev) => applyLocalForceCheckoutRecords(prev, now, note));
+        setGuestRecords((prev) => applyLocalForceCheckoutRecords(prev, now, note));
+        localStorage.setItem(forceKey, 'done');
+        clearStoredAdminSessions();
+        setKioskAdminSession(null);
         markSyncUnavailable();
       }
     };
@@ -380,12 +423,14 @@ function useSparkKioskAttendance() {
     runSystemForceCheckout();
     const interval = window.setInterval(runSystemForceCheckout, 30000);
     return () => window.clearInterval(interval);
-  }, [meeting, attendanceRecords, guestRecords, markSyncAvailable, markSyncUnavailable]);
-
-  const settings = useMemo(
-    () => ({ ...DEFAULT_SETTINGS, ...(remoteSettings || {}), ...localUiPrefs }),
-    [remoteSettings, localUiPrefs]
-  );
+  }, [
+    settings.meetingEnd,
+    meeting,
+    attendanceRecords,
+    guestRecords,
+    markSyncAvailable,
+    markSyncUnavailable,
+  ]);
 
   const members = useMemo(() => {
     const merged = mergeMembersWithAttendance(rawMembers, attendanceRecords);
@@ -416,7 +461,7 @@ function useSparkKioskAttendance() {
   const adminMembers = useMemo(
     () =>
       members
-        .filter((member) => member.isAdmin || ADMIN_CAPIDS.has(String(member.capidRaw || member.id)))
+        .filter((member) => member.isAdmin || member.isSeniorMember)
         .sort((a, b) => a.name.localeCompare(b.name)),
     [members]
   );
@@ -719,9 +764,11 @@ function useMockAttendance() {
   }, [state]);
 
   useEffect(() => {
+    const meetingEnd = state.settings.meetingEnd || DEFAULT_SETTINGS.meetingEnd;
+
     const runSystemForceCheckout = () => {
       const now = new Date();
-      if (!isAfterSystemForceCheckoutTime(now)) return;
+      if (!isAfterSystemForceCheckoutTime(now, meetingEnd)) return;
 
       const forceKey = `${SYSTEM_FORCE_KEY_PREFIX}-${forceCheckoutDateKey(now)}`;
       if (localStorage.getItem(forceKey) === 'done') return;
@@ -737,6 +784,7 @@ function useMockAttendance() {
         const checkOutTime = now.toISOString();
         const note = systemForceNote(now);
         localStorage.setItem(forceKey, 'done');
+        clearStoredAdminSessions();
 
         return {
           ...prev,
@@ -778,7 +826,7 @@ function useMockAttendance() {
               type: 'force-out',
             })),
             ...prev.activity,
-          ].slice(0, 50),
+          ],
         };
       });
     };
@@ -786,7 +834,7 @@ function useMockAttendance() {
     runSystemForceCheckout();
     const interval = window.setInterval(runSystemForceCheckout, 30000);
     return () => window.clearInterval(interval);
-  }, []);
+  }, [state.settings.meetingEnd]);
 
   const addActivity = useCallback((message, type) => {
     setState((prev) => ({
@@ -1008,16 +1056,22 @@ function useMockAttendance() {
         return state.settings.adminPin === adminIdOrPin;
       }
       const adminId = String(adminIdOrPin);
-      if (!ADMIN_CAPIDS.has(adminId)) return false;
+      const member = state.members.find((m) => String(m.id) === adminId);
+      const perms = resolveMemberAdminPermissions({
+        ...member,
+        capid: adminId,
+        memberId: adminId,
+      });
+      if (!perms.isAdmin) return false;
       return verifyPin(adminId, pinMaybe);
     },
-    [state.settings.adminPin, verifyPin]
+    [state.settings.adminPin, state.members, verifyPin]
   );
 
   const adminMembers = useMemo(
     () =>
       state.members
-        .filter((member) => ADMIN_CAPIDS.has(String(member.capidRaw || member.id || member.capid)))
+        .filter((member) => member.isAdmin || member.isSeniorMember)
         .sort((a, b) => a.name.localeCompare(b.name)),
     [state.members]
   );
@@ -1130,6 +1184,48 @@ function useFirebaseAttendance() {
       unsubActivity();
     };
   }, [meeting?.id]);
+
+  useEffect(() => {
+    const meetingEnd = settings.meetingEnd || DEFAULT_SETTINGS.meetingEnd;
+
+    const runSystemForceCheckout = async () => {
+      const now = new Date();
+      if (!isAfterSystemForceCheckoutTime(now, meetingEnd)) return;
+      if (!meeting?.id) return;
+      if (meeting.systemForceCompletedDate === forceCheckoutDateKey(now)) return;
+
+      const forceKey = `${SYSTEM_FORCE_KEY_PREFIX}-${forceCheckoutDateKey(now)}`;
+      if (localStorage.getItem(forceKey) === 'done') return;
+
+      const openMembers = attendanceRecords.filter((record) => record.status === 'checked_in');
+      const openGuests = guestRecords.filter((record) => record.status === 'checked_in');
+      if (!openMembers.length && !openGuests.length) {
+        localStorage.setItem(forceKey, 'done');
+        return;
+      }
+
+      const note = systemForceNote(now);
+
+      try {
+        await systemForceCheckoutFirestore({
+          meetingId: meeting.id,
+          attendanceRecords,
+          guestRecords,
+          note,
+        });
+        localStorage.setItem(forceKey, 'done');
+        clearStoredAdminSessions();
+        setSeniorSession(null);
+        saveSeniorSession(null);
+      } catch {
+        /* retry on next interval tick */
+      }
+    };
+
+    runSystemForceCheckout();
+    const interval = window.setInterval(runSystemForceCheckout, 30000);
+    return () => window.clearInterval(interval);
+  }, [settings.meetingEnd, meeting, attendanceRecords, guestRecords]);
 
   const members = useMemo(
     () => mergeMembersWithAttendance(rawMembers, attendanceRecords),
@@ -1337,7 +1433,7 @@ function useFirebaseAttendance() {
   const adminMembers = useMemo(
     () =>
       members
-        .filter((member) => member.isAdmin || ADMIN_CAPIDS.has(String(member.capidRaw || member.id)))
+        .filter((member) => member.isAdmin || member.isSeniorMember)
         .sort((a, b) => a.name.localeCompare(b.name)),
     [members]
   );
