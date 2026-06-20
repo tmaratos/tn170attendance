@@ -16,7 +16,8 @@ function KioskStatusPanel({ members, guests, now, meetingEnd }) {
   const afterForceTime = isAfterSystemForceCheckoutTime(now, meetingEnd);
   const signedInMembers = members.filter((member) => member.status === 'checked-in');
   const signedInGuests = guests.filter((guest) => guest.status === 'checked-in');
-  const signedOutMembers = members.filter((member) => member.status !== 'checked-in');
+  const signedOutMembers = members.filter((member) => member.status === 'checked-out');
+  const signedOutGuests = guests.filter((guest) => guest.status === 'checked-out');
 
   return (
     <aside className="public-status-panel">
@@ -81,15 +82,15 @@ function KioskStatusPanel({ members, guests, now, meetingEnd }) {
       ) : (
         <div className="public-status-list">
           <div className="public-status-count out">
-            <strong>{signedOutMembers.length}</strong>
-            <span>not currently present</span>
+            <strong>{signedOutMembers.length + signedOutGuests.length}</strong>
+            <span>signed out tonight</span>
           </div>
           {signedOutMembers.map((member) => (
             <div key={member.id} className="public-status-row signed-out">
               <div>
                 <strong>{member.name}</strong>
                 <span>
-                  {member.grade} - {member.status === 'checked-out' ? 'Checked out' : 'Not present'}
+                  {member.grade} - {formatTime(member.checkOutTime)}
                 </span>
                 {member.forceAction && member.forceNote && (
                   <em className={member.forceType === 'system' ? 'force-system' : 'force-admin'}>
@@ -99,6 +100,28 @@ function KioskStatusPanel({ members, guests, now, meetingEnd }) {
               </div>
             </div>
           ))}
+          {signedOutGuests.length > 0 && <div className="public-status-section-label">Guests</div>}
+          {signedOutGuests.map((guest) => (
+            <div
+              key={guest.id}
+              className={`public-status-row signed-out guest ${guest.isOpenHouse ? 'open-house' : ''}`}
+            >
+              <div>
+                <strong>{guest.name}</strong>
+                <span>
+                  {guest.isOpenHouse ? 'Open House' : 'Guest'} - {formatTime(guest.checkOutTime)}
+                </span>
+                {guest.forceAction && guest.forceNote && (
+                  <em className={guest.forceType === 'system' ? 'force-system' : 'force-admin'}>
+                    {guest.forceType === 'system' ? 'System force logout' : 'Admin force logout'}: {guest.forceNote}
+                  </em>
+                )}
+              </div>
+            </div>
+          ))}
+          {signedOutMembers.length === 0 && signedOutGuests.length === 0 && (
+            <div className="public-status-empty">No one has signed out yet.</div>
+          )}
         </div>
       )}
     </aside>
