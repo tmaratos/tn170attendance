@@ -39,7 +39,9 @@ npm run force:checkout
 
 ## Weekly attendance email (10 PM)
 
-See [WEEKLY_EMAIL.md](./WEEKLY_EMAIL.md) for full email setup, recipients, and Cloudflare notes.
+See [WEEKLY_EMAIL.md](./WEEKLY_EMAIL.md) for full email setup, recipients, Discord backup, and Cloudflare notes.
+
+At 10 PM Tuesday the workflow emails the attendance CSV and, when configured, posts the same file to Discord via `DISCORD_WEBHOOK_URL`.
 
 ---
 
@@ -50,6 +52,10 @@ See [WEEKLY_EMAIL.md](./WEEKLY_EMAIL.md) for full email setup, recipients, and C
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | Force checkout + Email | Full JSON for a Firebase service account with Firestore read/write |
 
 Email workflow additionally needs transport secrets — see [WEEKLY_EMAIL.md](./WEEKLY_EMAIL.md).
+
+| Secret | Required by | Description |
+| --- | --- | --- |
+| `DISCORD_WEBHOOK_URL` | Email (optional) | Discord webhook for CSV backup post |
 
 ### Service account permissions
 

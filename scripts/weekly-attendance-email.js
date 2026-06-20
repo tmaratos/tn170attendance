@@ -16,6 +16,7 @@
  *   MEETING_DAY (default Tuesday)
  *   SEND_HOUR (default 22 — 10 PM local)
  *   FORCE_SEND=true — skip schedule gate (manual runs)
+ *   DISCORD_WEBHOOK_URL — posts CSV to Discord channel as backup (skipped if unset)
  */
 
 import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
@@ -263,6 +264,49 @@ async function sendEmail({ to, subject, text, csv, filename }) {
   return 'smtp';
 }
 
+async function postToDiscord({ csv, filename, meetingDate, meeting, attendanceRecords, guestRecords, timeZone }) {
+  const webhookUrl = env('DISCORD_WEBHOOK_URL');
+  if (!webhookUrl) {
+    console.warn('DISCORD_WEBHOOK_URL not set — skipping Discord backup post.');
+    return false;
+  }
+
+  const checkedIn = attendanceRecords.filter((r) => r.status === 'checked_in').length;
+  const checkedOut = attendanceRecords.filter((r) => r.status === 'checked_out').length;
+  const guestsTotal = guestRecords.length;
+
+  const embed = {
+    title: `TN-170 Attendance — ${meetingDate}`,
+    description: meeting?.meetingTitle || 'Weekly meeting attendance report',
+    color: 0x1e3a5f,
+    fields: [
+      { name: 'Members (checked out)', value: String(checkedOut), inline: true },
+      { name: 'Members (still open)', value: String(checkedIn), inline: true },
+      { name: 'Guest records', value: String(guestsTotal), inline: true },
+      { name: 'Timezone', value: timeZone, inline: false },
+    ],
+    footer: { text: 'GitHub Actions weekly backup' },
+  };
+
+  const form = new FormData();
+  form.append(
+    'payload_json',
+    JSON.stringify({
+      content: 'Weekly attendance CSV backup',
+      embeds: [embed],
+    }),
+  );
+  form.append('files[0]', new Blob([csv], { type: 'text/csv' }), filename);
+
+  const response = await fetch(webhookUrl, { method: 'POST', body: form });
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Discord webhook error (${response.status}): ${body.slice(0, 200)}`);
+  }
+
+  return true;
+}
+
 function buildSummaryText({ meetingDate, meeting, attendanceRecords, guestRecords, timeZone }) {
   const checkedIn = attendanceRecords.filter((r) => r.status === 'checked_in').length;
   const checkedOut = attendanceRecords.filter((r) => r.status === 'checked_out').length;
@@ -329,6 +373,23 @@ async function main() {
   console.log(`Sent ${filename} to ${recipients.join(', ')} via ${provider}.`);
   if (!meeting) {
     console.log('Note: no Firestore meeting document found for this date — email contains headers only.');
+  }
+
+  try {
+    const posted = await postToDiscord({
+      csv,
+      filename,
+      meetingDate,
+      meeting,
+      attendanceRecords,
+      guestRecords,
+      timeZone,
+    });
+    if (posted) {
+      console.log(`Posted ${filename} to Discord backup channel.`);
+    }
+  } catch (err) {
+    console.error('Discord backup post failed (email was sent):', err.message);
   }
 }
 

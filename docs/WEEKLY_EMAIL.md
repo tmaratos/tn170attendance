@@ -8,6 +8,7 @@ See also [GITHUB_AUTOMATION.md](./GITHUB_AUTOMATION.md) for the 9:30 PM force-ch
 
 - **When:** Every **Tuesday at 10:00 PM** in `America/New_York` (Oak Ridge, TN — Eastern Time)
 - **What:** Fetches tonight's meeting from Firestore, builds a CSV (same columns as in-app export), and emails it to configured recipients
+- **Backup:** The same CSV is posted to the TN-170 Discord attendance channel when `DISCORD_WEBHOOK_URL` is configured
 - **Workflow:** `.github/workflows/weekly-attendance-email.yml`
 - **Script:** `scripts/weekly-attendance-email.js`
 
@@ -65,6 +66,20 @@ If `RESEND_API_KEY` is set, Resend is used; otherwise SMTP is used.
 | `SMTP_USER` | SMTP username |
 | `SMTP_PASS` | SMTP password or app password |
 | `SMTP_SECURE` | Optional: `true` for port 465 |
+
+### Discord backup (optional, alongside email)
+
+Posts the same CSV to the TN-170 Discord attendance channel (`1517911401224736971`) as a file attachment with a summary embed. Email remains the primary delivery; Discord is skipped with a log warning if the secret is not set.
+
+1. In Discord: open the TN-170 server → **Server Settings** → **Integrations** → **Webhooks** → **New Webhook**
+2. Select the attendance channel, name the webhook (e.g. `TN-170 Attendance Backup`), and **Copy Webhook URL**
+3. In GitHub: **Settings → Secrets and variables → Actions → New repository secret**
+
+| Secret | Description |
+| --- | --- |
+| `DISCORD_WEBHOOK_URL` | Full webhook URL from Discord (do not commit or log) |
+
+If the webhook post fails after email succeeds, the workflow logs an error but does not fail the job.
 
 ---
 
