@@ -551,6 +551,8 @@ function useSparkKioskAttendance() {
       try {
         await guestOpenHouseCheckInFirestore({
           guestName: guestData.name,
+          email: guestData.email,
+          phone: guestData.phone,
           visitReason: guestData.visitReason || null,
           guestId: guestData.guestId || null,
           meetingId: meeting?.id,
@@ -979,6 +981,8 @@ function useMockAttendance() {
           signInMode: isOpenHouse ? 'open_house' : 'hosted',
           isOpenHouse: !!isOpenHouse,
           visitReason: guestData.visitReason || null,
+          email: isOpenHouse ? guestData.email || null : null,
+          phone: isOpenHouse ? guestData.phone || null : null,
           checkInTime: now,
           checkOutTime: null,
           status: 'checked-in',
@@ -1346,6 +1350,8 @@ function useFirebaseAttendance() {
   const checkInOpenHouseGuest = useCallback(async (guestData) => {
     return guestOpenHouseCheckInFirestore({
       guestName: guestData.name,
+      email: guestData.email,
+      phone: guestData.phone,
       visitReason: guestData.visitReason || null,
       guestId: guestData.guestId || null,
     });

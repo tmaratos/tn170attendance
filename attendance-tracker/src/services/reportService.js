@@ -1,4 +1,5 @@
 import { doc, getDoc } from 'firebase/firestore';
+import { formatGuestPhone } from './guestService';
 import { callFunction, getDb, isSparkKioskMode } from './firebase';
 import { verifyMemberPinInFirestore } from './kioskPin';
 import { getCallableError } from './errors';
@@ -11,6 +12,8 @@ const CSV_HEADERS = [
   'CAPID/Pending CAPID',
   'Role',
   'Hosted By',
+  'Email',
+  'Phone',
   'Check-In',
   'Check-Out',
   'Duration',
@@ -54,6 +57,8 @@ export function buildMemberExportRow(member) {
     memberCapidLabel(member),
     member.role || '',
     '',
+    '',
+    '',
     formatTime(member.checkInTime),
     formatTime(member.checkOutTime),
     formatDuration(member.checkInTime, member.checkOutTime),
@@ -62,13 +67,20 @@ export function buildMemberExportRow(member) {
   ];
 }
 
+function guestHostedBy(guest) {
+  if (guest.isOpenHouse) return 'Open House';
+  return guest.hostName || guest.host || '';
+}
+
 export function buildGuestExportRow(guest) {
   return [
     'Guest',
     guest.name,
     '',
     '',
-    guest.hostName || guest.host || '',
+    guestHostedBy(guest),
+    guest.email || '',
+    guest.phone ? formatGuestPhone(guest.phone) : '',
     formatTime(guest.checkInTime),
     formatTime(guest.checkOutTime),
     formatDuration(guest.checkInTime, guest.checkOutTime),

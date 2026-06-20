@@ -3,6 +3,11 @@ import { Link } from 'react-router-dom';
 import { formatDateTime } from '../data/mockData';
 import { getCallableError } from '../services/errors';
 import { useLocalTime } from '../hooks/useLocalTime';
+import {
+  formatGuestPhone,
+  isValidGuestEmail,
+  isValidGuestPhone,
+} from '../services/guestService';
 
 const STEPS = ['Guest', 'Confirm', 'Success'];
 
@@ -10,7 +15,10 @@ export default function OpenHouseSignIn({ attendance }) {
   const { checkInOpenHouseGuest } = attendance;
   const [step, setStep] = useState(0);
   const [guestName, setGuestName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [visitReason, setVisitReason] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [successTime, setSuccessTime] = useState(null);
@@ -19,20 +27,50 @@ export default function OpenHouseSignIn({ attendance }) {
   const reset = () => {
     setStep(0);
     setGuestName('');
+    setEmail('');
+    setPhone('');
     setVisitReason('');
+    setFieldErrors({});
     setError('');
     setLoading(false);
     setSuccessTime(null);
   };
 
+  const validateStepZero = () => {
+    const nextErrors = {};
+    if (!guestName.trim()) {
+      nextErrors.name = 'Name is required.';
+    }
+    if (!email.trim()) {
+      nextErrors.email = 'Email is required.';
+    } else if (!isValidGuestEmail(email)) {
+      nextErrors.email = 'Enter a valid email address.';
+    }
+    if (!phone.trim()) {
+      nextErrors.phone = 'Phone number is required.';
+    } else if (!isValidGuestPhone(phone)) {
+      nextErrors.phone = 'Enter a valid 10-digit phone number.';
+    }
+    setFieldErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const canContinue = guestName.trim()
+    && email.trim()
+    && phone.trim()
+    && isValidGuestEmail(email)
+    && isValidGuestPhone(phone);
+
   const confirmSignIn = async () => {
-    if (!guestName.trim()) return;
+    if (!canContinue) return;
     setLoading(true);
     setError('');
 
     try {
       await checkInOpenHouseGuest({
         name: guestName.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
         visitReason: visitReason.trim() || null,
       });
       setSuccessTime(new Date().toISOString());
@@ -44,13 +82,19 @@ export default function OpenHouseSignIn({ attendance }) {
     }
   };
 
+  const goToConfirm = () => {
+    if (!validateStepZero()) return;
+    setError('');
+    setStep(1);
+  };
+
   const handleFlowEnter = (event) => {
     if (event.key !== 'Enter') return;
     if (event.target.closest?.('button,a,textarea')) return;
     event.preventDefault();
 
-    if (step === 0 && guestName.trim()) {
-      setStep(1);
+    if (step === 0 && canContinue) {
+      goToConfirm();
       return;
     }
     if (step === 1 && !loading) {
@@ -90,16 +134,60 @@ export default function OpenHouseSignIn({ attendance }) {
             </div>
 
             {step === 0 && (
-              <div className="public-flow-section">
+              <div className="public-flow-section open-house-form">
                 <label htmlFor="open-house-guest-name">Your name</label>
                 <input
                   id="open-house-guest-name"
-                  className="public-flow-search"
+                  className={`public-flow-search${fieldErrors.name ? ' invalid' : ''}`}
                   value={guestName}
-                  onChange={(event) => setGuestName(event.target.value)}
+                  onChange={(event) => {
+                    setGuestName(event.target.value);
+                    if (fieldErrors.name) {
+                      setFieldErrors((prev) => ({ ...prev, name: undefined }));
+                    }
+                  }}
                   autoFocus
+                  autoComplete="name"
                   placeholder="First and last name"
                 />
+                {fieldErrors.name && <p className="public-flow-field-error">{fieldErrors.name}</p>}
+
+                <label htmlFor="open-house-email">Email</label>
+                <input
+                  id="open-house-email"
+                  type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  className={`public-flow-search${fieldErrors.email ? ' invalid' : ''}`}
+                  value={email}
+                  onChange={(event) => {
+                    setEmail(event.target.value);
+                    if (fieldErrors.email) {
+                      setFieldErrors((prev) => ({ ...prev, email: undefined }));
+                    }
+                  }}
+                  placeholder="you@example.com"
+                />
+                {fieldErrors.email && <p className="public-flow-field-error">{fieldErrors.email}</p>}
+
+                <label htmlFor="open-house-phone">Phone number</label>
+                <input
+                  id="open-house-phone"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  className={`public-flow-search${fieldErrors.phone ? ' invalid' : ''}`}
+                  value={phone}
+                  onChange={(event) => {
+                    setPhone(event.target.value);
+                    if (fieldErrors.phone) {
+                      setFieldErrors((prev) => ({ ...prev, phone: undefined }));
+                    }
+                  }}
+                  placeholder="(555) 555-5555"
+                />
+                {fieldErrors.phone && <p className="public-flow-field-error">{fieldErrors.phone}</p>}
+
                 <label htmlFor="open-house-reason">Organization or reason for visit (optional)</label>
                 <input
                   id="open-house-reason"
@@ -111,8 +199,8 @@ export default function OpenHouseSignIn({ attendance }) {
                 <button
                   type="button"
                   className="public-confirm-button open-house"
-                  onClick={() => setStep(1)}
-                  disabled={!guestName.trim()}
+                  onClick={goToConfirm}
+                  disabled={!canContinue}
                 >
                   Continue
                 </button>
@@ -131,6 +219,10 @@ export default function OpenHouseSignIn({ attendance }) {
                   <p>Open House visitor</p>
                   {visitReason.trim() && <p className="open-house-reason-display">{visitReason.trim()}</p>}
                   <dl>
+                    <dt>Email</dt>
+                    <dd>{email.trim()}</dd>
+                    <dt>Phone</dt>
+                    <dd>{formatGuestPhone(phone)}</dd>
                     <dt>Date</dt>
                     <dd>{new Date().toLocaleDateString('en-US')}</dd>
                     <dt>Time</dt>

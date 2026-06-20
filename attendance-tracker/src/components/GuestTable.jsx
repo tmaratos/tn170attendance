@@ -1,5 +1,6 @@
 import { formatTime } from '../data/mockData';
 import { useLocalTime } from '../hooks/useLocalTime';
+import { formatGuestPhone } from '../services/guestService';
 import { isAfterSignOutReviewTime, isAfterSystemForceCheckoutTime } from '../utils/timeRules';
 
 export default function GuestTable({ guests, compact = false, meetingEnd }) {
@@ -33,18 +34,25 @@ export default function GuestTable({ guests, compact = false, meetingEnd }) {
                 <td>
                   <div className="guest-cell">
                     <div className="avatar guest-avatar">{guest.name.slice(0, 1)}</div>
-                    <span className="member-name">{guest.name}</span>
-                    {needsReview && (
-                      <span className="review-warning">Still checked in after 9:00 PM</span>
-                    )}
-                    {forceDue && (
-                      <span className="force-note due">System force checkout due at 9:30 PM.</span>
-                    )}
-                    {guest.forceAction && guest.forceNote && (
-                      <span className={`force-note ${forceType}`}>
-                        {forceType === 'system' ? 'System force logout' : 'Admin force logout'}: {guest.forceNote}
-                      </span>
-                    )}
+                    <div className="guest-cell-details">
+                      <span className="member-name">{guest.name}</span>
+                      {guest.isOpenHouse && (guest.email || guest.phone) && (
+                        <span className="guest-contact-info">
+                          {[guest.email, guest.phone ? formatGuestPhone(guest.phone) : null].filter(Boolean).join(' · ')}
+                        </span>
+                      )}
+                      {needsReview && (
+                        <span className="review-warning">Still checked in after 9:00 PM</span>
+                      )}
+                      {forceDue && (
+                        <span className="force-note due">System force checkout due at 9:30 PM.</span>
+                      )}
+                      {guest.forceAction && guest.forceNote && (
+                        <span className={`force-note ${forceType}`}>
+                          {forceType === 'system' ? 'System force logout' : 'Admin force logout'}: {guest.forceNote}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </td>
                 <td>{guest.isOpenHouse ? 'Open House' : guest.hostName || '—'}</td>

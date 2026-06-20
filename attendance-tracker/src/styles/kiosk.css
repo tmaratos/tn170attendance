@@ -1768,6 +1768,35 @@
   font-weight: 700;
 }
 
+.open-house-flow .open-house-form label:not(:first-of-type) {
+  margin-top: 14px;
+}
+
+.open-house-flow .public-flow-search.invalid {
+  border-color: rgba(248, 113, 113, 0.85);
+}
+
+.public-flow-field-error {
+  margin: -4px 0 10px;
+  color: #fecaca;
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.guest-cell-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.guest-contact-info {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.82rem;
+  font-weight: 700;
+  word-break: break-word;
+}
+
 .public-success-icon.open-house {
   background: rgba(124, 58, 237, 0.22);
   color: #c4b5fd;

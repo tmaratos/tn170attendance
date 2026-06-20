@@ -25,6 +25,35 @@ function normalizeName(name) {
   return name.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+function normalizeEmail(email) {
+  return email.trim().toLowerCase();
+}
+
+function normalizePhone(phone) {
+  return phone.replace(/\D/g, '');
+}
+
+export function isValidGuestEmail(email) {
+  if (!email?.trim()) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(email));
+}
+
+export function isValidGuestPhone(phone) {
+  const digits = normalizePhone(phone || '');
+  return digits.length === 10 || (digits.length === 11 && digits.startsWith('1'));
+}
+
+export function formatGuestPhone(phone) {
+  const digits = normalizePhone(phone || '');
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+  return phone || '';
+}
+
 function normalizeFirestoreError(err) {
   if (err?.code === 'permission-denied') return new Error(SYNC_UNAVAILABLE);
   return err instanceof Error ? err : new Error(err?.message || SYNC_UNAVAILABLE);
@@ -72,6 +101,8 @@ function mapGuestAttendance(docSnap) {
     signInMode: data.signInMode || (isOpenHouse ? 'open_house' : 'hosted'),
     isOpenHouse,
     visitReason: data.visitReason || null,
+    email: data.email || null,
+    phone: data.phone || null,
     status: data.status,
     checkInTime: timestampToIso(data.checkInTime),
     checkOutTime: timestampToIso(data.checkOutTime),
@@ -292,6 +323,8 @@ export async function guestCheckInFirestore({
 
 export async function guestOpenHouseCheckInFirestore({
   guestName,
+  email,
+  phone,
   visitReason = null,
   guestId = null,
   meetingId = null,
@@ -302,6 +335,15 @@ export async function guestOpenHouseCheckInFirestore({
   if (!guestName?.trim()) {
     throw new Error('Guest name is required.');
   }
+  if (!isValidGuestEmail(email)) {
+    throw new Error('A valid email address is required.');
+  }
+  if (!isValidGuestPhone(phone)) {
+    throw new Error('A valid 10-digit phone number is required.');
+  }
+
+  const normalizedEmail = normalizeEmail(email);
+  const normalizedPhone = normalizePhone(phone);
 
   try {
     const meeting = meetingId ? { id: meetingId } : await ensureActiveMeeting();
@@ -333,6 +375,8 @@ export async function guestOpenHouseCheckInFirestore({
       await updateDoc(guestRef, {
         fullName: trimmedName,
         normalizedName: normalized,
+        email: normalizedEmail,
+        phone: normalizedPhone,
         lastVisitDate: today,
         totalVisits: (guestDoc.totalVisits || 0) + 1,
         active: true,
@@ -344,6 +388,8 @@ export async function guestOpenHouseCheckInFirestore({
         guestId: guestRef.id,
         fullName: trimmedName,
         normalizedName: normalized,
+        email: normalizedEmail,
+        phone: normalizedPhone,
         firstVisitDate: today,
         lastVisitDate: today,
         totalVisits: 1,
@@ -361,6 +407,8 @@ export async function guestOpenHouseCheckInFirestore({
       signInMode: 'open_house',
       isOpenHouse: true,
       visitReason: visitReason?.trim() || null,
+      email: normalizedEmail,
+      phone: normalizedPhone,
       status: 'checked_in',
       checkInTime: now,
       checkOutTime: null,
@@ -378,6 +426,8 @@ export async function guestOpenHouseCheckInFirestore({
         guestId: guestRef.id,
         signInMode: 'open_house',
         visitReason: visitReason?.trim() || null,
+        email: normalizedEmail,
+        phone: normalizedPhone,
       },
     });
 
@@ -389,7 +439,11 @@ export async function guestOpenHouseCheckInFirestore({
       signInMode: 'open_house',
     };
   } catch (err) {
-    if (err.message?.includes('Guest name')) {
+    if (
+      err.message?.includes('Guest name')
+      || err.message?.includes('email')
+      || err.message?.includes('phone')
+    ) {
       throw err;
     }
     throw normalizeFirestoreError(err);

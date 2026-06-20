@@ -31,6 +31,8 @@ const CSV_HEADERS = [
   'CAPID/Pending CAPID',
   'Role',
   'Hosted By',
+  'Email',
+  'Phone',
   'Check-In',
   'Check-Out',
   'Duration',
@@ -149,6 +151,25 @@ function embedDescription(meetingTitle, meetingDate) {
   return meetingTitle;
 }
 
+function formatGuestPhoneForCsv(phone) {
+  if (!phone) return '';
+  const digits = String(phone).replace(/\D/g, '');
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+  return String(phone);
+}
+
+function guestHostedBy(record) {
+  if (record.isOpenHouse === true || record.signInMode === 'open_house') {
+    return 'Open House';
+  }
+  return record.hostName || record.host || '';
+}
+
 function forceActionNote(record) {
   if (!record?.forceAction) return record?.notes || '';
   const type = record.forceType === 'system' ? 'System force logout' : 'Admin force logout';
@@ -163,6 +184,8 @@ function buildCsv(attendanceRecords, guestRecords) {
     record.capid || record.temporaryId || record.memberId || '',
     record.role || '',
     '',
+    '',
+    '',
     formatTime(timestampToIso(record.checkInTime)),
     formatTime(timestampToIso(record.checkOutTime)),
     formatDuration(timestampToIso(record.checkInTime), timestampToIso(record.checkOutTime)),
@@ -175,7 +198,9 @@ function buildCsv(attendanceRecords, guestRecords) {
     record.guestName || record.name || '',
     '',
     '',
-    record.hostName || record.host || '',
+    guestHostedBy(record),
+    record.email || '',
+    formatGuestPhoneForCsv(record.phone),
     formatTime(timestampToIso(record.checkInTime)),
     formatTime(timestampToIso(record.checkOutTime)),
     formatDuration(timestampToIso(record.checkInTime), timestampToIso(record.checkOutTime)),
