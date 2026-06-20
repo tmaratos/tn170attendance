@@ -362,21 +362,28 @@ async function main() {
     timeZone,
   });
 
-  const provider = await sendEmail({
-    to: recipients,
-    subject,
-    text,
-    csv,
-    filename,
-  });
+  let emailError = null;
+  try {
+    const provider = await sendEmail({
+      to: recipients,
+      subject,
+      text,
+      csv,
+      filename,
+    });
+    console.log(`Sent ${filename} to ${recipients.join(', ')} via ${provider}.`);
+  } catch (err) {
+    emailError = err;
+    console.error('Email delivery failed:', err.message);
+  }
 
-  console.log(`Sent ${filename} to ${recipients.join(', ')} via ${provider}.`);
   if (!meeting) {
     console.log('Note: no Firestore meeting document found for this date — email contains headers only.');
   }
 
+  let discordPosted = false;
   try {
-    const posted = await postToDiscord({
+    discordPosted = await postToDiscord({
       csv,
       filename,
       meetingDate,
@@ -385,11 +392,18 @@ async function main() {
       guestRecords,
       timeZone,
     });
-    if (posted) {
+    if (discordPosted) {
       console.log(`Posted ${filename} to Discord backup channel.`);
     }
   } catch (err) {
-    console.error('Discord backup post failed (email was sent):', err.message);
+    console.error('Discord backup post failed:', err.message);
+  }
+
+  if (emailError && !discordPosted) {
+    throw emailError;
+  }
+  if (emailError && discordPosted) {
+    console.warn('Email failed but Discord backup succeeded — job marked successful.');
   }
 }
 
