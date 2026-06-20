@@ -277,9 +277,7 @@ async function postToDiscord({ csv, filename, meetingDate, meeting, attendanceRe
 
   const embed = {
     title: `TN-170 Attendance — ${meetingDate}`,
-    description: meeting?.meetingTitle
-      ? `${meeting.meetingTitle} — ${meetingDate}`
-      : `Squadron Meeting — ${meetingDate}`,
+    description: meeting?.meetingTitle || `Squadron Meeting — ${meetingDate}`,
     color: 0x1e3a5f,
     fields: [
       { name: 'Members (checked out)', value: String(checkedOut), inline: true },
