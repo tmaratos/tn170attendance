@@ -1,4 +1,14 @@
-# TN-170 Attendance Tracker - Firebase Deployment
+# TN-170 Attendance Tracker — Deployment
+
+## Live site
+
+The kiosk runs on **GitHub Pages**:
+
+**https://tmaratos.github.io/tn170attendance/**
+
+Firebase is the **Firestore backend only** (roster, rules, indexes). It is **not** the website host.
+
+**Do not** point GoDaddy or `tncap.us` DNS at the kiosk app. Cloudflare on `tncap.us` is for **email DNS only** (see [WEEKLY_EMAIL.md](./WEEKLY_EMAIL.md)). If you want a custom domain on the kiosk later, configure it as a [GitHub Pages custom domain](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site) — not Firebase Hosting or GoDaddy web forwarding.
 
 ## Permanent Free Policy
 
@@ -7,23 +17,83 @@ This project must stay on the Firebase Spark plan: $0/month and no billing card.
 | Service | Spark support | TN-170 usage |
 | --- | --- | --- |
 | Firestore | Yes | Read-only member roster from clients |
-| Hosting | Yes | Static website hosting |
+| GitHub Pages | Yes (free) | **Primary** static app host |
+| Firebase Hosting | Not used | App is on GitHub Pages, not Firebase Hosting |
 | Cloud Functions | No | Code remains in the repo only; it is blocked from deploy |
 | Firebase Storage | Not used | Avoided to keep the project simple and free |
 | Firebase Auth | Not used | PIN flow is handled by the kiosk app |
 
-The repo is configured so `npm run deploy` uses the Spark-only deploy path. Functions are intentionally not listed in `firebase.json`, and `npm run deploy:functions` exits with a billing warning.
+The repo is configured so `npm run deploy` deploys **Firestore rules and indexes only**. Functions are intentionally not listed in `firebase.json`, and `npm run deploy:functions` exits with a billing warning. `npm run deploy:hosting` is blocked — use `npm run build:pages` instead.
 
-## Native Browser Setup
+## Deploy the frontend (GitHub Pages)
 
-The Firebase console can be used for the free project setup:
+From the repo root:
 
-1. Confirm the project is on Spark: Project overview -> Billing/Usage should show Spark or no-cost.
+```powershell
+npm run build:pages
+```
+
+This builds the Vite app and copies `attendance-tracker/dist` to the repo root (`index.html`, `404.html`, `assets/`, etc.) via `scripts/sync-github-pages.js`.
+
+Then commit and push to `main`. GitHub Pages serves the root of the repository.
+
+Verify locally before pushing:
+
+```powershell
+cd attendance-tracker
+npm run build
+npm run preview
+```
+
+The kiosk should show the local clock, kiosk mode, roster search, PIN flow, guest flow, and admin routes without any paid Firebase services.
+
+## Deploy Firestore rules and indexes
+
+From the repo root:
+
+```powershell
+npm run deploy
+```
+
+That command is equivalent to:
+
+```powershell
+npm run deploy:spark
+```
+
+Which runs:
+
+```powershell
+firebase deploy --only firestore:rules,firestore:indexes
+```
+
+If Firebase CLI auth expires, reauthenticate:
+
+```powershell
+firebase login --reauth
+```
+
+Then rerun:
+
+```powershell
+npm run deploy
+```
+
+Rules-only deploy (no indexes change):
+
+```powershell
+npm run deploy:rules
+```
+
+## Native Browser Setup (Firebase console)
+
+Use the Firebase console for the free Firestore project setup:
+
+1. Confirm the project is on Spark: Project overview → Billing/Usage should show Spark or no-cost.
 2. Create/enable Cloud Firestore in production mode.
 3. Open Firestore and add/import the roster data.
-4. Open Hosting and click Get started.
 
-Firebase Hosting does not upload a built website directly from the browser. The Hosting setup screen gives Firebase CLI commands. That is normal and still free as long as only Hosting and Firestore rules/indexes are deployed.
+You do **not** need Firebase Hosting for this project. Skip Hosting setup in the console unless you are exploring unrelated options.
 
 Do not click Upgrade, Blaze, enable billing, or deploy Functions.
 
@@ -66,60 +136,19 @@ The JSON contains:
 
 Firestore rules keep client writes blocked for shared cloud collections. Roster changes should be made by an admin import/seed step, not by the public kiosk UI.
 
-## Free Deploy Command
-
-From the repo root:
-
-```powershell
-npm run deploy
-```
-
-That command is equivalent to:
-
-```powershell
-npm run deploy:spark
-```
-
-Which builds the app and deploys only:
-
-```powershell
-firebase deploy --only firestore:rules,firestore:indexes,hosting
-```
-
-If Firebase CLI auth expires, reauthenticate:
-
-```powershell
-firebase login --reauth
-```
-
-Then rerun:
-
-```powershell
-npm run deploy
-```
-
 ## Commands to Avoid
 
 Do not run:
 
 ```powershell
 firebase deploy --only functions
+npm run deploy:hosting
 ```
 
-Do not run a bare Firebase deploy from an older checkout that still includes Functions:
+Do not run a bare Firebase deploy from an older checkout that still includes Functions or Hosting:
 
 ```powershell
 firebase deploy
 ```
 
-In this repo version, `firebase.json` no longer includes Functions, but the safest habit is still to use `npm run deploy`.
-
-## Verify Locally
-
-```powershell
-cd C:\tn170attendance\attendance-tracker
-npm run build
-npm run preview
-```
-
-The kiosk should show the local clock, kiosk mode, roster search, PIN flow, guest flow, and admin routes without any paid Firebase services.
+In this repo version, `firebase.json` no longer includes Functions or Hosting, but the safest habit is still to use `npm run deploy` for Firestore backend changes and `npm run build:pages` for frontend changes.

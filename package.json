@@ -2,6 +2,7 @@
   "name": "tn170-attendance",
   "private": true,
   "type": "module",
+  "//": "build:pages = GitHub Pages frontend; deploy:spark = Firestore rules/indexes only (not hosting)",
   "scripts": {
     "seed:members": "node scripts/seed-members.js",
     "clear:pins": "node scripts/clear-all-pins.js",
@@ -10,8 +11,8 @@
     "build:app": "npm run build --prefix attendance-tracker",
     "build:pages": "npm run build:app && node scripts/sync-github-pages.js",
     "deploy": "npm run deploy:spark",
-    "deploy:spark": "npm run build:app && firebase deploy --only firestore:rules,firestore:indexes,hosting",
-    "deploy:hosting": "npm run build:app && firebase deploy --only hosting",
+    "deploy:spark": "firebase deploy --only firestore:rules,firestore:indexes",
+    "deploy:hosting": "node -e \"console.error('App is hosted on GitHub Pages, not Firebase Hosting. Run: npm run build:pages, then commit and push root assets.'); process.exit(1)\"",
     "deploy:functions": "node -e \"console.error('Cloud Functions require Firebase Blaze billing. TN-170 is Spark-only, so this deploy is blocked.'); process.exit(1)\"",
     "deploy:rules": "firebase deploy --only firestore:rules,firestore:indexes"
   },

@@ -2,6 +2,8 @@
 
 Automated attendance CSV emails run via **GitHub Actions** — no Firebase Cloud Functions or Blaze billing required.
 
+**Note:** Cloudflare on `tncap.us` is for email DNS only. The attendance kiosk lives at [https://tmaratos.github.io/tn170attendance/](https://tmaratos.github.io/tn170attendance/), not on `tncap.us`.
+
 See also [GITHUB_AUTOMATION.md](./GITHUB_AUTOMATION.md) for the 9:30 PM force-checkout job.
 
 ## Schedule
