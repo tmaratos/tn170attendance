@@ -71,7 +71,7 @@ If `RESEND_API_KEY` is set, Resend is used; otherwise SMTP is used.
 
 ### Discord backup (optional, alongside email)
 
-Posts the same CSV to the TN-170 Discord attendance channel (`1517911401224736971`) as a file attachment with a summary embed. Email remains the primary delivery; Discord is skipped with a log warning if the secret is not set.
+Posts the same CSV to the TN-170 Discord attendance channel (`1517911401224736971`) as a **ZIP attachment** (avoids Discord's inline CSV preview) with a summary embed. Email remains the primary delivery; Discord is skipped with a log warning if the secret is not set.
 
 1. In Discord: open the TN-170 server → **Server Settings** → **Integrations** → **Webhooks** → **New Webhook**
 2. Select the attendance channel, name the webhook (e.g. `TN-170 Attendance Backup`), and **Copy Webhook URL**

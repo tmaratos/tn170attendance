@@ -80,6 +80,75 @@ function escapeCsvCell(value) {
   return `"${String(value ?? '').replace(/"/g, '""')}"`;
 }
 
+let crc32Table;
+function crc32(buffer) {
+  if (!crc32Table) {
+    crc32Table = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) {
+      let c = i;
+      for (let j = 0; j < 8; j++) {
+        c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
+      }
+      crc32Table[i] = c;
+    }
+  }
+
+  let crc = 0xffffffff;
+  for (let i = 0; i < buffer.length; i++) {
+    crc = (crc >>> 8) ^ crc32Table[(crc ^ buffer[i]) & 0xff];
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+/** Store-only ZIP — Discord inlines text/csv attachments but not application/zip. */
+function zipSingleFile(filename, content) {
+  const nameBuffer = Buffer.from(filename, 'utf8');
+  const dataBuffer = Buffer.from(content, 'utf8');
+  const checksum = crc32(dataBuffer);
+  const size = dataBuffer.length;
+
+  const localHeader = Buffer.alloc(30 + nameBuffer.length);
+  localHeader.writeUInt32LE(0x04034b50, 0);
+  localHeader.writeUInt16LE(20, 4);
+  localHeader.writeUInt16LE(0, 8);
+  localHeader.writeUInt32LE(checksum, 14);
+  localHeader.writeUInt32LE(size, 18);
+  localHeader.writeUInt32LE(size, 22);
+  localHeader.writeUInt16LE(nameBuffer.length, 26);
+  nameBuffer.copy(localHeader, 30);
+
+  const centralHeader = Buffer.alloc(46 + nameBuffer.length);
+  centralHeader.writeUInt32LE(0x02014b50, 0);
+  centralHeader.writeUInt16LE(20, 4);
+  centralHeader.writeUInt16LE(20, 6);
+  centralHeader.writeUInt32LE(checksum, 16);
+  centralHeader.writeUInt32LE(size, 20);
+  centralHeader.writeUInt32LE(size, 24);
+  centralHeader.writeUInt16LE(nameBuffer.length, 28);
+  centralHeader.writeUInt32LE(0, 38);
+  nameBuffer.copy(centralHeader, 46);
+
+  const endRecord = Buffer.alloc(22);
+  endRecord.writeUInt32LE(0x06054b50, 0);
+  endRecord.writeUInt16LE(1, 8);
+  endRecord.writeUInt16LE(1, 10);
+  endRecord.writeUInt32LE(centralHeader.length, 12);
+  endRecord.writeUInt32LE(localHeader.length + size, 16);
+
+  return Buffer.concat([localHeader, dataBuffer, centralHeader, endRecord]);
+}
+
+function embedDescription(meetingTitle, meetingDate) {
+  const fallback = `Squadron Meeting — ${meetingDate}`;
+  if (!meetingTitle) return fallback;
+
+  const suffix = ` — ${meetingDate}`;
+  if (meetingTitle.endsWith(suffix + suffix)) {
+    return meetingTitle.slice(0, -suffix.length);
+  }
+  return meetingTitle;
+}
+
 function forceActionNote(record) {
   if (!record?.forceAction) return record?.notes || '';
   const type = record.forceType === 'system' ? 'System force logout' : 'Admin force logout';
@@ -268,7 +337,7 @@ async function postToDiscord({ csv, filename, meetingDate, meeting, attendanceRe
   const webhookUrl = env('DISCORD_WEBHOOK_URL');
   if (!webhookUrl) {
     console.warn('DISCORD_WEBHOOK_URL not set — skipping Discord backup post.');
-    return false;
+    return null;
   }
 
   const checkedIn = attendanceRecords.filter((r) => r.status === 'checked_in').length;
@@ -277,7 +346,7 @@ async function postToDiscord({ csv, filename, meetingDate, meeting, attendanceRe
 
   const embed = {
     title: `TN-170 Attendance — ${meetingDate}`,
-    description: meeting?.meetingTitle || `Squadron Meeting — ${meetingDate}`,
+    description: embedDescription(meeting?.meetingTitle, meetingDate),
     color: 0x1e3a5f,
     fields: [
       { name: 'Members (checked out)', value: String(checkedOut), inline: true },
@@ -288,16 +357,18 @@ async function postToDiscord({ csv, filename, meetingDate, meeting, attendanceRe
     footer: { text: 'GitHub Actions weekly backup' },
   };
 
+  const zipFilename = filename.replace(/\.csv$/i, '.zip');
+  const zipBuffer = zipSingleFile(filename, csv);
+
   const form = new FormData();
   form.append(
     'payload_json',
-    JSON.stringify({
-      embeds: [embed],
-    }),
+    JSON.stringify({ embeds: [embed] }),
   );
   form.append(
     'files[0]',
-    new File([Buffer.from(csv, 'utf8')], filename, { type: 'application/octet-stream' }),
+    new Blob([zipBuffer], { type: 'application/zip' }),
+    zipFilename,
   );
 
   const response = await fetch(webhookUrl, { method: 'POST', body: form });
@@ -306,7 +377,7 @@ async function postToDiscord({ csv, filename, meetingDate, meeting, attendanceRe
     throw new Error(`Discord webhook error (${response.status}): ${body.slice(0, 200)}`);
   }
 
-  return true;
+  return zipFilename;
 }
 
 function buildSummaryText({ meetingDate, meeting, attendanceRecords, guestRecords, timeZone }) {
@@ -385,7 +456,7 @@ async function main() {
 
   let discordPosted = false;
   try {
-    discordPosted = await postToDiscord({
+    const discordAttachment = await postToDiscord({
       csv,
       filename,
       meetingDate,
@@ -394,8 +465,9 @@ async function main() {
       guestRecords,
       timeZone,
     });
-    if (discordPosted) {
-      console.log(`Posted ${filename} to Discord backup channel.`);
+    if (discordAttachment) {
+      discordPosted = true;
+      console.log(`Posted ${discordAttachment} (contains ${filename}) to Discord backup channel.`);
     }
   } catch (err) {
     console.error('Discord backup post failed:', err.message);
