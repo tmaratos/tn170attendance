@@ -62,12 +62,16 @@ function timestampToIso(value) {
 
 function mapGuestAttendance(docSnap) {
   const data = docSnap.data();
+  const isOpenHouse = data.isOpenHouse === true || data.signInMode === 'open_house';
   return {
     id: docSnap.id,
     guestId: data.guestId,
     name: data.guestName,
     hostId: data.hostCapid,
     hostName: data.hostName,
+    signInMode: data.signInMode || (isOpenHouse ? 'open_house' : 'hosted'),
+    isOpenHouse,
+    visitReason: data.visitReason || null,
     status: data.status,
     checkInTime: timestampToIso(data.checkInTime),
     checkOutTime: timestampToIso(data.checkOutTime),
@@ -280,6 +284,112 @@ export async function guestCheckInFirestore({
     };
   } catch (err) {
     if (err.message?.includes('Incorrect host PIN') || err.message?.includes('Guest name')) {
+      throw err;
+    }
+    throw normalizeFirestoreError(err);
+  }
+}
+
+export async function guestOpenHouseCheckInFirestore({
+  guestName,
+  visitReason = null,
+  guestId = null,
+  meetingId = null,
+}) {
+  const db = getDb();
+  if (!db) throw new Error(SYNC_UNAVAILABLE);
+
+  if (!guestName?.trim()) {
+    throw new Error('Guest name is required.');
+  }
+
+  try {
+    const meeting = meetingId ? { id: meetingId } : await ensureActiveMeeting();
+    const trimmedName = guestName.trim();
+    const normalized = normalizeName(trimmedName);
+    const today = todayDateString();
+    const now = Timestamp.now();
+
+    let guestDoc = null;
+    if (guestId) {
+      const guestSnap = await getDoc(doc(db, 'guests', guestId));
+      if (guestSnap.exists()) {
+        guestDoc = { id: guestSnap.id, ...guestSnap.data() };
+      }
+    }
+
+    if (!guestDoc) {
+      const existing = await getDocs(
+        query(collection(db, 'guests'), where('normalizedName', '==', normalized), limit(1))
+      );
+      if (!existing.empty) {
+        guestDoc = { id: existing.docs[0].id, ...existing.docs[0].data() };
+      }
+    }
+
+    let guestRef;
+    if (guestDoc) {
+      guestRef = doc(db, 'guests', guestDoc.id);
+      await updateDoc(guestRef, {
+        fullName: trimmedName,
+        normalizedName: normalized,
+        lastVisitDate: today,
+        totalVisits: (guestDoc.totalVisits || 0) + 1,
+        active: true,
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      guestRef = doc(collection(db, 'guests'));
+      await setDoc(guestRef, {
+        guestId: guestRef.id,
+        fullName: trimmedName,
+        normalizedName: normalized,
+        firstVisitDate: today,
+        lastVisitDate: today,
+        totalVisits: 1,
+        active: true,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    }
+
+    const attendanceRef = doc(collection(db, 'guestAttendanceRecords'));
+    await setDoc(attendanceRef, {
+      meetingId: meeting.id,
+      guestId: guestRef.id,
+      guestName: trimmedName,
+      signInMode: 'open_house',
+      isOpenHouse: true,
+      visitReason: visitReason?.trim() || null,
+      status: 'checked_in',
+      checkInTime: now,
+      checkOutTime: null,
+      durationMinutes: null,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+
+    await appendGuestActivity(db, {
+      meetingId: meeting.id,
+      type: 'open_house_guest_checked_in',
+      guestId: guestRef.id,
+      guestName: trimmedName,
+      details: {
+        guestId: guestRef.id,
+        signInMode: 'open_house',
+        visitReason: visitReason?.trim() || null,
+      },
+    });
+
+    return {
+      success: true,
+      guestId: guestRef.id,
+      attendanceId: attendanceRef.id,
+      checkInTime: now.toDate().toISOString(),
+      signInMode: 'open_house',
+    };
+  } catch (err) {
+    if (err.message?.includes('Guest name')) {
       throw err;
     }
     throw normalizeFirestoreError(err);

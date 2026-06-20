@@ -51,6 +51,7 @@ import {
   guestCheckIn,
   guestCheckOut,
   guestCheckInFirestore,
+  guestOpenHouseCheckInFirestore,
   guestCheckOutFirestore,
 } from '../services/guestService';
 import { isAfterSystemForceCheckoutTime } from '../utils/timeRules';
@@ -545,6 +546,24 @@ function useSparkKioskAttendance() {
     [rawMembers, meeting?.id, markSyncAvailable, markSyncUnavailable]
   );
 
+  const checkInOpenHouseGuest = useCallback(
+    async (guestData) => {
+      try {
+        await guestOpenHouseCheckInFirestore({
+          guestName: guestData.name,
+          visitReason: guestData.visitReason || null,
+          guestId: guestData.guestId || null,
+          meetingId: meeting?.id,
+        });
+        markSyncAvailable();
+      } catch (err) {
+        markSyncUnavailable();
+        throw err;
+      }
+    },
+    [meeting?.id, markSyncAvailable, markSyncUnavailable]
+  );
+
   const updateSettings = useCallback((newSettings) => {
     setLocalUiPrefs((prev) => {
       const next = { ...prev, ...newSettings };
@@ -737,6 +756,7 @@ function useSparkKioskAttendance() {
     checkInMember,
     checkOutMember,
     checkInGuest,
+    checkInOpenHouseGuest,
     checkOutGuest,
     updateSettings,
     resetData,
@@ -917,6 +937,7 @@ function useMockAttendance() {
     (guestData) => {
       const now = new Date().toISOString();
       const today = now.split('T')[0];
+      const isOpenHouse = guestData.signInMode === 'open_house' || guestData.isOpenHouse;
       setState((prev) => {
         const existing = prev.recurringGuests.find(
           (g) => g.name.toLowerCase() === guestData.name.toLowerCase()
@@ -927,8 +948,8 @@ function useMockAttendance() {
             g.name.toLowerCase() === guestData.name.toLowerCase()
               ? {
                   ...g,
-                  hostId: guestData.hostId,
-                  hostName: guestData.hostName,
+                  hostId: isOpenHouse ? g.hostId : guestData.hostId,
+                  hostName: isOpenHouse ? g.hostName : guestData.hostName,
                   lastVisit: today,
                   totalVisits: g.totalVisits + 1,
                   status: 'checked-in',
@@ -941,8 +962,8 @@ function useMockAttendance() {
             {
               id: `rg${Date.now()}`,
               name: guestData.name,
-              hostId: guestData.hostId,
-              hostName: guestData.hostName,
+              hostId: isOpenHouse ? null : guestData.hostId,
+              hostName: isOpenHouse ? null : guestData.hostName,
               firstVisit: today,
               lastVisit: today,
               totalVisits: 1,
@@ -953,8 +974,11 @@ function useMockAttendance() {
         const newGuest = {
           id: `g${Date.now()}`,
           name: guestData.name,
-          hostId: guestData.hostId,
-          hostName: guestData.hostName,
+          hostId: isOpenHouse ? null : guestData.hostId,
+          hostName: isOpenHouse ? null : guestData.hostName,
+          signInMode: isOpenHouse ? 'open_house' : 'hosted',
+          isOpenHouse: !!isOpenHouse,
+          visitReason: guestData.visitReason || null,
           checkInTime: now,
           checkOutTime: null,
           status: 'checked-in',
@@ -976,9 +1000,25 @@ function useMockAttendance() {
           recurringGuests,
         };
       });
-      addActivity(`${guestData.name} (Guest) checked in`, 'guest-in');
+      addActivity(
+        isOpenHouse
+          ? `${guestData.name} (Open House) checked in`
+          : `${guestData.name} (Guest) checked in`,
+        isOpenHouse ? 'open-house-in' : 'guest-in'
+      );
     },
     [addActivity]
+  );
+
+  const checkInOpenHouseGuest = useCallback(
+    (guestData) => {
+      checkInGuest({
+        ...guestData,
+        signInMode: 'open_house',
+        isOpenHouse: true,
+      });
+    },
+    [checkInGuest]
   );
 
   const updateSettings = useCallback((newSettings) => {
@@ -1126,6 +1166,7 @@ function useMockAttendance() {
     checkInMember,
     checkOutMember,
     checkInGuest,
+    checkInOpenHouseGuest,
     checkOutGuest,
     updateSettings,
     resetData,
@@ -1302,6 +1343,14 @@ function useFirebaseAttendance() {
     });
   }, []);
 
+  const checkInOpenHouseGuest = useCallback(async (guestData) => {
+    return guestOpenHouseCheckInFirestore({
+      guestName: guestData.name,
+      visitReason: guestData.visitReason || null,
+      guestId: guestData.guestId || null,
+    });
+  }, []);
+
   const checkOutGuest = useCallback(async (guestAttendanceId) => {
     return guestCheckOut(guestAttendanceId);
   }, []);
@@ -1455,6 +1504,7 @@ function useFirebaseAttendance() {
     checkInMember,
     checkOutMember,
     checkInGuest,
+    checkInOpenHouseGuest,
     checkOutGuest,
     updateSettings,
     resetData,

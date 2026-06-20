@@ -1709,6 +1709,70 @@
   background: linear-gradient(180deg, #123769, #071c36);
 }
 
+.public-kiosk-secondary-actions {
+  width: 100%;
+  max-width: min(var(--kiosk-content-max), 100%);
+  margin: 8px auto 0;
+  display: flex;
+  justify-content: center;
+}
+
+.public-action-button.open-house {
+  min-height: 52px;
+  max-width: 320px;
+  width: 100%;
+  padding: 8px 16px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow: none;
+}
+
+.public-action-button.open-house span {
+  font-size: clamp(0.72rem, 1.4vw, 0.95rem);
+  letter-spacing: 0.04em;
+}
+
+.public-action-button.open-house small {
+  font-size: clamp(0.58rem, 1vw, 0.72rem);
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.public-status-row.signed-in.open-house {
+  border-left-color: #7c3aed;
+}
+
+.open-house-flow .open-house-subtitle {
+  margin: 8px 0 0;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.open-house-steps .public-flow-step.active {
+  border-color: rgba(124, 58, 237, 0.55);
+}
+
+.public-confirm-button.open-house {
+  background: linear-gradient(180deg, #7c3aed, #5b21b6);
+}
+
+.public-confirm-card.open-house {
+  border-color: rgba(124, 58, 237, 0.35);
+}
+
+.open-house-reason-display {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.public-success-icon.open-house {
+  background: rgba(124, 58, 237, 0.22);
+  color: #c4b5fd;
+}
+
 .public-status-panel {
   overflow: hidden;
   display: flex;
@@ -2932,6 +2996,25 @@
   .public-kiosk-footer .public-action-button.admin {
     grid-column: 1 / -1;
     min-height: 56px;
+  }
+
+  .public-kiosk-secondary-actions {
+    margin-top: 6px;
+    padding: 0 2px;
+  }
+
+  .public-kiosk-secondary-actions .public-action-button.open-house {
+    min-height: 44px;
+    max-width: none;
+    padding: 8px 10px;
+  }
+
+  .public-kiosk-secondary-actions .public-action-button.open-house span {
+    font-size: 0.72rem;
+  }
+
+  .public-kiosk-secondary-actions .public-action-button.open-house small {
+    font-size: 0.58rem;
   }
 
   .kiosk-footer-pin-help {

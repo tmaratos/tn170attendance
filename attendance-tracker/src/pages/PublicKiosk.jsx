@@ -60,11 +60,13 @@ function KioskStatusPanel({ members, guests, now, meetingEnd }) {
             <Link
               key={guest.id}
               to={`/guest-sign-out?guestId=${encodeURIComponent(guest.id)}`}
-              className={`public-status-row signed-in guest clickable ${afterReviewTime ? 'needs-review' : ''}`}
+              className={`public-status-row signed-in guest clickable ${guest.isOpenHouse ? 'open-house' : ''} ${afterReviewTime ? 'needs-review' : ''}`}
             >
               <div>
                 <strong>{guest.name}</strong>
-                <span>Guest - {formatTime(guest.checkInTime)}</span>
+                <span>
+                  {guest.isOpenHouse ? 'Open House' : 'Guest'} - {formatTime(guest.checkInTime)}
+                </span>
               </div>
               <em className="guest-sign-out-hint">Tap to sign out</em>
               {afterReviewTime && <em>Still checked in after 9:00 PM</em>}
@@ -163,6 +165,12 @@ export default function PublicKiosk({ attendance }) {
           <Link to="/admin-login" className="public-action-button admin">
             <span>ADMIN LOGIN</span>
             <small>Senior member tools</small>
+          </Link>
+        </div>
+        <div className="public-kiosk-secondary-actions">
+          <Link to="/open-house" className="public-action-button open-house">
+            <span>OPEN HOUSE</span>
+            <small>Self-service visitor sign-in</small>
           </Link>
         </div>
         <p className="kiosk-footer-pin-help">

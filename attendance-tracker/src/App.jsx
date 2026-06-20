@@ -7,6 +7,7 @@ import CheckIn from './pages/CheckIn';
 import CheckOut from './pages/CheckOut';
 import IPadKiosk from './pages/IPadKiosk';
 import GuestSignIn from './pages/GuestSignIn';
+import OpenHouseSignIn from './pages/OpenHouseSignIn';
 import GuestSignOut from './pages/GuestSignOut';
 import AdminLogin from './pages/AdminLogin';
 import Guests from './pages/Guests';
@@ -74,6 +75,8 @@ function AppShell({ attendance }) {
           <Route path="/check-out" element={<CheckOut attendance={attendance} />} />
           <Route path="/guest-sign-in" element={<GuestSignIn attendance={attendance} />} />
           <Route path="/guest-sign-out" element={<GuestSignOut attendance={attendance} />} />
+          <Route path="/open-house" element={<OpenHouseSignIn attendance={attendance} />} />
+          <Route path="/open-house-sign-in" element={<OpenHouseSignIn attendance={attendance} />} />
           <Route path="/ipad-kiosk" element={<IPadKiosk attendance={attendance} />} />
           <Route
             path="/admin-login"

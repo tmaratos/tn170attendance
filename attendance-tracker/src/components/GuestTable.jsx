@@ -47,7 +47,7 @@ export default function GuestTable({ guests, compact = false, meetingEnd }) {
                     )}
                   </div>
                 </td>
-                <td>{guest.hostName}</td>
+                <td>{guest.isOpenHouse ? 'Open House' : guest.hostName || '—'}</td>
                 <td className="time-cell in">{formatTime(guest.checkInTime)}</td>
               </tr>
             );
