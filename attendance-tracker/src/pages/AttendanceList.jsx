@@ -5,6 +5,7 @@ import { useLocalTime } from '../hooks/useLocalTime';
 import { isAfterSystemForceCheckoutTime } from '../utils/timeRules';
 import { getCallableError } from '../services/errors';
 import AttendanceCsvExport from '../components/AttendanceCsvExport';
+import GradeRankSelect from '../components/GradeRankSelect';
 
 const FILTERS = [
   { key: 'all', label: 'All' },
@@ -306,12 +307,11 @@ export default function AttendanceList({ attendance }) {
                 />
               </div>
               <div className="form-group">
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="Grade (default: Prospective)"
+                <label className="form-label">Grade / rank</label>
+                <GradeRankSelect
                   value={pendingGrade}
                   onChange={(e) => setPendingGrade(e.target.value)}
+                  includeProspective
                 />
               </div>
               <button

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
-import { CADET_GRADES, SENIOR_GRADES } from '../data/rosterData';
 import { getInitials } from '../data/mockData';
+import GradeRankSelect from './GradeRankSelect';
 import { getCallableError } from '../services/errors';
 
 const EMPTY_FORM = {
@@ -217,22 +217,10 @@ export default function MemberRosterManagement({
 
           <div className="form-group">
             <label className="form-label">Grade / rank</label>
-            <select
-              className="form-input"
+            <GradeRankSelect
               value={form.grade}
               onChange={(e) => setForm((prev) => ({ ...prev, grade: e.target.value }))}
-            >
-              <optgroup label="Cadet ranks">
-                {CADET_GRADES.map((grade) => (
-                  <option key={grade} value={grade}>{grade}</option>
-                ))}
-              </optgroup>
-              <optgroup label="Senior member ranks">
-                {SENIOR_GRADES.map((grade) => (
-                  <option key={grade} value={grade}>{grade}</option>
-                ))}
-              </optgroup>
-            </select>
+            />
           </div>
 
           {mode === 'create' ? (
