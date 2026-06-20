@@ -8,6 +8,7 @@ import CheckInWizard from '../components/CheckInWizard';
 import LocalClock from '../components/LocalClock';
 import PrintableAttendanceLog from '../components/PrintableAttendanceLog';
 import AttendanceCsvExport from '../components/AttendanceCsvExport';
+import MemberRosterManagement from '../components/MemberRosterManagement';
 import { isMeetingInProgress, formatMeetingTime } from '../data/mockData';
 import { useLocalTime } from '../hooks/useLocalTime';
 
@@ -52,9 +53,14 @@ export default function Dashboard({ attendance }) {
     memberHasPin,
     needsPinSetup,
     createMemberPin,
+    createMember,
+    updateMember,
+    deactivateMember,
+    reactivateMember,
   } = attendance;
   const stats = getStats();
   const { shortDateStr } = useLocalTime();
+  const canManageMembers = isFirebase && seniorSession?.canManageMembers;
 
   const checkedInMembers = members.filter((m) => m.status === 'checked-in');
   const checkedOutMembers = members.filter((m) => m.status === 'checked-out');
@@ -236,6 +242,17 @@ export default function Dashboard({ attendance }) {
             buttonClassName="btn btn-blue"
           />
         </div>
+
+        {canManageMembers && createMember && updateMember && (
+          <MemberRosterManagement
+            seniorSession={seniorSession}
+            searchMembers={searchMembers}
+            createMember={createMember}
+            updateMember={updateMember}
+            deactivateMember={deactivateMember}
+            reactivateMember={reactivateMember}
+          />
+        )}
       </div>
       </div>
     </>

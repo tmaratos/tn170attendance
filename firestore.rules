@@ -26,13 +26,64 @@ service cloud.firestore {
       return status in ['checked_in', 'checked_out'];
     }
 
+    function validMemberGrade(grade) {
+      return grade is string && grade.size() > 0;
+    }
+
+    function memberRoleMatchesGrade(grade, role, isCadet, isSeniorMember) {
+      let upper = grade.upper();
+      let isCadetGrade = upper.matches('^C/.*') || upper == 'CADET';
+      return (isCadetGrade && role == 'Cadet' && isCadet == true && isSeniorMember == false)
+        || (!isCadetGrade && role == 'Senior Member' && isCadet == false && isSeniorMember == true);
+    }
+
+    function validMemberCreate(capid) {
+      let data = request.resource.data;
+      return data.keys().hasAll([
+          'memberId', 'capid', 'grade', 'firstName', 'lastName', 'fullName', 'displayName',
+          'normalizedName', 'role', 'isCadet', 'isSeniorMember', 'isProspective', 'hasPin',
+          'pinResetRequired', 'active', 'isAdmin', 'canForceAttendance', 'canResetPins',
+          'canExportReports', 'canManageMembers', 'canManageGuests'
+        ])
+        && data.capid == capid
+        && data.memberId == capid
+        && data.temporaryId == null
+        && data.isProspective == false
+        && data.active == true
+        && data.hasPin == false
+        && data.pinResetRequired == false
+        && validMemberGrade(data.grade)
+        && memberRoleMatchesGrade(data.grade, data.role, data.isCadet, data.isSeniorMember);
+    }
+
+    function validMemberProfileUpdate() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return changed.hasOnly([
+          'firstName', 'middleName', 'lastName', 'fullName', 'displayName', 'normalizedName',
+          'grade', 'role', 'isCadet', 'isSeniorMember',
+          'isAdmin', 'canForceAttendance', 'canResetPins', 'canExportReports',
+          'canManageMembers', 'canManageGuests',
+          'active', 'updatedAt', 'updatedByCapid', 'updatedByName',
+          'deactivatedAt', 'deactivatedByCapid', 'deactivationReason',
+          'reactivatedAt', 'reactivatedByCapid'
+        ])
+        && memberRoleMatchesGrade(
+          request.resource.data.grade,
+          request.resource.data.role,
+          request.resource.data.isCadet,
+          request.resource.data.isSeniorMember
+        );
+    }
+
     // Member roster — readable for kiosk search; limited client updates for PIN state.
     match /members/{capid} {
       allow read: if true;
-      allow create, delete: if false;
-      allow update: if isActiveMember(capid)
-        && request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['pinResetRequired', 'hasPin', 'updatedAt']);
+      allow delete: if false;
+      allow create: if validMemberCreate(capid);
+      allow update: if (isActiveMember(capid)
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['pinResetRequired', 'hasPin', 'updatedAt']))
+        || validMemberProfileUpdate();
     }
 
     // PIN hashes — Spark kiosk reads hash for client-side verify; never stores plaintext.

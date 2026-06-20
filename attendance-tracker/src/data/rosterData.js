@@ -63,7 +63,24 @@ const ROSTER_LINES = `
 734587 C/MSgt Tucker Reed Wilkie
 `.trim().split('\n').map((l) => l.trim()).filter(Boolean);
 
-function normalizeName(name) {
+/** Cadet ranks used on TN-170 roster (stored exactly as shown). */
+export const CADET_GRADES = [
+  'CADET',
+  'C/Amn',
+  'C/A1C',
+  'C/SrA',
+  'C/MSgt',
+  'C/SMSgt',
+  'C/CMSgt',
+  'C/TSgt',
+];
+
+/** Senior member ranks used on TN-170 roster (stored exactly as shown). */
+export const SENIOR_GRADES = ['SM', '2d Lt', '1st Lt', 'Maj'];
+
+export const MEMBER_GRADES = [...CADET_GRADES, ...SENIOR_GRADES];
+
+export function normalizeName(name) {
   return name.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
@@ -84,7 +101,7 @@ function parseGradeAndName(tokens) {
   return { grade, firstName, middleName, lastName, fullName, displayName };
 }
 
-function parseRole(grade) {
+export function parseRole(grade) {
   const upper = grade.toUpperCase();
   if (upper.startsWith('C/') || upper === 'CADET') {
     return { role: 'Cadet', isCadet: true, isSeniorMember: false };
@@ -92,7 +109,7 @@ function parseRole(grade) {
   return { role: 'Senior Member', isCadet: false, isSeniorMember: true };
 }
 
-function buildPermissions(_capid, isSenior) {
+export function buildPermissions(_capid, isSenior) {
   return {
     isAdmin: isSenior,
     canForceAttendance: isSenior,
@@ -125,6 +142,44 @@ export function resolveMemberAdminPermissions(memberDoc) {
     canExportReports: isAdmin || !!memberDoc?.canExportReports,
     canManageMembers: isAdmin || !!memberDoc?.canManageMembers,
     canManageGuests: isAdmin || !!memberDoc?.canManageGuests,
+  };
+}
+
+export function isValidMemberGrade(grade) {
+  return MEMBER_GRADES.includes(String(grade || '').trim());
+}
+
+/** Build a Firestore member document matching seed / roster import shape. */
+export function buildMemberDocument({ capid, firstName, middleName = '', lastName, grade }) {
+  const capidStr = String(capid).trim();
+  const fn = String(firstName || '').trim();
+  const mn = String(middleName || '').trim();
+  const ln = String(lastName || '').trim();
+  const gradeStr = String(grade || '').trim();
+  const nameTokens = mn ? [fn, mn, ln] : [fn, ln];
+  const fullName = nameTokens.join(' ');
+  const displayName = fullName;
+  const roleInfo = parseRole(gradeStr);
+  const isSenior = roleInfo.isSeniorMember;
+  const permissions = buildPermissions(capidStr, isSenior);
+
+  return {
+    memberId: capidStr,
+    capid: capidStr,
+    temporaryId: null,
+    grade: gradeStr,
+    firstName: fn,
+    middleName: mn,
+    lastName: ln,
+    fullName,
+    displayName,
+    normalizedName: normalizeName(displayName),
+    ...roleInfo,
+    isProspective: false,
+    hasPin: false,
+    pinResetRequired: false,
+    active: true,
+    ...permissions,
   };
 }
 

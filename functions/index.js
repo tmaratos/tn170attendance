@@ -740,6 +740,156 @@ exports.createPendingMember = onCall(callableOptions, async (request) => {
   return { success: true, memberId: temporaryId, temporaryId, fullName: trimmedName };
 });
 
+exports.createMember = onCall(callableOptions, async (request) => {
+  const { actorCapid, actorPin, capid, firstName, middleName, lastName, grade } = request.data || {};
+  validatePin(actorPin);
+
+  const actor = await verifyActorPin(actorCapid, actorPin);
+  await requireManageMembers(actor);
+
+  const capidStr = String(capid || '').trim();
+  if (!/^\d{6,8}$/.test(capidStr)) {
+    throw new HttpsError('invalid-argument', 'CAPID must be 6–8 digits.');
+  }
+  if (!firstName?.trim() || !lastName?.trim()) {
+    throw new HttpsError('invalid-argument', 'First and last name are required.');
+  }
+  if (!grade?.trim()) {
+    throw new HttpsError('invalid-argument', 'Grade/rank is required.');
+  }
+
+  const existing = await db.collection('members').doc(capidStr).get();
+  if (existing.exists) {
+    throw new HttpsError('already-exists', 'CAPID already exists on the roster.');
+  }
+
+  const fn = String(firstName).trim();
+  const mn = String(middleName || '').trim();
+  const ln = String(lastName).trim();
+  const gradeStr = String(grade).trim();
+  const fullName = mn ? `${fn} ${mn} ${ln}` : `${fn} ${ln}`;
+  const displayName = fullName;
+  const upper = gradeStr.toUpperCase();
+  const isCadetGrade = upper.startsWith('C/') || upper === 'CADET';
+  const roleInfo = isCadetGrade
+    ? { role: 'Cadet', isCadet: true, isSeniorMember: false }
+    : { role: 'Senior Member', isCadet: false, isSeniorMember: true };
+  const isSenior = roleInfo.isSeniorMember;
+  const now = FieldValue.serverTimestamp();
+
+  const member = {
+    memberId: capidStr,
+    capid: capidStr,
+    temporaryId: null,
+    grade: gradeStr,
+    firstName: fn,
+    middleName: mn,
+    lastName: ln,
+    fullName,
+    displayName,
+    normalizedName: normalizeName(displayName),
+    ...roleInfo,
+    isProspective: false,
+    hasPin: false,
+    pinResetRequired: false,
+    active: true,
+    isAdmin: isSenior,
+    canForceAttendance: isSenior,
+    canResetPins: isSenior,
+    canExportReports: isSenior,
+    canManageMembers: isSenior,
+    canManageGuests: isSenior,
+    createdByCapid: actor.capid || actorCapid,
+    createdByName: actor.displayName || actor.fullName,
+    createdAt: now,
+    updatedAt: now,
+  };
+
+  await db.collection('members').doc(capidStr).set(member);
+
+  const meeting = await getOrCreateTodaysMeeting();
+  await logActivity({
+    meetingId: meeting.id,
+    type: 'member_created',
+    actorCapid: actor.capid || actorCapid,
+    actorName: actor.displayName || actor.fullName,
+    targetCapid: capidStr,
+    targetName: displayName,
+  });
+
+  return { success: true, capid: capidStr, displayName };
+});
+
+exports.updateMember = onCall(callableOptions, async (request) => {
+  const { actorCapid, actorPin, capid, firstName, middleName, lastName, grade } = request.data || {};
+  validatePin(actorPin);
+
+  const actor = await verifyActorPin(actorCapid, actorPin);
+  await requireManageMembers(actor);
+
+  const capidStr = String(capid || '').trim();
+  if (!/^\d{6,8}$/.test(capidStr)) {
+    throw new HttpsError('invalid-argument', 'CAPID must be 6–8 digits.');
+  }
+  if (!firstName?.trim() || !lastName?.trim()) {
+    throw new HttpsError('invalid-argument', 'First and last name are required.');
+  }
+  if (!grade?.trim()) {
+    throw new HttpsError('invalid-argument', 'Grade/rank is required.');
+  }
+
+  const target = await getMember(capidStr);
+  if (!target) {
+    throw new HttpsError('not-found', 'Member not found.');
+  }
+
+  const fn = String(firstName).trim();
+  const mn = String(middleName || '').trim();
+  const ln = String(lastName).trim();
+  const gradeStr = String(grade).trim();
+  const fullName = mn ? `${fn} ${mn} ${ln}` : `${fn} ${ln}`;
+  const displayName = fullName;
+  const upper = gradeStr.toUpperCase();
+  const isCadetGrade = upper.startsWith('C/') || upper === 'CADET';
+  const roleInfo = isCadetGrade
+    ? { role: 'Cadet', isCadet: true, isSeniorMember: false }
+    : { role: 'Senior Member', isCadet: false, isSeniorMember: true };
+  const isSenior = roleInfo.isSeniorMember;
+  const now = FieldValue.serverTimestamp();
+
+  await db.collection('members').doc(capidStr).update({
+    firstName: fn,
+    middleName: mn,
+    lastName: ln,
+    fullName,
+    displayName,
+    normalizedName: normalizeName(displayName),
+    grade: gradeStr,
+    ...roleInfo,
+    isAdmin: isSenior,
+    canForceAttendance: isSenior,
+    canResetPins: isSenior,
+    canExportReports: isSenior,
+    canManageMembers: isSenior,
+    canManageGuests: isSenior,
+    updatedAt: now,
+    updatedByCapid: actor.capid || actorCapid,
+    updatedByName: actor.displayName || actor.fullName,
+  });
+
+  const meeting = await getOrCreateTodaysMeeting();
+  await logActivity({
+    meetingId: meeting.id,
+    type: 'member_updated',
+    actorCapid: actor.capid || actorCapid,
+    actorName: actor.displayName || actor.fullName,
+    targetCapid: capidStr,
+    targetName: displayName,
+  });
+
+  return { success: true, capid: capidStr, displayName };
+});
+
 exports.updatePendingMemberCapid = onCall(callableOptions, async (request) => {
   const { actorCapid, actorPin, memberId, newCapid } = request.data || {};
   validatePin(actorPin);

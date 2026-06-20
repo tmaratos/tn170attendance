@@ -22,6 +22,12 @@ import {
   updatePendingMemberCapid,
   deactivateMember,
   reactivateMember,
+  createMember,
+  updateMember,
+  createMemberSpark,
+  updateMemberSpark,
+  deactivateMemberSpark,
+  reactivateMemberSpark,
 } from '../services/memberService';
 import {
   subscribeToActiveMeeting,
@@ -733,6 +739,51 @@ function useSparkKioskAttendance() {
     [kioskAdminSession, meeting, markSyncAvailable, markSyncUnavailable]
   );
 
+  const createMemberFn = useCallback(
+    async (payload, actorPin) => {
+      const actorId = kioskAdminSession?.memberId || kioskAdminSession?.capid;
+      if (!actorId) throw new Error('Admin authentication required.');
+      return createMemberSpark({ actorCapid: actorId, actorPin, ...payload });
+    },
+    [kioskAdminSession]
+  );
+
+  const updateMemberFn = useCallback(
+    async (payload, actorPin) => {
+      const actorId = kioskAdminSession?.memberId || kioskAdminSession?.capid;
+      if (!actorId) throw new Error('Admin authentication required.');
+      return updateMemberSpark({ actorCapid: actorId, actorPin, ...payload });
+    },
+    [kioskAdminSession]
+  );
+
+  const deactivateMemberFn = useCallback(
+    async (targetMemberId, actorPin, reason) => {
+      const actorId = kioskAdminSession?.memberId || kioskAdminSession?.capid;
+      if (!actorId) throw new Error('Admin authentication required.');
+      return deactivateMemberSpark({
+        actorCapid: actorId,
+        actorPin,
+        targetMemberId,
+        reason,
+      });
+    },
+    [kioskAdminSession]
+  );
+
+  const reactivateMemberFn = useCallback(
+    async (targetMemberId, actorPin) => {
+      const actorId = kioskAdminSession?.memberId || kioskAdminSession?.capid;
+      if (!actorId) throw new Error('Admin authentication required.');
+      return reactivateMemberSpark({
+        actorCapid: actorId,
+        actorPin,
+        targetMemberId,
+      });
+    },
+    [kioskAdminSession]
+  );
+
   const clearKioskAdminSession = useCallback(() => {
     setKioskAdminSession(null);
     saveKioskAdminSession(null);
@@ -772,6 +823,10 @@ function useSparkKioskAttendance() {
     createMemberPin,
     authenticateSenior: authenticateKioskAdmin,
     resetMemberPin: resetMemberPinFn,
+    createMember: createMemberFn,
+    updateMember: updateMemberFn,
+    deactivateMember: deactivateMemberFn,
+    reactivateMember: reactivateMemberFn,
     canResetPins: kioskAdminSession?.canResetPins ?? false,
     clearSeniorSession: clearKioskAdminSession,
     addActivity: () => {},
@@ -1456,6 +1511,30 @@ function useFirebaseAttendance() {
     [seniorSession]
   );
 
+  const createMemberFn = useCallback(
+    async (payload, actorPin) => {
+      if (!seniorSession) throw new Error('Senior authentication required.');
+      return createMember({
+        actorCapid: seniorSession.memberId || seniorSession.capid,
+        actorPin,
+        ...payload,
+      });
+    },
+    [seniorSession]
+  );
+
+  const updateMemberFn = useCallback(
+    async (payload, actorPin) => {
+      if (!seniorSession) throw new Error('Senior authentication required.');
+      return updateMember({
+        actorCapid: seniorSession.memberId || seniorSession.capid,
+        actorPin,
+        ...payload,
+      });
+    },
+    [seniorSession]
+  );
+
   const startMeetingFn = useCallback(
     async (actorPin, meetingTitle) => {
       if (!seniorSession) throw new Error('Senior authentication required.');
@@ -1527,6 +1606,8 @@ function useFirebaseAttendance() {
     resetMemberPin: resetMemberPinFn,
     createPendingMember: createPendingMemberFn,
     updatePendingMemberCapid: updatePendingCapidFn,
+    createMember: createMemberFn,
+    updateMember: updateMemberFn,
     deactivateMember: deactivateMemberFn,
     reactivateMember: reactivateMemberFn,
     startMeeting: startMeetingFn,
