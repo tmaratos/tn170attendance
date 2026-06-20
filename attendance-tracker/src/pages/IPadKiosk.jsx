@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import BuiltByCredit from '../components/BuiltByCredit';
 import CheckInWizard from '../components/CheckInWizard';
 import CheckoutReminder from '../components/CheckoutReminder';
 import LocalClock from '../components/LocalClock';
@@ -123,6 +124,7 @@ export default function IPadKiosk({ attendance }) {
           </div>
         </aside>
       </main>
+      <BuiltByCredit />
     </div>
   );
 }

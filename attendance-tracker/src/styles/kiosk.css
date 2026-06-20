@@ -2603,6 +2603,25 @@
   line-height: 1.45;
 }
 
+.kiosk-built-by {
+  margin: 10px 0 0;
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.34);
+  letter-spacing: 0.02em;
+}
+
+.kiosk-built-by a {
+  color: rgba(240, 192, 64, 0.5);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.kiosk-built-by a:hover {
+  color: rgba(240, 192, 64, 0.78);
+}
+
 .admin-forgot-pin-link {
   display: block;
   width: 100%;
@@ -3050,6 +3069,16 @@
     margin-top: 10px;
     padding: 0 4px;
     font-size: 0.85rem;
+  }
+
+  .kiosk-built-by {
+    margin-top: 6px;
+    font-size: 0.58rem;
+    color: rgba(255, 255, 255, 0.26);
+  }
+
+  .kiosk-built-by a {
+    color: rgba(240, 192, 64, 0.42);
   }
 }
 

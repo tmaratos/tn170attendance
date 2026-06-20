@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import BuiltByCredit from '../components/BuiltByCredit';
 import CheckoutReminder from '../components/CheckoutReminder';
 import { formatTime } from '../data/mockData';
 import { useLocalTime } from '../hooks/useLocalTime';
@@ -176,6 +177,7 @@ export default function PublicKiosk({ attendance }) {
         <p className="kiosk-footer-pin-help">
           New or forgot PIN? Tap Check In, select your name, and create a PIN if none exists yet.
         </p>
+        <BuiltByCredit />
       </footer>
     </div>
   );
