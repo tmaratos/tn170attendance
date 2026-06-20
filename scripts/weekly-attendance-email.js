@@ -264,39 +264,24 @@ async function sendEmail({ to, subject, text, csv, filename }) {
   return 'smtp';
 }
 
-async function postToDiscord({ csv, filename, meetingDate, meeting, attendanceRecords, guestRecords, timeZone }) {
+async function postToDiscord({ csv, filename, meetingDate }) {
   const webhookUrl = env('DISCORD_WEBHOOK_URL');
   if (!webhookUrl) {
     console.warn('DISCORD_WEBHOOK_URL not set — skipping Discord backup post.');
     return false;
   }
 
-  const checkedIn = attendanceRecords.filter((r) => r.status === 'checked_in').length;
-  const checkedOut = attendanceRecords.filter((r) => r.status === 'checked_out').length;
-  const guestsTotal = guestRecords.length;
-
-  const embed = {
-    title: `TN-170 Attendance — ${meetingDate}`,
-    description: meeting?.meetingTitle || 'Weekly meeting attendance report',
-    color: 0x1e3a5f,
-    fields: [
-      { name: 'Members (checked out)', value: String(checkedOut), inline: true },
-      { name: 'Members (still open)', value: String(checkedIn), inline: true },
-      { name: 'Guest records', value: String(guestsTotal), inline: true },
-      { name: 'Timezone', value: timeZone, inline: false },
-    ],
-    footer: { text: 'GitHub Actions weekly backup' },
-  };
-
   const form = new FormData();
   form.append(
     'payload_json',
     JSON.stringify({
-      content: 'Weekly attendance CSV backup',
-      embeds: [embed],
+      content: `TN-170 attendance for ${meetingDate}`,
     }),
   );
-  form.append('files[0]', new Blob([csv], { type: 'text/csv' }), filename);
+  form.append(
+    'files[0]',
+    new File([Buffer.from(csv, 'utf8')], filename, { type: 'application/octet-stream' }),
+  );
 
   const response = await fetch(webhookUrl, { method: 'POST', body: form });
   if (!response.ok) {
@@ -383,15 +368,7 @@ async function main() {
 
   let discordPosted = false;
   try {
-    discordPosted = await postToDiscord({
-      csv,
-      filename,
-      meetingDate,
-      meeting,
-      attendanceRecords,
-      guestRecords,
-      timeZone,
-    });
+    discordPosted = await postToDiscord({ csv, filename, meetingDate });
     if (discordPosted) {
       console.log(`Posted ${filename} to Discord backup channel.`);
     }
