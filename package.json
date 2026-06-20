@@ -6,6 +6,7 @@
     "seed:members": "node scripts/seed-members.js",
     "clear:pins": "node scripts/clear-all-pins.js",
     "email:weekly": "node scripts/weekly-attendance-email.js",
+    "force:checkout": "node scripts/system-force-checkout.js",
     "build:app": "npm run build --prefix attendance-tracker",
     "build:pages": "npm run build:app && node scripts/sync-github-pages.js",
     "deploy": "npm run deploy:spark",
