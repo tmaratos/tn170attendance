@@ -1,5 +1,30 @@
 rules_version = '2';
 
+// =============================================================================
+// TN-170 Attendance — Firestore security rules (Spark / public-kiosk model)
+// =============================================================================
+// SECURITY MODEL & KNOWN EXPOSURE (read docs/SECURITY.md for the full assessment
+// and migration plan):
+//
+// This is an UNAUTHENTICATED public kiosk. There is no Firebase Authentication,
+// so these rules can validate the SHAPE of a write but cannot verify WHO is
+// writing. Consequently, with only these rules, an unauthenticated client can
+// still READ roster names, attendance, guest contact info, activity, and the
+// (crackable, 4-digit) PIN hashes, and can CREATE shaped documents. That is
+// inherent to a no-Auth kiosk and CANNOT be closed by rules alone.
+//
+// The safe, non-kiosk-breaking hardening applied here:
+//   * Member create/update cannot grant admin permissions to a cadet grade
+//     (permission flags must match the grade — no privilege escalation via flags).
+//   * Clients can no longer write `systemForceCompletedDate` on meetings; only the
+//     trusted server-side GitHub Actions job (Admin SDK, bypasses rules) sets it.
+//   * Automation audit records (automationRuns) are read-only to clients.
+//
+// The real containment for the read/PIN exposure is Firebase App Check
+// (reCAPTCHA v3, free on Spark) + enforcement on Firestore, plus moving PIN
+// verification server-side. See docs/SECURITY.md. Do NOT loosen these rules.
+// =============================================================================
+
 service cloud.firestore {
   match /databases/{database}/documents {
     function isActiveMember(capid) {
@@ -30,11 +55,27 @@ service cloud.firestore {
       return grade is string && grade.size() > 0;
     }
 
-    function memberRoleMatchesGrade(grade, role, isCadet, isSeniorMember) {
+    function isCadetGrade(grade) {
       let upper = grade.upper();
-      let isCadetGrade = upper.matches('^C/.*') || upper == 'CADET';
-      return (isCadetGrade && role == 'Cadet' && isCadet == true && isSeniorMember == false)
-        || (!isCadetGrade && role == 'Senior Member' && isCadet == false && isSeniorMember == true);
+      return upper.matches('^C/.*') || upper == 'CADET';
+    }
+
+    function memberRoleMatchesGrade(grade, role, isCadet, isSeniorMember) {
+      let cadet = isCadetGrade(grade);
+      return (cadet && role == 'Cadet' && isCadet == true && isSeniorMember == false)
+        || (!cadet && role == 'Senior Member' && isCadet == false && isSeniorMember == true);
+    }
+
+    // Permission flags must equal (grade is senior). Prevents a cadet-grade member
+    // from being created/updated with admin permissions via the open write path.
+    function memberPermsMatchGrade(data) {
+      let senior = !isCadetGrade(data.grade);
+      return data.isAdmin == senior
+        && data.canForceAttendance == senior
+        && data.canResetPins == senior
+        && data.canExportReports == senior
+        && data.canManageMembers == senior
+        && data.canManageGuests == senior;
     }
 
     function validMemberCreate(capid) {
@@ -53,7 +94,8 @@ service cloud.firestore {
         && data.hasPin == false
         && data.pinResetRequired == false
         && validMemberGrade(data.grade)
-        && memberRoleMatchesGrade(data.grade, data.role, data.isCadet, data.isSeniorMember);
+        && memberRoleMatchesGrade(data.grade, data.role, data.isCadet, data.isSeniorMember)
+        && memberPermsMatchGrade(data);
     }
 
     function validMemberProfileUpdate() {
@@ -72,10 +114,11 @@ service cloud.firestore {
           request.resource.data.role,
           request.resource.data.isCadet,
           request.resource.data.isSeniorMember
-        );
+        )
+        && memberPermsMatchGrade(request.resource.data);
     }
 
-    // Member roster — readable for kiosk search; limited client updates for PIN state.
+    // Member roster — readable for kiosk search; limited client writes.
     match /members/{capid} {
       allow read: if true;
       allow delete: if false;
@@ -86,7 +129,9 @@ service cloud.firestore {
         || validMemberProfileUpdate();
     }
 
-    // PIN hashes — Spark kiosk reads hash for client-side verify; never stores plaintext.
+    // PIN hashes — Spark kiosk reads hash for client-side verify; never plaintext.
+    // NOTE: readable hashes of 4-digit PINs are crackable offline; App Check +
+    // server-side verification is the migration path (docs/SECURITY.md).
     match /memberPins/{capid} {
       allow read: if true;
       allow delete: if isActiveMember(capid);
@@ -102,19 +147,20 @@ service cloud.firestore {
         && request.resource.data.pinHash.size() >= 8;
     }
 
-    // Meetings — Spark kiosk creates/updates today's active meeting.
+    // Meetings — kiosk creates/marks today's active meeting in_progress.
+    // systemForceCompletedDate is NOT client-writable (server-only via Admin SDK).
     match /meetings/{meetingId} {
       allow read: if true;
       allow create: if request.resource.data.keys().hasAll(['meetingDate', 'status'])
         && isValidMeetingDate(request.resource.data.meetingDate)
         && request.resource.data.status == 'in_progress';
       allow update: if request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['status', 'endTime', 'updatedAt', 'systemForceCompletedDate'])
+          .hasOnly(['status', 'endTime', 'updatedAt'])
         && request.resource.data.status == 'in_progress';
       allow delete: if false;
     }
 
-    // Member attendance — Spark kiosk check-in/out (no Auth).
+    // Member attendance — kiosk check-in/out (no Auth).
     match /attendanceRecords/{recordId} {
       allow read: if true;
       allow create: if request.resource.data.keys().hasAll([
@@ -149,7 +195,9 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Guest attendance per meeting.
+    // Guest attendance per meeting. NOTE: guest email/phone are readable here;
+    // Firestore reads are all-or-nothing per document, so the kiosk guest table
+    // cannot be shown without exposing these fields under the no-Auth model.
     match /guestAttendanceRecords/{recordId} {
       allow read: if true;
       allow create: if request.resource.data.keys().hasAll([
@@ -177,8 +225,17 @@ service cloud.firestore {
     match /activityLog/{logId} {
       allow read: if true;
       allow create: if request.resource.data.keys().hasAll(['activityType', 'timestamp'])
-        && request.resource.data.activityType is string;
+        && request.resource.data.activityType is string
+        && request.resource.data.activityType.size() <= 64;
       allow update, delete: if false;
+    }
+
+    // Automation audit / idempotency records — written ONLY by the server-side
+    // GitHub Actions jobs (Admin SDK bypasses rules). Read-only to clients so a
+    // future diagnostics view can show delivery status; never client-writable.
+    match /automationRuns/{runId} {
+      allow read: if true;
+      allow write: if false;
     }
 
     match /reportExports/{exportId} {

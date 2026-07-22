@@ -1,154 +1,60 @@
 /**
- * Server-side system force checkout — run from GitHub Actions or locally.
+ * Server-side system force checkout — the AUTHORITATIVE Tuesday 9:30 PM checkout.
  *
- * Force-checks-out all open member and guest attendance records for tonight's
- * meeting at settings.meetingEnd (default 21:30 / 9:30 PM local).
+ * Runs from GitHub Actions (or locally). Force-checks-out every open member and
+ * guest attendance record for the correct Eastern meeting date, exactly once,
+ * with atomic Firestore idempotency and a persistent audit record. It does NOT
+ * depend on any kiosk browser being open, nor on the runner's clock/timezone.
  *
  * Required env:
- *   FIREBASE_PROJECT_ID (default: tn170-attendance)
  *   FIREBASE_SERVICE_ACCOUNT_JSON — full service account JSON string
- *
- * Optional:
+ * Optional env:
+ *   FIREBASE_PROJECT_ID (default tn170-attendance)
  *   SCHEDULE_TIMEZONE (default America/New_York)
- *   MEETING_DAY (default Tuesday — overridden by Firestore settings when present)
- *   FORCE_HOUR (default derived from settings.meetingEnd, typically 21)
- *   FORCE_RUN=true — skip schedule gate (manual test)
+ *   MEETING_DAY (default Tuesday; overridden by Firestore settings when present)
+ *   DRY_RUN=true            — report what would happen; write nothing
+ *   MEETING_DATE=YYYY-MM-DD — process a specific Eastern meeting date
+ *   FORCE_RUN=true          — skip the schedule gate (manual test) [alias SKIP_SCHEDULE_GATE]
+ *   GITHUB_RUN_ID / GITHUB_EVENT_NAME — captured into the audit record when present
  */
+import { Timestamp, FieldValue } from 'firebase-admin/firestore';
+import { initFirebaseAdmin, describeFirebaseCredential, DEFAULT_PROJECT_ID } from './lib/firebaseAdmin.js';
+import {
+  DEFAULT_TIMEZONE,
+  DEFAULT_MEETING_DAY,
+  DEFAULT_MEETING_END,
+  evaluateWindow,
+  zonedDateString,
+  zonedWallTimeToUtc,
+  zonedTimeLabel,
+} from './lib/time.js';
+import {
+  fetchMeetingBundle,
+  claimAutomationStep,
+  completeAutomationStep,
+  failAutomationStep,
+} from './lib/meeting.js';
 
-import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
-import { getFirestore, Timestamp, FieldValue } from 'firebase-admin/firestore';
-import { readFileSync, existsSync } from 'fs';
-
-const DEFAULT_PROJECT_ID = 'tn170-attendance';
-const DEFAULT_MEETING_END = '21:30';
+const MARKER_COLLECTION = 'automationRuns';
 
 function env(name, fallback = '') {
   return process.env[name]?.trim() || fallback;
 }
 
-function meetingDateInTimezone(timeZone) {
-  return new Intl.DateTimeFormat('en-CA', { timeZone }).format(new Date());
+function boolEnv(name) {
+  return env(name).toLowerCase() === 'true';
 }
 
-function localTimeParts(timeZone) {
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    weekday: 'long',
-    hour: 'numeric',
-    minute: 'numeric',
-    hour12: false,
-  }).formatToParts(new Date());
-}
-
-function parseMeetingEnd(meetingEnd) {
-  const [hourRaw, minuteRaw] = String(meetingEnd || DEFAULT_MEETING_END).split(':');
-  return {
-    hour: Number(hourRaw),
-    minute: Number(minuteRaw || 0),
-  };
-}
-
-function systemForceNote(timeZone) {
-  const time = new Date().toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-    timeZone,
-  });
-  return `System force logout at ${time} local time.`;
+function log(stage, message) {
+  console.log(`[${stage}] ${message}`);
 }
 
 function durationMinutesFrom(checkInTime, checkOutTime) {
   if (!checkInTime || !checkOutTime) return null;
-  const checkInMs = checkInTime.toMillis ? checkInTime.toMillis() : new Date(checkInTime).getTime();
-  const checkOutMs = checkOutTime.toMillis ? checkOutTime.toMillis() : new Date(checkOutTime).getTime();
-  return Math.round((checkOutMs - checkInMs) / 60000);
-}
-
-function initFirebaseAdmin() {
-  const projectId = env('FIREBASE_PROJECT_ID', DEFAULT_PROJECT_ID);
-  const json = env('FIREBASE_SERVICE_ACCOUNT_JSON');
-  const keyPath = env('GOOGLE_APPLICATION_CREDENTIALS');
-
-  if (json) {
-    initializeApp({
-      credential: cert(JSON.parse(json)),
-      projectId,
-    });
-    return;
-  }
-
-  if (keyPath && existsSync(keyPath)) {
-    initializeApp({
-      credential: cert(JSON.parse(readFileSync(keyPath, 'utf8'))),
-      projectId,
-    });
-    return;
-  }
-
-  initializeApp({
-    credential: applicationDefault(),
-    projectId,
-  });
-}
-
-async function fetchSettings(db) {
-  const snap = await db.collection('settings').doc('squadron').get();
-  if (!snap.exists) {
-    return {
-      meetingDay: env('MEETING_DAY', 'Tuesday'),
-      meetingEnd: DEFAULT_MEETING_END,
-    };
-  }
-  const data = snap.data();
-  return {
-    meetingDay: data.meetingDay || env('MEETING_DAY', 'Tuesday'),
-    meetingEnd: data.meetingEnd || DEFAULT_MEETING_END,
-  };
-}
-
-function shouldRunNow({ meetingDay, meetingEnd }) {
-  if (env('FORCE_RUN') === 'true') return true;
-
-  const timeZone = env('SCHEDULE_TIMEZONE', 'America/New_York');
-  const parts = localTimeParts(timeZone);
-  const weekday = parts.find((part) => part.type === 'weekday')?.value;
-  const hour = Number(parts.find((part) => part.type === 'hour')?.value);
-  const minute = Number(parts.find((part) => part.type === 'minute')?.value);
-
-  const { hour: endHour, minute: endMinute } = parseMeetingEnd(meetingEnd);
-  const forceHour = Number(env('FORCE_HOUR', String(endHour)));
-
-  if (weekday !== meetingDay) return false;
-  if (hour > forceHour) return true;
-  if (hour === forceHour && minute >= endMinute) return true;
-  return false;
-}
-
-async function fetchMeetingBundle(db, meetingDate) {
-  const meetingsSnap = await db
-    .collection('meetings')
-    .where('meetingDate', '==', meetingDate)
-    .limit(1)
-    .get();
-
-  if (meetingsSnap.empty) {
-    return { meeting: null, attendanceRecords: [], guestRecords: [] };
-  }
-
-  const meetingDoc = meetingsSnap.docs[0];
-  const meeting = { id: meetingDoc.id, ...meetingDoc.data() };
-
-  const [attendanceSnap, guestSnap] = await Promise.all([
-    db.collection('attendanceRecords').where('meetingId', '==', meeting.id).get(),
-    db.collection('guestAttendanceRecords').where('meetingId', '==', meeting.id).get(),
-  ]);
-
-  return {
-    meeting,
-    attendanceRecords: attendanceSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
-    guestRecords: guestSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
-  };
+  const inMs = checkInTime.toMillis ? checkInTime.toMillis() : new Date(checkInTime).getTime();
+  const outMs = checkOutTime.toMillis ? checkOutTime.toMillis() : new Date(checkOutTime).getTime();
+  const mins = Math.round((outMs - inMs) / 60000);
+  return mins >= 0 ? mins : null;
 }
 
 async function appendActivityLog(db, payload) {
@@ -156,9 +62,9 @@ async function appendActivityLog(db, payload) {
     meetingId: payload.meetingId || null,
     activityType: payload.type,
     type: payload.type,
-    actorMemberId: payload.actorMemberId || null,
-    actorCapid: payload.actorCapid || null,
-    actorName: payload.actorName || null,
+    actorMemberId: null,
+    actorCapid: 'system',
+    actorName: 'System',
     targetMemberId: payload.targetMemberId || null,
     targetCapid: payload.targetCapid || null,
     targetName: payload.targetName || null,
@@ -169,35 +75,117 @@ async function appendActivityLog(db, payload) {
   });
 }
 
-async function runForceCheckout(db, { meeting, attendanceRecords, guestRecords, meetingDate, note }) {
-  if (meeting?.systemForceCompletedDate === meetingDate) {
-    console.log(`System force checkout already completed for ${meetingDate}.`);
-    return { members: 0, guests: 0, skipped: true };
+async function main() {
+  const timeZone = env('SCHEDULE_TIMEZONE', DEFAULT_TIMEZONE);
+  const dryRun = boolEnv('DRY_RUN');
+  const force = boolEnv('FORCE_RUN') || boolEnv('SKIP_SCHEDULE_GATE');
+  const projectId = env('FIREBASE_PROJECT_ID', DEFAULT_PROJECT_ID);
+  const runId = env('GITHUB_RUN_ID') || null;
+  const triggerSource = env('GITHUB_EVENT_NAME') || 'local';
+
+  // 1. Preflight configuration (no secret values).
+  const cred = describeFirebaseCredential();
+  log('preflight', `project=${projectId} tz=${timeZone} dryRun=${dryRun} force=${force}`);
+  log('preflight', `firebase credential: mode=${cred.mode} ok=${cred.ok}${cred.error ? ` (${cred.error})` : ''}`);
+  if (!cred.ok) {
+    throw new Error(`Firebase credential not usable: ${cred.error}. Set FIREBASE_SERVICE_ACCOUNT_JSON.`);
   }
 
-  const openMembers = attendanceRecords.filter((record) => record.status === 'checked_in');
-  const openGuests = guestRecords.filter((record) => record.status === 'checked_in');
+  // 3. Firebase authentication.
+  const db = initFirebaseAdmin();
+  log('firebase', 'admin SDK initialized.');
 
-  if (!openMembers.length && !openGuests.length) {
-    if (meeting?.id) {
-      await db.collection('meetings').doc(meeting.id).update({
-        systemForceCompletedDate: meetingDate,
-        updatedAt: FieldValue.serverTimestamp(),
-      });
+  // Settings (meetingDay/meetingEnd) drive the schedule gate.
+  let meetingDay = env('MEETING_DAY', DEFAULT_MEETING_DAY);
+  let meetingEnd = DEFAULT_MEETING_END;
+  try {
+    const settingsSnap = await db.collection('settings').doc('squadron').get();
+    if (settingsSnap.exists) {
+      const data = settingsSnap.data();
+      meetingDay = data.meetingDay || meetingDay;
+      meetingEnd = data.meetingEnd || meetingEnd;
     }
-    console.log('No open attendance records — marked meeting complete.');
-    return { members: 0, guests: 0, skipped: false };
+  } catch (err) {
+    log('firebase', `settings read failed (${err.message}); using defaults.`);
   }
 
-  const now = Timestamp.now();
+  // 2. Schedule validation.
+  const now = new Date();
+  const decision = evaluateWindow(now, {
+    timeZone,
+    meetingDay,
+    thresholdTime: meetingEnd,
+    force,
+    override: env('MEETING_DATE'),
+  });
+  log('schedule', `now(ET)=${zonedTimeLabel(now, timeZone)} weekday-check → run=${decision.run} (${decision.reason})`);
+  if (!decision.run) {
+    log('schedule', `Skipping — ${decision.reason}. Meeting end ${meetingEnd} ${meetingDay} (${timeZone}).`);
+    log('schedule', 'Set FORCE_RUN=true (or workflow_dispatch skip_schedule_gate) to run immediately.');
+    return;
+  }
 
-  await Promise.all(
-    openMembers.map(async (record) => {
-      const durationMinutes = durationMinutesFrom(record.checkInTime, now);
+  const meetingDate = decision.meetingDate || zonedDateString(now, timeZone);
+  log('schedule', `Target meeting date: ${meetingDate}`);
+
+  // 4. Meeting resolution.
+  const { meeting, attendanceRecords, guestRecords, duplicateCount } = await fetchMeetingBundle(db, meetingDate);
+  if (duplicateCount > 1) {
+    log('meeting', `WARNING: ${duplicateCount} legacy meeting docs found for ${meetingDate}; using lowest id ${meeting?.id}.`);
+  }
+  if (!meeting) {
+    log('meeting', `No meeting document for ${meetingDate} — nothing to force checkout.`);
+    return;
+  }
+  log('meeting', `Resolved meeting ${meeting.id} (${meeting.meetingTitle || 'untitled'}).`);
+
+  // 5. Attendance retrieval.
+  const openMembers = attendanceRecords.filter((r) => r.status === 'checked_in');
+  const openGuests = guestRecords.filter((r) => r.status === 'checked_in');
+  log('attendance', `${attendanceRecords.length} member / ${guestRecords.length} guest records; open: ${openMembers.length} member, ${openGuests.length} guest.`);
+
+  const checkOutInstant = zonedWallTimeToUtc(meetingDate, meetingEnd, timeZone);
+  const now2 = new Date();
+  const stampDate = checkOutInstant <= now2 ? checkOutInstant : now2;
+  const note = `System force logout at ${zonedTimeLabel(checkOutInstant, timeZone)} ${timeZone}.`;
+
+  if (dryRun) {
+    log('idempotency', 'DRY_RUN — skipping idempotency claim.');
+    log('force-checkout', `DRY_RUN — would check out ${openMembers.length} member(s) and ${openGuests.length} guest(s) at ${stampDate.toISOString()}.`);
+    log('status', 'DRY_RUN complete. No writes performed.');
+    return;
+  }
+
+  // 6. Idempotency check (atomic claim).
+  const markerId = `force-${meetingDate}`;
+  const alreadyByLegacyFlag = meeting.systemForceCompletedDate === meetingDate;
+  let claim;
+  try {
+    claim = await claimAutomationStep(db, MARKER_COLLECTION, markerId, {
+      kind: 'force-checkout',
+      meetingId: meeting.id,
+      meetingDate,
+      triggerSource,
+      workflowRunId: runId,
+    });
+  } catch (err) {
+    throw new Error(`Idempotency transaction failed: ${err.message}`);
+  }
+
+  if (!claim.claimed || alreadyByLegacyFlag) {
+    log('idempotency', `Already completed for ${meetingDate} — skipping (once-only guarantee held).`);
+    return;
+  }
+  log('idempotency', `Claimed ${markerId}.`);
+
+  // 7. Force checkout.
+  const stamp = Timestamp.fromDate(stampDate);
+  try {
+    for (const record of openMembers) {
       await db.collection('attendanceRecords').doc(record.id).update({
         status: 'checked_out',
-        checkOutTime: now,
-        durationMinutes,
+        checkOutTime: stamp,
+        durationMinutes: durationMinutesFrom(record.checkInTime, stamp),
         checkedOutBy: 'system',
         forceAction: true,
         forceActionBy: 'system',
@@ -211,18 +199,15 @@ async function runForceCheckout(db, { meeting, attendanceRecords, guestRecords, 
         targetMemberId: record.memberId,
         targetCapid: record.capid || record.temporaryId || record.memberId,
         targetName: record.memberName,
-        details: { notes: note, forceType: 'system', source: 'github-actions' },
+        details: { notes: note, forceType: 'system', source: 'github-actions', runId },
       });
-    })
-  );
+    }
 
-  await Promise.all(
-    openGuests.map(async (record) => {
-      const durationMinutes = durationMinutesFrom(record.checkInTime, now);
+    for (const record of openGuests) {
       await db.collection('guestAttendanceRecords').doc(record.id).update({
         status: 'checked_out',
-        checkOutTime: now,
-        durationMinutes,
+        checkOutTime: stamp,
+        durationMinutes: durationMinutesFrom(record.checkInTime, stamp),
         checkedOutBy: 'system',
         forceAction: true,
         forceType: 'system',
@@ -234,60 +219,49 @@ async function runForceCheckout(db, { meeting, attendanceRecords, guestRecords, 
         type: 'guest_checked_out',
         guestId: record.guestId,
         guestName: record.name || record.guestName,
-        details: { notes: note, forceType: 'system', source: 'github-actions' },
+        details: { notes: note, forceType: 'system', source: 'github-actions', runId },
       });
-    })
-  );
+    }
 
-  if (meeting?.id) {
     await db.collection('meetings').doc(meeting.id).update({
       systemForceCompletedDate: meetingDate,
       updatedAt: FieldValue.serverTimestamp(),
     });
+  } catch (err) {
+    // 10. Persistent completion record (failure).
+    await failAutomationStep(db, MARKER_COLLECTION, markerId, {
+      meetingId: meeting.id,
+      meetingDate,
+      configuredMeetingEnd: meetingEnd,
+      executedAtUtc: new Date().toISOString(),
+      executedAtEastern: zonedTimeLabel(new Date(), timeZone),
+      triggerSource,
+      workflowRunId: runId,
+      error: err.message?.slice(0, 500) || 'unknown error',
+    });
+    throw err;
   }
 
-  return { members: openMembers.length, guests: openGuests.length, skipped: false };
-}
-
-async function main() {
-  initFirebaseAdmin();
-  const db = getFirestore();
-
-  const settings = await fetchSettings(db);
-  if (!shouldRunNow(settings)) {
-    console.log('Skipping — outside configured force-checkout window.');
-    console.log(`Expected: ${settings.meetingDay} at or after ${settings.meetingEnd} (${env('SCHEDULE_TIMEZONE', 'America/New_York')}).`);
-    console.log('Set FORCE_RUN=true to run immediately (manual test).');
-    return;
-  }
-
-  const timeZone = env('SCHEDULE_TIMEZONE', 'America/New_York');
-  const meetingDate = meetingDateInTimezone(timeZone);
-  const note = systemForceNote(timeZone);
-
-  const { meeting, attendanceRecords, guestRecords } = await fetchMeetingBundle(db, meetingDate);
-
-  if (!meeting) {
-    console.log(`No meeting document for ${meetingDate} — nothing to force checkout.`);
-    return;
-  }
-
-  const result = await runForceCheckout(db, {
-    meeting,
-    attendanceRecords,
-    guestRecords,
+  // 10. Persistent completion record (success).
+  await completeAutomationStep(db, MARKER_COLLECTION, markerId, {
+    meetingId: meeting.id,
     meetingDate,
-    note,
+    configuredMeetingEnd: meetingEnd,
+    checkoutInstantUtc: stampDate.toISOString(),
+    executedAtUtc: new Date().toISOString(),
+    executedAtEastern: zonedTimeLabel(new Date(), timeZone),
+    triggerSource,
+    workflowRunId: runId,
+    memberCount: openMembers.length,
+    guestCount: openGuests.length,
+    skipped: false,
   });
 
-  if (result.skipped) return;
-
-  console.log(
-    `System force checkout complete for ${meetingDate}: ${result.members} member(s), ${result.guests} guest(s).`
-  );
+  // 12. Final status.
+  log('status', `System force checkout complete for ${meetingDate}: ${openMembers.length} member(s), ${openGuests.length} guest(s) checked out at ${zonedTimeLabel(stampDate, timeZone)} ET.`);
 }
 
 main().catch((err) => {
-  console.error('System force checkout failed:', err.message);
+  console.error(`[fatal] System force checkout failed: ${err.message}`);
   process.exit(1);
 });

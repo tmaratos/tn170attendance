@@ -1,28 +1,38 @@
-# Weekly attendance email (Tuesday 10 PM)
+# Weekly attendance report (Tuesday 10:30 PM ET)
 
-Automated attendance CSV emails run via **GitHub Actions** — no Firebase Cloud Functions or Blaze billing required.
+Automated attendance delivery runs via **GitHub Actions** — no Firebase Cloud
+Functions or Blaze billing required. **Discord is the required destination and is
+independent of email.** Email is an optional additional copy.
 
-**Note:** Cloudflare on `tncap.us` is for email DNS only. The attendance kiosk lives at [https://tmaratos.github.io/tn170attendance/](https://tmaratos.github.io/tn170attendance/), not on `tncap.us`.
+**Note:** Cloudflare on `tncap.us` is for email DNS only. The attendance kiosk lives at [https://tmaratos.github.io/tn170attendance/](https://tmaratos.github.io/tn170attendance/), not on `tncap.us`. Email is optional — you can leave it unconfigured and Discord still works.
 
-See also [GITHUB_AUTOMATION.md](./GITHUB_AUTOMATION.md) for the 9:30 PM force-checkout job.
+See also [GITHUB_AUTOMATION.md](./GITHUB_AUTOMATION.md) for the 9:30 PM force-checkout
+job and the manual inputs, and [AUDIT_2026-07.md](./AUDIT_2026-07.md) for the full
+audit and Discord-failure recovery.
 
 ## Schedule
 
-- **When:** Every **Tuesday at 10:00 PM** in `America/New_York` (Oak Ridge, TN — Eastern Time)
-- **What:** Fetches tonight's meeting from Firestore, builds a CSV (same columns as in-app export), and emails it to configured recipients
-- **Backup:** The same CSV is posted to the TN-170 Discord attendance channel when `DISCORD_WEBHOOK_URL` is configured
+- **When:** Every **Tuesday at 10:30 PM** in `America/New_York` (Oak Ridge, TN — Eastern Time)
+- **What:** Resolves the Eastern-date meeting from Firestore, builds the CSV, and
+  posts a **ZIP + embed** to Discord channel `1517911401224736971`.
+- **Email:** OPTIONAL. If `EMAIL_RECIPIENTS` + a transport are set, the CSV is also
+  emailed. Missing/failed email never blocks Discord.
+- **Idempotent:** delivery is recorded in `automationRuns/report-<date>`; duplicate
+  or late runs post **once**.
 - **Workflow:** `.github/workflows/weekly-attendance-email.yml`
 - **Script:** `scripts/weekly-attendance-email.js`
 
-GitHub Actions cron uses UTC. The workflow runs at several UTC times on Wednesday morning and the script only sends when local time is Tuesday hour 22 in `SCHEDULE_TIMEZONE`.
+GitHub Actions cron uses UTC and can be **hours late**. The script validates
+`America/New_York` wall-clock time, targets the correct Tuesday meeting date, and is
+idempotent, so a delayed (even Wednesday-morning) run still delivers once.
 
-Override timezone or hour with repository **Variables** (optional):
+Override with repository **Variables** (optional):
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `SCHEDULE_TIMEZONE` | `America/New_York` | IANA timezone for send window |
-| `MEETING_DAY` | `Tuesday` | Weekday name for gate check |
-| `SEND_HOUR` | `22` | Hour (24h) to send |
+| `SCHEDULE_TIMEZONE` | `America/New_York` | IANA timezone for the send window |
+| `MEETING_DAY` | `Tuesday` | Weekday name for the gate check |
+| `REPORT_TIME` | `22:30` | Local time (HH:MM) to deliver |
 
 ## Default recipients
 

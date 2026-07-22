@@ -9,6 +9,7 @@ import LocalClock from '../components/LocalClock';
 import PrintableAttendanceLog from '../components/PrintableAttendanceLog';
 import AttendanceCsvExport from '../components/AttendanceCsvExport';
 import MemberRosterManagement from '../components/MemberRosterManagement';
+import OperationalDiagnostics from '../components/OperationalDiagnostics';
 import { isMeetingInProgress, formatMeetingTime } from '../data/mockData';
 import { useLocalTime } from '../hooks/useLocalTime';
 
@@ -253,6 +254,8 @@ export default function Dashboard({ attendance }) {
             reactivateMember={reactivateMember}
           />
         )}
+
+        <OperationalDiagnostics attendance={attendance} />
       </div>
       </div>
     </>

@@ -65,6 +65,8 @@ function AppShell({ attendance }) {
       <SyncWarningBanner
         isSyncAvailable={attendance.isSyncAvailable}
         syncError={attendance.syncError}
+        syncState={attendance.syncState}
+        lastSyncedAt={attendance.lastSyncedAt}
       />
       {!isPublicFullScreen && <Sidebar settings={attendance.settings} />}
       <main className={`main-content ${isPublicFullScreen ? 'public-main-content' : ''}`}>

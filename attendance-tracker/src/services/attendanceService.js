@@ -2,6 +2,7 @@ import {
   addDoc,
   collection,
   doc,
+  getDoc,
   getDocs,
   limit,
   onSnapshot,
@@ -18,8 +19,14 @@ import { toUiMember } from './memberService';
 
 const SYNC_UNAVAILABLE = 'Cloud sync unavailable. This device is not currently syncing attendance.';
 
-function todayDateString() {
-  return new Date().toISOString().split('T')[0];
+/** Meetings are keyed by the Eastern (America/New_York) date so every device and
+ *  the GitHub Actions automation resolve the SAME meeting document. Never use the
+ *  device/UTC date here — that caused devices opening after ~8 PM ET to select a
+ *  different (next-day) meeting and desync attendance. */
+export const MEETING_TIMEZONE = 'America/New_York';
+
+export function meetingDateString(now = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: MEETING_TIMEZONE }).format(now);
 }
 
 function memberAttendanceFields(member) {
@@ -64,22 +71,18 @@ export function subscribeToActiveMeeting(callback, onError) {
   const db = getDb();
   if (!db) return () => {};
 
-  const today = todayDateString();
-  const q = query(
-    collection(db, 'meetings'),
-    where('meetingDate', '==', today),
-    limit(1)
-  );
+  // Subscribe to the deterministic Eastern-date meeting document directly, so all
+  // devices watch the exact same doc (no query, no limit(1) ambiguity, no duplicates).
+  const ref = doc(db, 'meetings', meetingDateString());
 
   return onSnapshot(
-    q,
+    ref,
     (snap) => {
-      if (snap.empty) {
+      if (!snap.exists()) {
         callback(null);
         return;
       }
-      const meetingDoc = snap.docs[0];
-      callback({ id: meetingDoc.id, ...meetingDoc.data() });
+      callback({ id: snap.id, ...snap.data() });
     },
     () => {
       if (onError) onError();
@@ -88,7 +91,7 @@ export function subscribeToActiveMeeting(callback, onError) {
   );
 }
 
-/** @deprecated Use subscribeToActiveMeeting */
+/** @deprecated Use subscribeToActiveMeeting — kept as an alias for older imports. */
 export function subscribeTodaysMeeting(callback, onError) {
   return subscribeToActiveMeeting(callback, onError);
 }
@@ -125,25 +128,20 @@ export async function ensureActiveMeeting() {
   const db = getDb();
   if (!db) throw new Error(SYNC_UNAVAILABLE);
 
-  const meetingDate = todayDateString();
+  const meetingDate = meetingDateString();
+  // Deterministic doc id = Eastern meeting date. Concurrent creates from two
+  // devices write the same id with identical content (idempotent, no duplicates).
+  const ref = doc(db, 'meetings', meetingDate);
   try {
-    const existing = await getDocs(
-      query(collection(db, 'meetings'), where('meetingDate', '==', meetingDate), limit(1))
-    );
-
-    if (!existing.empty) {
-      const meetingDoc = existing.docs[0];
-      const data = meetingDoc.data();
+    const existing = await getDoc(ref);
+    if (existing.exists()) {
+      const data = existing.data();
       if (data.status !== 'in_progress') {
-        await updateDoc(doc(db, 'meetings', meetingDoc.id), {
-          status: 'in_progress',
-          updatedAt: serverTimestamp(),
-        });
+        await updateDoc(ref, { status: 'in_progress', updatedAt: serverTimestamp() });
       }
-      return { id: meetingDoc.id, ...data, status: 'in_progress' };
+      return { id: ref.id, ...data, status: 'in_progress' };
     }
 
-    const ref = doc(collection(db, 'meetings'));
     const meeting = {
       meetingDate,
       meetingTitle: `Squadron Meeting — ${meetingDate}`,
@@ -376,88 +374,14 @@ export async function forceCheckOutFirestore(
   }
 }
 
-export async function systemForceCheckoutFirestore({
-  meetingId,
-  attendanceRecords,
-  guestRecords,
-  note,
-}) {
-  const db = getDb();
-  if (!db) throw new Error(SYNC_UNAVAILABLE);
-
-  const meetingDate = todayDateString();
-  const now = Timestamp.now();
-
-  try {
-    const openMembers = attendanceRecords.filter((record) => record.status === 'checked_in');
-    const openGuests = guestRecords.filter((record) => record.status === 'checked_in');
-
-    if (!openMembers.length && !openGuests.length) {
-      await updateDoc(doc(db, 'meetings', meetingId), {
-        systemForceCompletedDate: meetingDate,
-        updatedAt: serverTimestamp(),
-      });
-      return { success: true, count: 0 };
-    }
-
-    await Promise.all(
-      openMembers.map(async (record) => {
-        const durationMinutes = durationMinutesFrom(record.checkInTime, now);
-        await updateDoc(doc(db, 'attendanceRecords', record.id), {
-          status: 'checked_out',
-          checkOutTime: now,
-          durationMinutes,
-          checkedOutBy: 'system',
-          forceAction: true,
-          forceActionBy: 'system',
-          forceType: 'system',
-          notes: note,
-          updatedAt: serverTimestamp(),
-        });
-        await appendActivityLog(db, {
-          meetingId,
-          type: 'force_check_out',
-          targetMemberId: record.memberId,
-          targetCapid: record.capid || record.temporaryId || record.memberId,
-          targetName: record.memberName,
-          details: { notes: note, forceType: 'system' },
-        });
-      })
-    );
-
-    await Promise.all(
-      openGuests.map(async (record) => {
-        const durationMinutes = durationMinutesFrom(record.checkInTime, now);
-        await updateDoc(doc(db, 'guestAttendanceRecords', record.id), {
-          status: 'checked_out',
-          checkOutTime: now,
-          durationMinutes,
-          checkedOutBy: 'system',
-          forceAction: true,
-          forceType: 'system',
-          notes: note,
-          updatedAt: serverTimestamp(),
-        });
-        await appendActivityLog(db, {
-          meetingId,
-          type: 'guest_checked_out',
-          guestId: record.guestId,
-          guestName: record.name || record.guestName,
-          details: { notes: note, forceType: 'system' },
-        });
-      })
-    );
-
-    await updateDoc(doc(db, 'meetings', meetingId), {
-      systemForceCompletedDate: meetingDate,
-      updatedAt: serverTimestamp(),
-    });
-
-    return { success: true, count: openMembers.length + openGuests.length };
-  } catch (err) {
-    throw normalizeFirestoreError(err);
-  }
-}
+/**
+ * Global "force everyone out" is now performed ONLY by the trusted server-side
+ * GitHub Actions job (scripts/system-force-checkout.js) at 9:30 PM Eastern, with
+ * atomic idempotency. The kiosk browser must never be able to check everyone out
+ * based on the device clock, so the old client-side systemForceCheckoutFirestore()
+ * has been removed. Admins can still force-check-out an individual via
+ * forceCheckOutFirestore().
+ */
 
 export function subscribeAttendanceRecords(meetingId, callback, onError) {
   const db = getDb();

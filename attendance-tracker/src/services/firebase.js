@@ -1,4 +1,5 @@
 import { initializeApp } from 'firebase/app';
+import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { getFunctions, connectFunctionsEmulator, httpsCallable } from 'firebase/functions';
 import { getStorage, connectStorageEmulator } from 'firebase/storage';
@@ -76,6 +77,21 @@ export function getFirebaseApp() {
   if (!isFirebaseConfigured()) return null;
   if (!app) {
     app = initializeApp(firebaseConfig);
+    // Opt-in Firebase App Check (reCAPTCHA v3). No-op unless a site key is set at
+    // build time. When enabled here AND enforced on Firestore in the console, this
+    // is the recommended containment for the public-read exposure (see docs/SECURITY.md).
+    const recaptchaSiteKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY;
+    if (recaptchaSiteKey) {
+      try {
+        initializeAppCheck(app, {
+          provider: new ReCaptchaV3Provider(recaptchaSiteKey),
+          isTokenAutoRefreshEnabled: true,
+        });
+      } catch (err) {
+        // Never break the kiosk if App Check fails to initialize.
+        console.warn('App Check initialization failed:', err?.message);
+      }
+    }
   }
   return app;
 }
