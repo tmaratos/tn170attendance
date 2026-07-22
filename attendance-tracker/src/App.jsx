@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
-import { BrowserRouter, Navigate, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter, Navigate, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
+import AdminTopBar from './components/AdminTopBar';
+import StatusStrip from './components/StatusStrip';
 import PublicKiosk from './pages/PublicKiosk';
 import Dashboard from './pages/Dashboard';
 import CheckIn from './pages/CheckIn';
@@ -12,6 +14,7 @@ import GuestSignOut from './pages/GuestSignOut';
 import AdminLogin from './pages/AdminLogin';
 import Guests from './pages/Guests';
 import AttendanceList from './pages/AttendanceList';
+import Roster from './pages/Roster';
 import Reports from './pages/Reports';
 import AdminTools from './pages/AdminTools';
 import Settings from './pages/Settings';
@@ -23,6 +26,17 @@ import './styles/dashboard.css';
 import './styles/tables.css';
 import './styles/forms.css';
 import './styles/kiosk.css';
+import './styles/redesign.css';
+
+const ADMIN_PAGES = {
+  '/admin/dashboard': { title: 'Dashboard', subtitle: 'Squadron attendance overview' },
+  '/admin/members': { title: 'Attendance', subtitle: "Tonight's meeting" },
+  '/admin/roster': { title: 'Roster', subtitle: 'Squadron members' },
+  '/admin/reports': { title: 'Reports', subtitle: 'Automated attendance exports' },
+  '/admin/tools': { title: 'Overrides & PINs', subtitle: 'Force actions and PIN resets' },
+  '/admin/settings': { title: 'Settings', subtitle: 'Squadron configuration' },
+  '/admin/guests': { title: 'Guests', subtitle: 'Guest attendance' },
+};
 
 export default function App() {
   const attendance = useAttendance();
@@ -36,6 +50,7 @@ export default function App() {
 
 function AppShell({ attendance }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const [adminAuthed, setAdminAuthed] = useState(() => {
     try {
       return sessionStorage.getItem('tn170-admin-auth') === 'true';
@@ -47,6 +62,7 @@ function AppShell({ attendance }) {
   const isAdminLogin = location.pathname === '/admin-login';
   const isPublicFullScreen = !isAdminRoute || isAdminLogin;
   const hasAdminAccess = adminAuthed || Boolean(attendance.seniorSession);
+  const pageMeta = ADMIN_PAGES[location.pathname] || { title: 'TN-170 Attendance', subtitle: '' };
 
   useEffect(() => {
     if (attendance.seniorSession) {
@@ -60,65 +76,93 @@ function AppShell({ attendance }) {
     sessionStorage.setItem('tn170-admin-auth', 'true');
   };
 
+  const handleSignOut = () => {
+    attendance.clearSeniorSession?.();
+    try {
+      sessionStorage.removeItem('tn170-admin-auth');
+    } catch {
+      /* ignore */
+    }
+    setAdminAuthed(false);
+    navigate('/');
+  };
+
+  const showAdminChrome = isAdminRoute && !isAdminLogin;
+
   return (
-    <div className={`app-layout ${isPublicFullScreen ? 'public-app-layout' : ''}`}>
+    <div className={`app-layout ${isPublicFullScreen ? 'public-app-layout' : ''} ${showAdminChrome ? 'admin-shell' : ''}`}>
       <SyncWarningBanner
         isSyncAvailable={attendance.isSyncAvailable}
         syncError={attendance.syncError}
         syncState={attendance.syncState}
         lastSyncedAt={attendance.lastSyncedAt}
       />
-      {!isPublicFullScreen && <Sidebar settings={attendance.settings} />}
+      {!isPublicFullScreen && <Sidebar settings={attendance.settings} attendance={attendance} />}
       <main className={`main-content ${isPublicFullScreen ? 'public-main-content' : ''}`}>
-        <Routes>
-          <Route path="/" element={<PublicKiosk attendance={attendance} />} />
-          <Route path="/kiosk" element={<PublicKiosk attendance={attendance} />} />
-          <Route path="/check-in" element={<CheckIn attendance={attendance} />} />
-          <Route path="/check-out" element={<CheckOut attendance={attendance} />} />
-          <Route path="/guest-sign-in" element={<GuestSignIn attendance={attendance} />} />
-          <Route path="/guest-sign-out" element={<GuestSignOut attendance={attendance} />} />
-          <Route path="/open-house" element={<OpenHouseSignIn attendance={attendance} />} />
-          <Route path="/open-house-sign-in" element={<OpenHouseSignIn attendance={attendance} />} />
-          <Route path="/ipad-kiosk" element={<IPadKiosk attendance={attendance} />} />
-          <Route
-            path="/admin-login"
-            element={<AdminLogin attendance={attendance} onLogin={handleAdminLogin} />}
-          />
+        {showAdminChrome && (
+          <>
+            <AdminTopBar
+              title={pageMeta.title}
+              subtitle={pageMeta.subtitle}
+              attendance={attendance}
+              onSignOut={handleSignOut}
+            />
+            <StatusStrip attendance={attendance} />
+          </>
+        )}
+        <div className={showAdminChrome ? 'admin-page' : ''}>
+          <Routes>
+            <Route path="/" element={<PublicKiosk attendance={attendance} />} />
+            <Route path="/kiosk" element={<PublicKiosk attendance={attendance} />} />
+            <Route path="/check-in" element={<CheckIn attendance={attendance} />} />
+            <Route path="/check-out" element={<CheckOut attendance={attendance} />} />
+            <Route path="/guest-sign-in" element={<GuestSignIn attendance={attendance} />} />
+            <Route path="/guest-sign-out" element={<GuestSignOut attendance={attendance} />} />
+            <Route path="/open-house" element={<OpenHouseSignIn attendance={attendance} />} />
+            <Route path="/open-house-sign-in" element={<OpenHouseSignIn attendance={attendance} />} />
+            <Route path="/ipad-kiosk" element={<IPadKiosk attendance={attendance} />} />
+            <Route
+              path="/admin-login"
+              element={<AdminLogin attendance={attendance} onLogin={handleAdminLogin} />}
+            />
 
-          <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
-          <Route
-            path="/admin/dashboard"
-            element={
-              hasAdminAccess ? <Dashboard attendance={attendance} /> : <Navigate to="/admin-login" replace />
-            }
-          />
-          <Route
-            path="/admin/reports"
-            element={hasAdminAccess ? <Reports attendance={attendance} /> : <Navigate to="/admin-login" replace />}
-          />
-          <Route
-            path="/admin/members"
-            element={hasAdminAccess ? <AttendanceList attendance={attendance} /> : <Navigate to="/admin-login" replace />}
-          />
-          <Route
-            path="/admin/settings"
-            element={hasAdminAccess ? <Settings attendance={attendance} /> : <Navigate to="/admin-login" replace />}
-          />
-          <Route
-            path="/admin/guests"
-            element={hasAdminAccess ? <Guests attendance={attendance} /> : <Navigate to="/admin-login" replace />}
-          />
-          <Route
-            path="/admin/tools"
-            element={hasAdminAccess ? <AdminTools attendance={attendance} /> : <Navigate to="/admin-login" replace />}
-          />
+            <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+            <Route
+              path="/admin/dashboard"
+              element={hasAdminAccess ? <Dashboard attendance={attendance} /> : <Navigate to="/admin-login" replace />}
+            />
+            <Route
+              path="/admin/reports"
+              element={hasAdminAccess ? <Reports attendance={attendance} /> : <Navigate to="/admin-login" replace />}
+            />
+            <Route
+              path="/admin/members"
+              element={hasAdminAccess ? <AttendanceList attendance={attendance} /> : <Navigate to="/admin-login" replace />}
+            />
+            <Route
+              path="/admin/roster"
+              element={hasAdminAccess ? <Roster attendance={attendance} /> : <Navigate to="/admin-login" replace />}
+            />
+            <Route
+              path="/admin/settings"
+              element={hasAdminAccess ? <Settings attendance={attendance} /> : <Navigate to="/admin-login" replace />}
+            />
+            <Route
+              path="/admin/guests"
+              element={hasAdminAccess ? <Guests attendance={attendance} /> : <Navigate to="/admin-login" replace />}
+            />
+            <Route
+              path="/admin/tools"
+              element={hasAdminAccess ? <AdminTools attendance={attendance} /> : <Navigate to="/admin-login" replace />}
+            />
 
-          <Route path="/guests" element={<Navigate to="/admin/guests" replace />} />
-          <Route path="/attendance" element={<Navigate to="/admin/members" replace />} />
-          <Route path="/reports" element={<Navigate to="/admin/reports" replace />} />
-          <Route path="/settings" element={<Navigate to="/admin/settings" replace />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+            <Route path="/guests" element={<Navigate to="/admin/guests" replace />} />
+            <Route path="/attendance" element={<Navigate to="/admin/members" replace />} />
+            <Route path="/reports" element={<Navigate to="/admin/reports" replace />} />
+            <Route path="/settings" element={<Navigate to="/admin/settings" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </div>
       </main>
     </div>
   );

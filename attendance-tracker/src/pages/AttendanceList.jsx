@@ -2,7 +2,6 @@ import { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { formatTime, formatDuration, getInitials } from '../data/mockData';
 import AttendanceCsvExport from '../components/AttendanceCsvExport';
-import MemberRosterManagement from '../components/MemberRosterManagement';
 
 const FILTERS = [
   { key: 'all', label: 'All' },
@@ -21,19 +20,11 @@ export default function AttendanceList({ attendance }) {
     meeting,
     seniorSession,
     addActivity,
-    searchMembers,
-    createMember,
-    updateMember,
-    deactivateMember,
-    reactivateMember,
   } = attendance;
   const [searchParams] = useSearchParams();
   const initialFilter = searchParams.get('filter') || 'all';
   const [filter, setFilter] = useState(initialFilter);
   const [search, setSearch] = useState('');
-
-  // A single authoritative roster-management workflow (createMember/updateMember).
-  const canManage = isFirebase && seniorSession?.canManageMembers && createMember && updateMember;
 
   const filteredMembers = useMemo(() => {
     let list = members;
@@ -224,17 +215,6 @@ export default function AttendanceList({ attendance }) {
           </>
         )}
       </div>
-
-      {canManage && (
-        <MemberRosterManagement
-          seniorSession={seniorSession}
-          searchMembers={searchMembers}
-          createMember={createMember}
-          updateMember={updateMember}
-          deactivateMember={deactivateMember}
-          reactivateMember={reactivateMember}
-        />
-      )}
     </div>
   );
 }

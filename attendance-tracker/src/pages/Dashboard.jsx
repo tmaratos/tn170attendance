@@ -8,8 +8,6 @@ import CheckInWizard from '../components/CheckInWizard';
 import LocalClock from '../components/LocalClock';
 import PrintableAttendanceLog from '../components/PrintableAttendanceLog';
 import AttendanceCsvExport from '../components/AttendanceCsvExport';
-import MemberRosterManagement from '../components/MemberRosterManagement';
-import OperationalDiagnostics from '../components/OperationalDiagnostics';
 import { isMeetingInProgress, formatMeetingTime } from '../data/mockData';
 import { useLocalTime } from '../hooks/useLocalTime';
 
@@ -31,6 +29,7 @@ function ActionIcon({ type }) {
     out: <><path d="M21 12H10" /><path d="m13 8-4 4 4 4" /><path d="M4 4v16" /></>,
     list: <><path d="M8 6h13" /><path d="M8 12h13" /><path d="M8 18h13" /><path d="M3 6h.01" /><path d="M3 12h.01" /><path d="M3 18h.01" /></>,
     print: <><path d="M6 9V3h12v6" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><path d="M6 14h12v7H6z" /></>,
+    add: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M19 8v6" /><path d="M22 11h-6" /></>,
   };
 
   return <svg {...common}>{icons[type]}</svg>;
@@ -221,8 +220,14 @@ export default function Dashboard({ attendance }) {
           </Link>
           <Link to="/admin/members" className="btn btn-blue">
             <ActionIcon type="list" />
-            <span><strong>View Full List</strong><small>All members and guests</small></span>
+            <span><strong>View Attendance</strong><small>Tonight's full list</small></span>
           </Link>
+          {canManageMembers && (
+            <Link to="/admin/roster" className="btn btn-gold">
+              <ActionIcon type="add" />
+              <span><strong>Add Member</strong><small>Manage the roster</small></span>
+            </Link>
+          )}
           <button type="button" className="btn btn-gray" onClick={handlePrint}>
             <ActionIcon type="print" />
             <span><strong>Print Sign In Sheet</strong><small>Print attendance sheet</small></span>
@@ -244,18 +249,6 @@ export default function Dashboard({ attendance }) {
           />
         </div>
 
-        {canManageMembers && createMember && updateMember && (
-          <MemberRosterManagement
-            seniorSession={seniorSession}
-            searchMembers={searchMembers}
-            createMember={createMember}
-            updateMember={updateMember}
-            deactivateMember={deactivateMember}
-            reactivateMember={reactivateMember}
-          />
-        )}
-
-        <OperationalDiagnostics attendance={attendance} />
       </div>
       </div>
     </>

@@ -1,0 +1,312 @@
+/* =========================================================================
+   TN-170 admin redesign — professional app shell, status strip, drawer.
+   Additive and scoped to new class names; does not override existing pages.
+   ========================================================================= */
+
+/* Light, calm content area for admin pages */
+.admin-shell {
+  background: #eef2f8;
+  min-height: 100dvh;
+}
+
+.admin-shell .main-content {
+  background: #eef2f8;
+  color: var(--gray-800);
+  padding: 0;
+}
+
+/* Uniform page padding below the top bar + status strip */
+.admin-page { padding: 24px 28px 40px; }
+
+/* The top bar now carries the page title; hide the duplicate in-page <h1>.
+   Keep .page-subtitle visible — some screens (auth, loading) rely on it for state. */
+.admin-shell .page-title { display: none; }
+.admin-shell .page-subtitle { margin-bottom: 16px; color: var(--gray-500); }
+
+/* Dashboard was designed for a dark canvas; flatten it onto the light shell
+   and drop the now-redundant "Welcome!" header (the top bar carries the title). */
+.admin-shell .dashboard-page {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  max-width: none;
+}
+.admin-shell .dashboard-header { display: none; }
+
+/* ---- Top bar ---------------------------------------------------------- */
+.admin-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 28px;
+  background: var(--white);
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.admin-topbar-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.admin-topbar-title h1 {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--navy);
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+.admin-topbar-title .admin-topbar-sub {
+  font-size: 0.82rem;
+  color: var(--gray-500);
+  font-weight: 500;
+}
+
+.admin-topbar-spacer { flex: 1 1 auto; }
+
+.admin-topbar-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--gray-200);
+  border-radius: 10px;
+  background: var(--gray-50);
+  font-weight: 600;
+  color: var(--gray-700);
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.admin-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px 6px 6px;
+  border-radius: 12px;
+}
+.admin-identity .avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--navy);
+  color: var(--white);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 0.85rem;
+  flex: none;
+}
+.admin-identity-meta { display: flex; flex-direction: column; line-height: 1.15; }
+.admin-identity-name { font-weight: 700; color: var(--navy); font-size: 0.92rem; }
+.admin-identity-role { font-size: 0.76rem; color: var(--gray-500); }
+
+.admin-signout {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: 1px solid var(--gray-200);
+  border-radius: 10px;
+  background: var(--white);
+  color: var(--gray-700);
+  font-weight: 600;
+  font-size: 0.85rem;
+  transition: background 0.15s, border-color 0.15s;
+}
+.admin-signout:hover { background: var(--red-bg); border-color: var(--red); color: var(--red-dark); }
+
+/* ---- Status strip ----------------------------------------------------- */
+.status-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  margin: 20px 28px 0;
+  background: var(--gray-200);
+  border: 1px solid var(--gray-200);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 18px;
+  background: var(--white);
+}
+.status-item-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.status-item-icon svg { width: 20px; height: 20px; }
+.status-item-body { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+.status-item-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--gray-500); font-weight: 700; }
+.status-item-value { font-size: 0.95rem; font-weight: 700; color: var(--navy); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.status-item-value.muted { color: var(--gray-500); font-weight: 600; }
+
+.status-icon-green { background: var(--green-bg); color: var(--green-dark); }
+.status-icon-blue { background: #dbeafe; color: var(--cap-blue-dark); }
+.status-icon-gold { background: #fef3c7; color: var(--gold-dark); }
+.status-icon-red { background: var(--red-bg); color: var(--red-dark); }
+.status-icon-gray { background: var(--gray-100); color: var(--gray-500); }
+
+/* Admin page content wrapper (below the strip) */
+.admin-content { padding: 24px 28px 40px; }
+
+/* ---- Sidebar identity footer & kiosk button --------------------------- */
+.sidebar-kiosk-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 16px 0;
+  padding: 11px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.16);
+  color: #cbd5e1;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: background 0.15s;
+}
+.sidebar-kiosk-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
+
+.sidebar-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 14px 12px 4px;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.06);
+}
+.sidebar-identity .avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--gold); color: var(--navy-dark);
+  display: grid; place-items: center; font-weight: 800; font-size: 0.82rem; flex: none;
+}
+.sidebar-identity-meta { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+.sidebar-identity-name { color: #fff; font-weight: 700; font-size: 0.86rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar-identity-role { color: #94a3b8; font-size: 0.74rem; }
+.sidebar-nav-group-label {
+  margin: 16px 22px 6px;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  font-weight: 700;
+}
+
+/* ---- Right slide-over drawer (Add member) ----------------------------- */
+.drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 9, 20, 0.45);
+  z-index: 50;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+.drawer-overlay.open { opacity: 1; pointer-events: auto; }
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100dvh;
+  width: min(420px, 92vw);
+  background: var(--white);
+  z-index: 51;
+  box-shadow: -12px 0 40px rgba(0,0,0,0.25);
+  transform: translateX(100%);
+  transition: transform 0.24s ease;
+  display: flex;
+  flex-direction: column;
+}
+.drawer.open { transform: translateX(0); }
+.drawer-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 20px 22px; border-bottom: 1px solid var(--gray-200);
+}
+.drawer-header h2 { font-size: 1.15rem; font-weight: 800; color: var(--navy); }
+.drawer-close {
+  width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center;
+  color: var(--gray-500); font-size: 1.3rem;
+}
+.drawer-close:hover { background: var(--gray-100); color: var(--gray-800); }
+.drawer-body { padding: 20px 22px; overflow-y: auto; flex: 1 1 auto; }
+.drawer-footer {
+  display: flex; gap: 12px; justify-content: flex-end;
+  padding: 16px 22px; border-top: 1px solid var(--gray-200);
+}
+
+/* ---- Refined cards / tables for admin pages --------------------------- */
+.card {
+  background: var(--white);
+  border: 1px solid var(--gray-200);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
+.card-pad { padding: 20px 22px; }
+.card-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 16px 22px; border-bottom: 1px solid var(--gray-100);
+}
+.card-header h2, .card-header h3 { font-size: 1.05rem; font-weight: 800; color: var(--navy); }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 10px; border-radius: 999px; font-size: 0.76rem; font-weight: 700;
+}
+.pill-green { background: var(--green-bg); color: var(--green-dark); }
+.pill-gold { background: #fef3c7; color: var(--gold-dark); }
+.pill-red { background: var(--red-bg); color: var(--red-dark); }
+.pill-gray { background: var(--gray-100); color: var(--gray-600); }
+.pill-blue { background: #dbeafe; color: var(--cap-blue-dark); }
+
+.seg {
+  display: inline-flex; background: var(--gray-100); border-radius: 10px; padding: 4px; gap: 4px;
+  flex-wrap: wrap;
+}
+.seg button {
+  padding: 7px 14px; border-radius: 8px; font-weight: 600; font-size: 0.88rem; color: var(--gray-600);
+}
+.seg button.active { background: var(--white); color: var(--navy); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+
+/* Icon button used in tables */
+.icon-btn {
+  width: 34px; height: 34px; border-radius: 8px; display: grid; place-items: center;
+  border: 1px solid var(--gray-200); background: var(--white); color: var(--gray-600);
+}
+.icon-btn:hover { background: var(--gray-50); color: var(--navy); }
+
+/* ---- Inline banners / notes ------------------------------------------- */
+.banner-success {
+  padding: 12px 16px; border-radius: 10px; margin-bottom: 16px;
+  background: var(--green-bg); color: var(--green-dark); font-weight: 600;
+  border: 1px solid #bbf7d0;
+}
+.banner-error {
+  padding: 12px 16px; border-radius: 10px; margin-bottom: 16px;
+  background: var(--red-bg); color: var(--red-dark); font-weight: 600;
+  border: 1px solid #fecaca;
+}
+.info-note {
+  display: flex; gap: 8px; align-items: flex-start;
+  padding: 12px 14px; border-radius: 10px; background: #eff6ff; color: var(--cap-blue-dark);
+  font-size: 0.85rem; border: 1px solid #bfdbfe; margin-top: 4px;
+}
+
+@media (max-width: 768px) {
+  .admin-topbar { padding: 12px 16px 12px 84px; }
+  .status-strip { margin: 14px 14px 0; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+  .admin-page { padding: 16px 14px 32px; }
+  .admin-topbar-date { display: none; }
+  .admin-identity-meta { display: none; }
+}
