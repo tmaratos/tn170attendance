@@ -1,311 +1,111 @@
 /**
- * Weekly attendance email — run from GitHub Actions or locally.
+ * Weekly attendance report — posts the Tuesday attendance export to Discord
+ * (required) and, optionally, emails it. Runs from GitHub Actions or locally.
+ *
+ * Discord is a REQUIRED destination and is fully decoupled from email:
+ *   - Missing EMAIL_RECIPIENTS never prevents Discord delivery.
+ *   - Email failure never prevents Discord delivery.
+ *   - Discord failure is surfaced as a workflow failure + uploaded artifact.
  *
  * Required env:
- *   FIREBASE_PROJECT_ID (default: tn170-attendance)
- *   FIREBASE_SERVICE_ACCOUNT_JSON — full service account JSON string
+ *   FIREBASE_SERVICE_ACCOUNT_JSON — service account JSON string
+ *   DISCORD_WEBHOOK_URL — webhook created in the attendance channel (never logged)
+ * Optional env:
+ *   FIREBASE_PROJECT_ID, SCHEDULE_TIMEZONE (America/New_York), MEETING_DAY (Tuesday)
+ *   REPORT_TIME (default 22:30 — 10:30 PM local)
+ *   DELIVERY_MODE = full | discord_only | email_only   (default full)
+ *   DRY_RUN=true, MEETING_DATE=YYYY-MM-DD
+ *   FORCE_SEND=true  — skip the schedule gate [alias SKIP_SCHEDULE_GATE]
+ *   FORCE_RESEND=true — re-post even if a prior run already succeeded
+ *   ARTIFACT_DIR (default ./report-artifacts)
+ * Email transport (optional): RESEND_API_KEY + EMAIL_FROM, or SMTP_* + EMAIL_FROM
  *   EMAIL_RECIPIENTS — comma/semicolon-separated addresses
- *
- * Email transport (pick one):
- *   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, EMAIL_FROM
- *   — or —
- *   RESEND_API_KEY, EMAIL_FROM
- *
- * Optional:
- *   SCHEDULE_TIMEZONE (default America/New_York — Oak Ridge, TN)
- *   MEETING_DAY (default Tuesday)
- *   SEND_HOUR (default 22 — 10 PM local)
- *   FORCE_SEND=true — skip schedule gate (manual runs)
- *   DISCORD_WEBHOOK_URL — posts CSV to Discord channel as backup (skipped if unset)
  */
-
-import { initializeApp, cert, applicationDefault } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
-import { readFileSync, existsSync } from 'fs';
+import { FieldValue } from 'firebase-admin/firestore';
+import { mkdirSync, writeFileSync } from 'fs';
+import { join } from 'path';
 import nodemailer from 'nodemailer';
+import { initFirebaseAdmin, describeFirebaseCredential, DEFAULT_PROJECT_ID } from './lib/firebaseAdmin.js';
+import {
+  DEFAULT_TIMEZONE,
+  DEFAULT_MEETING_DAY,
+  DEFAULT_REPORT_TIME,
+  evaluateWindow,
+  zonedDateString,
+  zonedTimeLabel,
+} from './lib/time.js';
+import { fetchMeetingBundle } from './lib/meeting.js';
+import { buildCsv, summarize } from './lib/csv.js';
+import { deliverToDiscord, buildEmbed, validateWebhookUrl } from './lib/discord.js';
 
-const DEFAULT_PROJECT_ID = 'tn170-attendance';
-const CSV_HEADERS = [
-  'Type',
-  'Name',
-  'CAPID/Pending CAPID',
-  'Role',
-  'Hosted By',
-  'Email',
-  'Phone',
-  'Check-In',
-  'Check-Out',
-  'Duration',
-  'Status',
-  'Force Action Note',
-];
+const MARKER_COLLECTION = 'automationRuns';
 
 function env(name, fallback = '') {
   return process.env[name]?.trim() || fallback;
 }
-
+function boolEnv(name) {
+  return env(name).toLowerCase() === 'true';
+}
+function log(stage, message) {
+  console.log(`[${stage}] ${message}`);
+}
 function parseRecipients(raw) {
   return String(raw || '')
     .split(/[,;\s]+/)
-    .map((entry) => entry.trim())
+    .map((e) => e.trim())
     .filter(Boolean);
 }
 
-function timestampToIso(value) {
-  if (!value) return null;
-  if (typeof value === 'string') return value;
-  if (value.toDate) return value.toDate().toISOString();
-  if (value._seconds) return new Date(value._seconds * 1000).toISOString();
-  return null;
+function buildSummaryText({ meetingDate, meeting, summary, timeZone }) {
+  return [
+    'TN-170 Oak Ridge Composite Squadron — official Tuesday attendance report',
+    '',
+    `Meeting date: ${meetingDate}`,
+    meeting?.meetingTitle ? `Meeting: ${meeting.meetingTitle}` : null,
+    `Timezone: ${timeZone}`,
+    '',
+    `Total member attendance records: ${summary.memberTotal}`,
+    `Members checked out: ${summary.memberCheckedOut}`,
+    `Members still open (should be 0): ${summary.memberCheckedIn}`,
+    `Total guest records: ${summary.guestTotal}`,
+    '',
+    'Attachment (ZIP) contains the full member + guest CSV for tonight\'s meeting.',
+  ]
+    .filter(Boolean)
+    .join('\n');
 }
 
-function formatTime(isoString) {
-  if (!isoString) return '—';
-  return new Date(isoString).toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-    timeZone: env('SCHEDULE_TIMEZONE', 'America/New_York'),
+async function sendViaResend({ to, subject, text, csv, filename }) {
+  const apiKey = env('RESEND_API_KEY');
+  const from = env('EMAIL_FROM');
+  if (!apiKey || !from) throw new Error('RESEND_API_KEY and EMAIL_FROM are required for Resend.');
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      from,
+      to,
+      subject,
+      text,
+      attachments: [{ filename, content: Buffer.from(csv, 'utf8').toString('base64') }],
+    }),
   });
-}
-
-function formatDuration(checkIn, checkOut) {
-  if (!checkIn || !checkOut) return '—';
-  const ms = new Date(checkOut) - new Date(checkIn);
-  const hours = Math.floor(ms / 3600000);
-  const minutes = Math.floor((ms % 3600000) / 60000);
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  return `${minutes}m`;
-}
-
-function escapeCsvCell(value) {
-  return `"${String(value ?? '').replace(/"/g, '""')}"`;
-}
-
-let crc32Table;
-function crc32(buffer) {
-  if (!crc32Table) {
-    crc32Table = new Uint32Array(256);
-    for (let i = 0; i < 256; i++) {
-      let c = i;
-      for (let j = 0; j < 8; j++) {
-        c = (c & 1) ? (0xedb88320 ^ (c >>> 1)) : (c >>> 1);
-      }
-      crc32Table[i] = c;
-    }
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Resend API error (${response.status}): ${body.slice(0, 200)}`);
   }
-
-  let crc = 0xffffffff;
-  for (let i = 0; i < buffer.length; i++) {
-    crc = (crc >>> 8) ^ crc32Table[(crc ^ buffer[i]) & 0xff];
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
-/** Store-only ZIP — Discord inlines text/csv attachments but not application/zip. */
-function zipSingleFile(filename, content) {
-  const nameBuffer = Buffer.from(filename, 'utf8');
-  const dataBuffer = Buffer.from(content, 'utf8');
-  const checksum = crc32(dataBuffer);
-  const size = dataBuffer.length;
-
-  const localHeader = Buffer.alloc(30 + nameBuffer.length);
-  localHeader.writeUInt32LE(0x04034b50, 0);
-  localHeader.writeUInt16LE(20, 4);
-  localHeader.writeUInt16LE(0, 8);
-  localHeader.writeUInt32LE(checksum, 14);
-  localHeader.writeUInt32LE(size, 18);
-  localHeader.writeUInt32LE(size, 22);
-  localHeader.writeUInt16LE(nameBuffer.length, 26);
-  nameBuffer.copy(localHeader, 30);
-
-  const centralHeader = Buffer.alloc(46 + nameBuffer.length);
-  centralHeader.writeUInt32LE(0x02014b50, 0);
-  centralHeader.writeUInt16LE(20, 4);
-  centralHeader.writeUInt16LE(20, 6);
-  centralHeader.writeUInt32LE(checksum, 16);
-  centralHeader.writeUInt32LE(size, 20);
-  centralHeader.writeUInt32LE(size, 24);
-  centralHeader.writeUInt16LE(nameBuffer.length, 28);
-  centralHeader.writeUInt32LE(0, 38);
-  nameBuffer.copy(centralHeader, 46);
-
-  const endRecord = Buffer.alloc(22);
-  endRecord.writeUInt32LE(0x06054b50, 0);
-  endRecord.writeUInt16LE(1, 8);
-  endRecord.writeUInt16LE(1, 10);
-  endRecord.writeUInt32LE(centralHeader.length, 12);
-  endRecord.writeUInt32LE(localHeader.length + size, 16);
-
-  return Buffer.concat([localHeader, dataBuffer, centralHeader, endRecord]);
-}
-
-function embedDescription(meetingTitle, meetingDate) {
-  const fallback = `Squadron Meeting — ${meetingDate}`;
-  if (!meetingTitle) return fallback;
-
-  const suffix = ` — ${meetingDate}`;
-  if (meetingTitle.endsWith(suffix + suffix)) {
-    return meetingTitle.slice(0, -suffix.length);
-  }
-  return meetingTitle;
-}
-
-function formatGuestPhoneForCsv(phone) {
-  if (!phone) return '';
-  const digits = String(phone).replace(/\D/g, '');
-  if (digits.length === 10) {
-    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-  }
-  if (digits.length === 11 && digits.startsWith('1')) {
-    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
-  }
-  return String(phone);
-}
-
-function guestHostedBy(record) {
-  if (record.isOpenHouse === true || record.signInMode === 'open_house') {
-    return 'Open House';
-  }
-  return record.hostName || record.host || '';
-}
-
-function forceActionNote(record) {
-  if (!record?.forceAction) return record?.notes || '';
-  const type = record.forceType === 'system' ? 'System force logout' : 'Admin force logout';
-  const note = record.notes || record.forceNote || '';
-  return note ? `${type}: ${note}` : type;
-}
-
-function buildCsv(attendanceRecords, guestRecords) {
-  const memberRows = attendanceRecords.map((record) => [
-    'Member',
-    record.memberName || '',
-    record.capid || record.temporaryId || record.memberId || '',
-    record.role || '',
-    '',
-    '',
-    '',
-    formatTime(timestampToIso(record.checkInTime)),
-    formatTime(timestampToIso(record.checkOutTime)),
-    formatDuration(timestampToIso(record.checkInTime), timestampToIso(record.checkOutTime)),
-    record.status === 'checked_in' ? 'Checked In' : 'Checked Out',
-    forceActionNote(record),
-  ]);
-
-  const guestRows = guestRecords.map((record) => [
-    'Guest',
-    record.guestName || record.name || '',
-    '',
-    '',
-    guestHostedBy(record),
-    record.email || '',
-    formatGuestPhoneForCsv(record.phone),
-    formatTime(timestampToIso(record.checkInTime)),
-    formatTime(timestampToIso(record.checkOutTime)),
-    formatDuration(timestampToIso(record.checkInTime), timestampToIso(record.checkOutTime)),
-    record.status === 'checked_in' ? 'Present' : 'Signed Out',
-    forceActionNote(record),
-  ]);
-
-  const rows = [CSV_HEADERS, ...memberRows, ...guestRows];
-  return rows.map((row) => row.map(escapeCsvCell).join(',')).join('\n');
-}
-
-function meetingDateInTimezone(timeZone) {
-  return new Intl.DateTimeFormat('en-CA', { timeZone }).format(new Date());
-}
-
-function shouldSendNow() {
-  if (env('FORCE_SEND') === 'true') return true;
-
-  const timeZone = env('SCHEDULE_TIMEZONE', 'America/New_York');
-  const meetingDay = env('MEETING_DAY', 'Tuesday');
-  const sendHour = Number(env('SEND_HOUR', '22'));
-
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone,
-    weekday: 'long',
-    hour: 'numeric',
-    hour12: false,
-  }).formatToParts(new Date());
-
-  const weekday = parts.find((part) => part.type === 'weekday')?.value;
-  const hour = Number(parts.find((part) => part.type === 'hour')?.value);
-
-  return weekday === meetingDay && hour === sendHour;
-}
-
-function initFirebaseAdmin() {
-  const projectId = env('FIREBASE_PROJECT_ID', DEFAULT_PROJECT_ID);
-  const json = env('FIREBASE_SERVICE_ACCOUNT_JSON');
-  const keyPath = env('GOOGLE_APPLICATION_CREDENTIALS');
-
-  if (json) {
-    initializeApp({
-      credential: cert(JSON.parse(json)),
-      projectId,
-    });
-    return;
-  }
-
-  if (keyPath && existsSync(keyPath)) {
-    initializeApp({
-      credential: cert(JSON.parse(readFileSync(keyPath, 'utf8'))),
-      projectId,
-    });
-    return;
-  }
-
-  initializeApp({
-    credential: applicationDefault(),
-    projectId,
-  });
-}
-
-async function fetchMeetingBundle(db, meetingDate) {
-  const meetingsSnap = await db
-    .collection('meetings')
-    .where('meetingDate', '==', meetingDate)
-    .limit(1)
-    .get();
-
-  if (meetingsSnap.empty) {
-    return { meeting: null, attendanceRecords: [], guestRecords: [] };
-  }
-
-  const meetingDoc = meetingsSnap.docs[0];
-  const meeting = { id: meetingDoc.id, ...meetingDoc.data() };
-
-  const [attendanceSnap, guestSnap] = await Promise.all([
-    db.collection('attendanceRecords').where('meetingId', '==', meeting.id).get(),
-    db.collection('guestAttendanceRecords').where('meetingId', '==', meeting.id).get(),
-  ]);
-
-  return {
-    meeting,
-    attendanceRecords: attendanceSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
-    guestRecords: guestSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
-  };
 }
 
 async function sendViaSmtp({ to, subject, text, csv, filename }) {
   const host = env('SMTP_HOST');
-  const user = env('SMTP_USER');
-  const pass = env('SMTP_PASS');
   const from = env('EMAIL_FROM');
-
-  if (!host || !from) {
-    throw new Error('SMTP_HOST and EMAIL_FROM are required for SMTP delivery.');
-  }
-
+  if (!host || !from) throw new Error('SMTP_HOST and EMAIL_FROM are required for SMTP.');
   const transporter = nodemailer.createTransport({
     host,
     port: Number(env('SMTP_PORT', '587')),
     secure: env('SMTP_SECURE') === 'true',
-    auth: user ? { user, pass } : undefined,
+    auth: env('SMTP_USER') ? { user: env('SMTP_USER'), pass: env('SMTP_PASS') } : undefined,
   });
-
   await transporter.sendMail({
     from,
     to,
@@ -315,198 +115,212 @@ async function sendViaSmtp({ to, subject, text, csv, filename }) {
   });
 }
 
-async function sendViaResend({ to, subject, text, csv, filename }) {
-  const apiKey = env('RESEND_API_KEY');
-  const from = env('EMAIL_FROM');
-
-  if (!apiKey || !from) {
-    throw new Error('RESEND_API_KEY and EMAIL_FROM are required for Resend delivery.');
-  }
-
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      from,
-      to,
-      subject,
-      text,
-      attachments: [
-        {
-          filename,
-          content: Buffer.from(csv, 'utf8').toString('base64'),
-        },
-      ],
-    }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Resend API error (${response.status}): ${body}`);
-  }
-}
-
-async function sendEmail({ to, subject, text, csv, filename }) {
+async function sendEmail(args) {
   if (env('RESEND_API_KEY')) {
-    await sendViaResend({ to, subject, text, csv, filename });
+    await sendViaResend(args);
     return 'resend';
   }
-  await sendViaSmtp({ to, subject, text, csv, filename });
+  await sendViaSmtp(args);
   return 'smtp';
 }
 
-async function postToDiscord({ csv, filename, meetingDate, meeting, attendanceRecords, guestRecords, timeZone }) {
-  const webhookUrl = env('DISCORD_WEBHOOK_URL');
-  if (!webhookUrl) {
-    console.warn('DISCORD_WEBHOOK_URL not set — skipping Discord backup post.');
-    return null;
-  }
-
-  const checkedIn = attendanceRecords.filter((r) => r.status === 'checked_in').length;
-  const checkedOut = attendanceRecords.filter((r) => r.status === 'checked_out').length;
-  const guestsTotal = guestRecords.length;
-
-  const embed = {
-    title: `TN-170 Attendance — ${meetingDate}`,
-    description: embedDescription(meeting?.meetingTitle, meetingDate),
-    color: 0x1e3a5f,
-    fields: [
-      { name: 'Members (checked out)', value: String(checkedOut), inline: true },
-      { name: 'Members (still open)', value: String(checkedIn), inline: true },
-      { name: 'Guest records', value: String(guestsTotal), inline: true },
-      { name: 'Timezone', value: timeZone, inline: false },
-    ],
-    footer: { text: 'GitHub Actions weekly backup' },
-  };
-
-  const zipFilename = filename.replace(/\.csv$/i, '.zip');
-  const zipBuffer = zipSingleFile(filename, csv);
-
-  const form = new FormData();
-  form.append(
-    'payload_json',
-    JSON.stringify({ embeds: [embed] }),
-  );
-  form.append(
-    'files[0]',
-    new Blob([zipBuffer], { type: 'application/zip' }),
-    zipFilename,
-  );
-
-  const response = await fetch(webhookUrl, { method: 'POST', body: form });
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Discord webhook error (${response.status}): ${body.slice(0, 200)}`);
-  }
-
-  return zipFilename;
-}
-
-function buildSummaryText({ meetingDate, meeting, attendanceRecords, guestRecords, timeZone }) {
-  const checkedIn = attendanceRecords.filter((r) => r.status === 'checked_in').length;
-  const checkedOut = attendanceRecords.filter((r) => r.status === 'checked_out').length;
-  const guestsPresent = guestRecords.filter((r) => r.status === 'checked_in').length;
-  const guestsTotal = guestRecords.length;
-
-  const lines = [
-    'TN-170 Oak Ridge Composite Squadron — weekly attendance report',
-    '',
-    `Meeting date: ${meetingDate}`,
-    meeting?.meetingTitle ? `Meeting: ${meeting.meetingTitle}` : null,
-    `Timezone: ${timeZone}`,
-    '',
-    `Members checked in (still open): ${checkedIn}`,
-    `Members checked out: ${checkedOut}`,
-    `Total member attendance records: ${attendanceRecords.length}`,
-    `Guests present (still open): ${guestsPresent}`,
-    `Total guest records: ${guestsTotal}`,
-    '',
-    'CSV attachment includes member and guest rows for tonight\'s meeting.',
-  ].filter(Boolean);
-
-  return lines.join('\n');
-}
-
 async function main() {
-  if (!shouldSendNow()) {
-    console.log('Skipping send — outside configured Tuesday send window.');
-    console.log('Set FORCE_SEND=true to run immediately (manual test).');
+  const timeZone = env('SCHEDULE_TIMEZONE', DEFAULT_TIMEZONE);
+  const dryRun = boolEnv('DRY_RUN');
+  const force = boolEnv('FORCE_SEND') || boolEnv('SKIP_SCHEDULE_GATE');
+  const forceResend = boolEnv('FORCE_RESEND');
+  const mode = (env('DELIVERY_MODE', 'full') || 'full').toLowerCase();
+  const projectId = env('FIREBASE_PROJECT_ID', DEFAULT_PROJECT_ID);
+  const runId = env('GITHUB_RUN_ID') || null;
+  const triggerSource = env('GITHUB_EVENT_NAME') || 'local';
+  const artifactDir = env('ARTIFACT_DIR', './report-artifacts');
+
+  const wantDiscord = mode === 'full' || mode === 'discord_only';
+  const wantEmail = mode === 'full' || mode === 'email_only';
+  const discordRequired = wantDiscord; // Discord is the required destination when in scope.
+
+  // 1. Preflight configuration (presence only — never values).
+  const cred = describeFirebaseCredential();
+  const webhook = env('DISCORD_WEBHOOK_URL');
+  const webhookCheck = validateWebhookUrl(webhook);
+  const recipients = parseRecipients(env('EMAIL_RECIPIENTS'));
+  log('preflight', `mode=${mode} dryRun=${dryRun} force=${force} forceResend=${forceResend}`);
+  log('preflight', `firebase credential: mode=${cred.mode} ok=${cred.ok}${cred.error ? ` (${cred.error})` : ''}`);
+  log('preflight', `discord webhook present=${Boolean(webhook)} syntacticallyValid=${webhookCheck.valid}${webhook ? '' : ' (DISCORD_WEBHOOK_URL missing)'}`);
+  log('preflight', `email transport: resend=${Boolean(env('RESEND_API_KEY'))} smtp=${Boolean(env('SMTP_HOST'))} from=${Boolean(env('EMAIL_FROM'))} recipients=${recipients.length}`);
+
+  if (!cred.ok) throw new Error(`Firebase credential not usable: ${cred.error}.`);
+
+  // 3. Firebase authentication.
+  const db = initFirebaseAdmin();
+  log('firebase', 'admin SDK initialized.');
+
+  // Settings for the schedule gate.
+  let meetingDay = env('MEETING_DAY', DEFAULT_MEETING_DAY);
+  try {
+    const settingsSnap = await db.collection('settings').doc('squadron').get();
+    if (settingsSnap.exists) meetingDay = settingsSnap.data().meetingDay || meetingDay;
+  } catch (err) {
+    log('firebase', `settings read failed (${err.message}); using defaults.`);
+  }
+
+  // 2. Schedule validation.
+  const now = new Date();
+  const decision = evaluateWindow(now, {
+    timeZone,
+    meetingDay,
+    thresholdTime: env('REPORT_TIME', DEFAULT_REPORT_TIME),
+    force,
+    override: env('MEETING_DATE'),
+  });
+  log('schedule', `now(ET)=${zonedTimeLabel(now, timeZone)} → run=${decision.run} (${decision.reason})`);
+  if (!decision.run) {
+    log('schedule', 'Skipping — outside the report window. Set FORCE_SEND=true to run now.');
+    return;
+  }
+  const meetingDate = decision.meetingDate || zonedDateString(now, timeZone);
+  log('schedule', `Target meeting date: ${meetingDate}`);
+
+  // 4/5. Meeting + attendance retrieval.
+  const { meeting, attendanceRecords, guestRecords, duplicateCount } = await fetchMeetingBundle(db, meetingDate);
+  if (duplicateCount > 1) log('meeting', `WARNING: ${duplicateCount} legacy meeting docs for ${meetingDate}.`);
+  if (!meeting) log('meeting', `No Firestore meeting for ${meetingDate} — report will contain headers only.`);
+  else log('meeting', `Resolved meeting ${meeting.id}.`);
+  const summary = summarize(attendanceRecords, guestRecords);
+  log('attendance', `members total=${summary.memberTotal} checkedOut=${summary.memberCheckedOut} open=${summary.memberCheckedIn}; guests=${summary.guestTotal}.`);
+
+  // 7. Report generation.
+  const csv = buildCsv(attendanceRecords, guestRecords, timeZone);
+  const filename = `tn170-attendance-${meetingDate}.csv`;
+  const subject = `TN-170 Attendance — ${meetingDate}`;
+  const text = buildSummaryText({ meetingDate, meeting, summary, timeZone });
+
+  // Always write the artifact so it is downloadable even if delivery fails.
+  const zipName = filename.replace(/\.csv$/i, '.zip');
+  try {
+    mkdirSync(artifactDir, { recursive: true });
+    writeFileSync(join(artifactDir, filename), csv, 'utf8');
+    log('artifact', `Wrote ${join(artifactDir, filename)} (and ${zipName} is generated in-memory for Discord).`);
+  } catch (err) {
+    log('artifact', `Could not write artifact file: ${err.message}`);
+  }
+
+  // 6. Idempotency — read prior delivery record.
+  const markerId = `report-${meetingDate}`;
+  const markerRef = db.collection(MARKER_COLLECTION).doc(markerId);
+  const priorSnap = dryRun ? null : await markerRef.get();
+  const prior = priorSnap?.exists ? priorSnap.data() : null;
+  const discordAlreadyDone = Boolean(prior?.discordSucceeded) && !forceResend;
+  const emailAlreadyDone = Boolean(prior?.emailSucceeded) && !forceResend;
+
+  if (dryRun) {
+    log('discord', `DRY_RUN — would ${wantDiscord ? 'post' : 'skip'} Discord (webhook valid=${webhookCheck.valid}).`);
+    log('email', `DRY_RUN — would ${wantEmail && recipients.length ? 'email ' + recipients.length + ' recipient(s)' : 'skip email'}.`);
+    log('status', 'DRY_RUN complete. No delivery performed.');
     return;
   }
 
-  const recipients = parseRecipients(env('EMAIL_RECIPIENTS'));
-  if (!recipients.length) {
-    throw new Error('EMAIL_RECIPIENTS is empty. Add comma-separated addresses in GitHub Secrets.');
-  }
-
-  const timeZone = env('SCHEDULE_TIMEZONE', 'America/New_York');
-  const meetingDate = meetingDateInTimezone(timeZone);
-
-  initFirebaseAdmin();
-  const db = getFirestore();
-
-  const { meeting, attendanceRecords, guestRecords } = await fetchMeetingBundle(db, meetingDate);
-  const csv = buildCsv(attendanceRecords, guestRecords);
-  const filename = `tn170-attendance-${meetingDate}.csv`;
-  const subject = `TN-170 Attendance — ${meetingDate}`;
-  const text = buildSummaryText({
+  const record = {
+    kind: 'report',
+    meetingId: meeting?.id || null,
     meetingDate,
-    meeting,
-    attendanceRecords,
-    guestRecords,
-    timeZone,
-  });
+    reportGeneratedAt: new Date().toISOString(),
+    csvFilename: filename,
+    zipFilename: zipName,
+    triggerSource,
+    workflowRunId: runId,
+    deliveryMode: mode,
+  };
 
-  let emailError = null;
-  try {
-    const provider = await sendEmail({
-      to: recipients,
-      subject,
-      text,
-      csv,
-      filename,
-    });
-    console.log(`Sent ${filename} to ${recipients.join(', ')} via ${provider}.`);
-  } catch (err) {
-    emailError = err;
-    console.error('Email delivery failed:', err.message);
-  }
-
-  if (!meeting) {
-    console.log('Note: no Firestore meeting document found for this date — email contains headers only.');
-  }
-
-  let discordPosted = false;
-  try {
-    const discordAttachment = await postToDiscord({
-      csv,
-      filename,
-      meetingDate,
-      meeting,
-      attendanceRecords,
-      guestRecords,
-      timeZone,
-    });
-    if (discordAttachment) {
-      discordPosted = true;
-      console.log(`Posted ${discordAttachment} (contains ${filename}) to Discord backup channel.`);
+  // 8. Discord delivery (required; fully independent of email).
+  let discordResult = null;
+  if (wantDiscord) {
+    if (discordAlreadyDone) {
+      log('discord', `Already delivered for ${meetingDate} (message ${prior?.discordMessageId || 'n/a'}) — skipping. Use FORCE_RESEND=true to re-post.`);
+      discordResult = { ok: true, status: prior?.discordStatus || 200, messageId: prior?.discordMessageId || null };
+    } else if (!webhook) {
+      discordResult = { ok: false, status: 0, error: 'DISCORD_WEBHOOK_URL is not set' };
+      log('discord', 'FAILED — DISCORD_WEBHOOK_URL is not set. Add the webhook secret (see docs).');
+    } else if (!webhookCheck.valid) {
+      discordResult = { ok: false, status: 0, error: `webhook URL invalid: ${webhookCheck.reason}` };
+      log('discord', `FAILED — webhook URL is not valid (${webhookCheck.reason}).`);
+    } else {
+      const embed = buildEmbed({ meetingDate, meeting, summary, timeZone, official: true });
+      discordResult = await deliverToDiscord(webhook, { csv, filename, embed });
+      if (discordResult.ok) {
+        log('discord', `Delivered ${zipName} to attendance channel (status ${discordResult.status}, message ${discordResult.messageId || 'n/a'}, attempts ${discordResult.attempts}).`);
+      } else {
+        log('discord', `FAILED after ${discordResult.attempts} attempt(s): ${discordResult.error} (status ${discordResult.status}).`);
+      }
     }
-  } catch (err) {
-    console.error('Discord backup post failed:', err.message);
+    Object.assign(record, {
+      discordAttempted: true,
+      discordSucceeded: Boolean(discordResult.ok),
+      discordStatus: discordResult.status || 0,
+      discordMessageId: discordResult.messageId || null,
+    });
+  } else {
+    log('discord', 'Skipped (delivery mode does not include Discord).');
+    Object.assign(record, { discordAttempted: false, discordSucceeded: prior?.discordSucceeded || false });
   }
 
-  if (emailError && !discordPosted) {
-    throw emailError;
+  // 9. Email delivery (optional; missing recipients/transport is not a hard failure in full mode).
+  let emailResult = null;
+  if (wantEmail) {
+    const hasTransport = Boolean(env('RESEND_API_KEY')) || Boolean(env('SMTP_HOST'));
+    if (emailAlreadyDone) {
+      log('email', 'Already delivered — skipping.');
+      emailResult = { ok: true, provider: prior?.emailProvider || null };
+    } else if (!recipients.length || !hasTransport || !env('EMAIL_FROM')) {
+      const why = !recipients.length ? 'no EMAIL_RECIPIENTS' : !hasTransport ? 'no email transport configured' : 'no EMAIL_FROM';
+      log('email', `Skipped — ${why}. Email is optional; Discord is unaffected.`);
+      emailResult = { ok: false, skipped: true, reason: why };
+    } else {
+      try {
+        const provider = await sendEmail({ to: recipients, subject, text, csv, filename });
+        log('email', `Sent ${filename} to ${recipients.length} recipient(s) via ${provider}.`);
+        emailResult = { ok: true, provider };
+      } catch (err) {
+        log('email', `FAILED: ${err.message}. Discord delivery is unaffected.`);
+        emailResult = { ok: false, error: err.message?.slice(0, 300) };
+      }
+    }
+    Object.assign(record, {
+      emailAttempted: !emailResult.skipped,
+      emailSucceeded: Boolean(emailResult.ok),
+      emailProvider: emailResult.provider || null,
+    });
+  } else {
+    log('email', 'Skipped (delivery mode does not include email).');
   }
-  if (emailError && discordPosted) {
-    console.warn('Email failed but Discord backup succeeded — job marked successful.');
+
+  // 10. Persist delivery record.
+  const discordFailed = discordRequired && !(discordResult && discordResult.ok);
+  const emailOnlyFailed = mode === 'email_only' && !(emailResult && emailResult.ok);
+  const finalState = discordFailed || emailOnlyFailed ? 'failed' : 'delivered';
+  record.errorSummary = [
+    discordFailed ? `discord: ${discordResult?.error || 'failed'}` : null,
+    emailResult && !emailResult.ok && !emailResult.skipped ? `email: ${emailResult.error || 'failed'}` : null,
+  ]
+    .filter(Boolean)
+    .join('; ') || null;
+  record.finalState = finalState;
+  record.updatedAt = FieldValue.serverTimestamp();
+  await markerRef.set(record, { merge: true });
+  log('record', `Delivery record ${markerId} → ${finalState}.`);
+
+  // 12. Final status — fail the workflow when a required destination failed.
+  if (finalState === 'failed') {
+    throw new Error(
+      discordFailed
+        ? `Discord delivery FAILED for ${meetingDate}: ${discordResult?.error || 'unknown'}. The report ZIP is attached as a workflow artifact. Fix DISCORD_WEBHOOK_URL and re-run (Discord-only, FORCE_SEND=true).`
+        : `Email-only delivery failed for ${meetingDate}: ${emailResult?.error || emailResult?.reason || 'unknown'}.`,
+    );
   }
+  log('status', `Report delivery complete for ${meetingDate} (${finalState}).`);
 }
 
 main().catch((err) => {
-  console.error('Weekly attendance email failed:', err.message);
+  console.error(`[fatal] Weekly attendance report failed: ${err.message}`);
   process.exit(1);
 });

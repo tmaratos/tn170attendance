@@ -99,13 +99,24 @@ Do not click Upgrade, Blaze, enable billing, or deploy Functions.
 
 ## Spark Kiosk Architecture
 
-When Firebase web config is present, the app runs in free kiosk mode by default:
+When Firebase web config is present, the app runs in free kiosk mode by default.
+**Firestore is the source of truth and syncs across every device in real time:**
 
-1. Member roster: read from Firestore.
-2. Attendance, guests, activity, and PIN hashes: stored locally in browser localStorage on each kiosk device.
-3. Admin PIN/settings: stored locally on the kiosk device.
+1. Member roster: Firestore (`members`).
+2. Meetings: Firestore (`meetings`), keyed by a **deterministic Eastern-date
+   document ID** (e.g. `meetings/2026-07-21`) so every device resolves the same
+   meeting.
+3. Attendance, guests, activity: Firestore (`attendanceRecords`,
+   `guestAttendanceRecords`, `activityLog`), streamed via real-time listeners.
+4. PIN hashes: Firestore (`memberPins`), hashed in the browser before upload.
+5. Admin session: per-device in `sessionStorage` (kept device-specific for security).
 
-This keeps the live site free. The tradeoff is that attendance data is per device, not shared between multiple iPads.
+LocalStorage is used **only** as a clearly-labeled offline cache — never as an
+independent attendance database. When a device is offline, the app shows an
+**Offline/Reconnecting** banner and the last successful sync time; when connectivity
+returns it re-fetches the authoritative meeting from Firestore. Global force checkout
+is performed **only** by the server-side GitHub Action (Tue 9:30 PM ET), never by the
+browser. See [AUDIT_2026-07.md](./AUDIT_2026-07.md) and [SECURITY.md](./SECURITY.md).
 
 `attendance-tracker/.env.example` sets:
 

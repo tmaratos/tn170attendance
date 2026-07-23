@@ -168,7 +168,7 @@ export default function AdminTools({ attendance }) {
   if (attendanceLoading) {
     return (
       <div>
-        <h1 className="page-title">Admin Tools</h1>
+        <h1 className="page-title">Overrides &amp; PINs</h1>
         <p className="page-subtitle">Loading admin permissions...</p>
       </div>
     );
@@ -177,7 +177,7 @@ export default function AdminTools({ attendance }) {
   if (!authenticated) {
     return (
       <div>
-        <h1 className="page-title">Admin Tools</h1>
+        <h1 className="page-title">Overrides &amp; PINs</h1>
         <p className="page-subtitle">
           {isCloudBackend
             ? 'Senior members: enter your CAPID and PIN to access administrative functions'
@@ -250,7 +250,7 @@ export default function AdminTools({ attendance }) {
 
   return (
     <div>
-      <h1 className="page-title">Admin Tools</h1>
+      <h1 className="page-title">Overrides &amp; PINs</h1>
       <p className="page-subtitle">
         Force check-in/out and administrative overrides
         {seniorSession?.displayName ? ` — ${seniorSession.displayName}` : ''}

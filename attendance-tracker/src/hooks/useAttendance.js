@@ -46,9 +46,9 @@ import {
   checkOutMemberFirestore,
   forceCheckInFirestore,
   forceCheckOutFirestore,
-  systemForceCheckoutFirestore,
   appendActivityLogSpark,
   ensureActiveMeeting,
+  meetingDateString,
   SYNC_UNAVAILABLE,
 } from '../services/attendanceService';
 import {
@@ -60,15 +60,17 @@ import {
   guestOpenHouseCheckInFirestore,
   guestCheckOutFirestore,
 } from '../services/guestService';
-import { isAfterSystemForceCheckoutTime } from '../utils/timeRules';
 import { resolveMemberAdminPermissions } from '../data/rosterData';
+import { firebaseConfig } from '../services/firebase';
+
+/** Build-time app version (commit SHA or timestamp), injected by vite.config.js. */
+const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev';
 
 const STORAGE_KEY = 'tn170-attendance-v2';
 const KIOSK_UI_PREFS_KEY = 'tn170-kiosk-ui-prefs';
 const KIOSK_OFFLINE_CACHE_KEY = 'tn170-kiosk-offline-cache';
 const SENIOR_SESSION_KEY = 'tn170-senior-session';
 const KIOSK_ADMIN_SESSION_KEY = 'tn170-kiosk-admin-session';
-const SYSTEM_FORCE_KEY_PREFIX = 'tn170-system-force-checkout';
 
 function mockHashPin(pin, memberId) {
   const input = `${memberId}:${pin}:tn170`;
@@ -156,45 +158,6 @@ function enrichMemberDoc(member) {
   return { ...member, ...resolveMemberAdminPermissions({ ...member, capid }) };
 }
 
-function forceCheckoutDateKey(date = new Date()) {
-  return date.toLocaleDateString('en-CA');
-}
-
-function systemForceNote(date = new Date()) {
-  return `System force logout at ${date.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true,
-  })} local time.`;
-}
-
-function clearStoredAdminSessions() {
-  try {
-    sessionStorage.removeItem(SENIOR_SESSION_KEY);
-    sessionStorage.removeItem(KIOSK_ADMIN_SESSION_KEY);
-    sessionStorage.removeItem('tn170-admin-auth');
-  } catch {
-    /* ignore storage errors */
-  }
-}
-
-function applyLocalForceCheckoutRecords(records, now, note) {
-  const checkOutTime = now.toISOString();
-  return records.map((record) =>
-    record.status === 'checked_in'
-      ? {
-          ...record,
-          status: 'checked_out',
-          checkOutTime,
-          forceAction: true,
-          forceType: 'system',
-          forceNote: note,
-          notes: note,
-        }
-      : record
-  );
-}
-
 function adminForceNote(date = new Date()) {
   return `Admin force logout at ${date.toLocaleTimeString('en-US', {
     hour: 'numeric',
@@ -253,6 +216,8 @@ function useSparkKioskAttendance() {
   const [loading, setLoading] = useState(true);
   const [isSyncAvailable, setIsSyncAvailable] = useState(true);
   const [syncError, setSyncError] = useState(null);
+  const [lastSyncedAt, setLastSyncedAt] = useState(null);
+  const [hasSyncedOnce, setHasSyncedOnce] = useState(false);
 
   const markSyncUnavailable = useCallback(() => {
     setIsSyncAvailable(false);
@@ -262,6 +227,8 @@ function useSparkKioskAttendance() {
   const markSyncAvailable = useCallback(() => {
     setIsSyncAvailable(true);
     setSyncError(null);
+    setLastSyncedAt(new Date());
+    setHasSyncedOnce(true);
   }, []);
 
   const persistOfflineCache = useCallback((payload) => {
@@ -380,64 +347,21 @@ function useSparkKioskAttendance() {
     persistOfflineCache,
   ]);
 
-  const settings = useMemo(
-    () => ({ ...DEFAULT_SETTINGS, ...(remoteSettings || {}), ...localUiPrefs }),
-    [remoteSettings, localUiPrefs]
-  );
-
-  useEffect(() => {
-    const meetingEnd = settings.meetingEnd || DEFAULT_SETTINGS.meetingEnd;
-
-    const runSystemForceCheckout = async () => {
-      const now = new Date();
-      if (!isAfterSystemForceCheckoutTime(now, meetingEnd)) return;
-      if (!meeting?.id) return;
-      if (meeting.systemForceCompletedDate === forceCheckoutDateKey(now)) return;
-
-      const forceKey = `${SYSTEM_FORCE_KEY_PREFIX}-${forceCheckoutDateKey(now)}`;
-      if (localStorage.getItem(forceKey) === 'done') return;
-
-      const openMembers = attendanceRecords.filter((record) => record.status === 'checked_in');
-      const openGuests = guestRecords.filter((record) => record.status === 'checked_in');
-      if (!openMembers.length && !openGuests.length) {
-        localStorage.setItem(forceKey, 'done');
-        return;
-      }
-
-      const note = systemForceNote(now);
-
-      try {
-        await systemForceCheckoutFirestore({
-          meetingId: meeting.id,
-          attendanceRecords,
-          guestRecords,
-          note,
-        });
-        localStorage.setItem(forceKey, 'done');
-        clearStoredAdminSessions();
-        setKioskAdminSession(null);
-        markSyncAvailable();
-      } catch {
-        setAttendanceRecords((prev) => applyLocalForceCheckoutRecords(prev, now, note));
-        setGuestRecords((prev) => applyLocalForceCheckoutRecords(prev, now, note));
-        localStorage.setItem(forceKey, 'done');
-        clearStoredAdminSessions();
-        setKioskAdminSession(null);
-        markSyncUnavailable();
-      }
+  // Local UI prefs may NOT override the authoritative meeting schedule. The old
+  // behavior let a stale tn170-kiosk-ui-prefs meetingEnd (e.g. 20:00) trigger an
+  // 8 PM checkout. Schedule fields come only from Firestore settings or defaults;
+  // the trusted server-side job (9:30 PM ET) is what actually checks everyone out.
+  const settings = useMemo(() => {
+    const { meetingDay, meetingStart, meetingEnd, ...uiOnlyPrefs } = localUiPrefs;
+    return {
+      ...DEFAULT_SETTINGS,
+      ...uiOnlyPrefs,
+      ...(remoteSettings || {}),
+      meetingDay: remoteSettings?.meetingDay || DEFAULT_SETTINGS.meetingDay,
+      meetingStart: remoteSettings?.meetingStart || DEFAULT_SETTINGS.meetingStart,
+      meetingEnd: remoteSettings?.meetingEnd || DEFAULT_SETTINGS.meetingEnd,
     };
-
-    runSystemForceCheckout();
-    const interval = window.setInterval(runSystemForceCheckout, 30000);
-    return () => window.clearInterval(interval);
-  }, [
-    settings.meetingEnd,
-    meeting,
-    attendanceRecords,
-    guestRecords,
-    markSyncAvailable,
-    markSyncUnavailable,
-  ]);
+  }, [remoteSettings, localUiPrefs]);
 
   const members = useMemo(() => {
     const merged = mergeMembersWithAttendance(rawMembers, attendanceRecords);
@@ -803,6 +727,19 @@ function useSparkKioskAttendance() {
     isSyncAvailable,
     syncError,
     usingLocalRoster,
+    syncState: isSyncAvailable ? 'connected' : hasSyncedOnce ? 'reconnecting' : 'offline',
+    lastSyncedAt,
+    diagnostics: {
+      syncState: isSyncAvailable ? 'connected' : hasSyncedOnce ? 'reconnecting' : 'offline',
+      firebaseProjectId: firebaseConfig.projectId,
+      currentMeetingId: meeting?.id || null,
+      currentMeetingDate: meeting?.meetingDate || meetingDateString(),
+      lastSyncedAt,
+      memberAttendanceCount: attendanceRecords.length,
+      guestAttendanceCount: guestRecords.length,
+      usingLocalRoster,
+      appVersion: APP_VERSION,
+    },
     adminMembers,
     loading,
     error: syncError,
@@ -840,78 +777,8 @@ function useMockAttendance() {
     saveMockState(state);
   }, [state]);
 
-  useEffect(() => {
-    const meetingEnd = state.settings.meetingEnd || DEFAULT_SETTINGS.meetingEnd;
-
-    const runSystemForceCheckout = () => {
-      const now = new Date();
-      if (!isAfterSystemForceCheckoutTime(now, meetingEnd)) return;
-
-      const forceKey = `${SYSTEM_FORCE_KEY_PREFIX}-${forceCheckoutDateKey(now)}`;
-      if (localStorage.getItem(forceKey) === 'done') return;
-
-      setState((prev) => {
-        const openMembers = prev.members.filter((m) => m.status === 'checked-in');
-        const openGuests = prev.guests.filter((g) => g.status === 'checked-in');
-        if (!openMembers.length && !openGuests.length) {
-          localStorage.setItem(forceKey, 'done');
-          return prev;
-        }
-
-        const checkOutTime = now.toISOString();
-        const note = systemForceNote(now);
-        localStorage.setItem(forceKey, 'done');
-        clearStoredAdminSessions();
-
-        return {
-          ...prev,
-          members: prev.members.map((member) =>
-            member.status === 'checked-in'
-              ? {
-                  ...member,
-                  status: 'checked-out',
-                  checkOutTime,
-                  forceAction: true,
-                  forceType: 'system',
-                  forceNote: note,
-                }
-              : member
-          ),
-          guests: prev.guests.map((guest) =>
-            guest.status === 'checked-in'
-              ? {
-                  ...guest,
-                  status: 'checked-out',
-                  checkOutTime,
-                  forceAction: true,
-                  forceType: 'system',
-                  forceNote: note,
-                }
-              : guest
-          ),
-          activity: [
-            ...openMembers.map((member, index) => ({
-              id: `sfm${Date.now()}-${index}`,
-              message: `${member.name} system force logged out`,
-              timestamp: checkOutTime,
-              type: 'force-out',
-            })),
-            ...openGuests.map((guest, index) => ({
-              id: `sfg${Date.now()}-${index}`,
-              message: `${guest.name} (Guest) system force logged out`,
-              timestamp: checkOutTime,
-              type: 'force-out',
-            })),
-            ...prev.activity,
-          ],
-        };
-      });
-    };
-
-    runSystemForceCheckout();
-    const interval = window.setInterval(runSystemForceCheckout, 30000);
-    return () => window.clearInterval(interval);
-  }, [state.settings.meetingEnd]);
+  // Mock/dev mode does not simulate the server force-checkout; the authoritative
+  // 9:30 PM ET checkout is performed by GitHub Actions in production.
 
   const addActivity = useCallback((message, type) => {
     setState((prev) => ({
@@ -1285,47 +1152,9 @@ function useFirebaseAttendance() {
     };
   }, [meeting?.id]);
 
-  useEffect(() => {
-    const meetingEnd = settings.meetingEnd || DEFAULT_SETTINGS.meetingEnd;
-
-    const runSystemForceCheckout = async () => {
-      const now = new Date();
-      if (!isAfterSystemForceCheckoutTime(now, meetingEnd)) return;
-      if (!meeting?.id) return;
-      if (meeting.systemForceCompletedDate === forceCheckoutDateKey(now)) return;
-
-      const forceKey = `${SYSTEM_FORCE_KEY_PREFIX}-${forceCheckoutDateKey(now)}`;
-      if (localStorage.getItem(forceKey) === 'done') return;
-
-      const openMembers = attendanceRecords.filter((record) => record.status === 'checked_in');
-      const openGuests = guestRecords.filter((record) => record.status === 'checked_in');
-      if (!openMembers.length && !openGuests.length) {
-        localStorage.setItem(forceKey, 'done');
-        return;
-      }
-
-      const note = systemForceNote(now);
-
-      try {
-        await systemForceCheckoutFirestore({
-          meetingId: meeting.id,
-          attendanceRecords,
-          guestRecords,
-          note,
-        });
-        localStorage.setItem(forceKey, 'done');
-        clearStoredAdminSessions();
-        setSeniorSession(null);
-        saveSeniorSession(null);
-      } catch {
-        /* retry on next interval tick */
-      }
-    };
-
-    runSystemForceCheckout();
-    const interval = window.setInterval(runSystemForceCheckout, 30000);
-    return () => window.clearInterval(interval);
-  }, [settings.meetingEnd, meeting, attendanceRecords, guestRecords]);
+  // Global force checkout is performed by the trusted server-side GitHub Actions
+  // job at 9:30 PM ET, never from the browser (which cannot be trusted with the
+  // device clock/timezone). Individual admin force check-out remains available.
 
   const members = useMemo(
     () => mergeMembersWithAttendance(rawMembers, attendanceRecords),

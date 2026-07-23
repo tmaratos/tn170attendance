@@ -2,18 +2,41 @@ name: System force checkout
 
 on:
   schedule:
-    # GitHub cron is UTC. Wed 01:30–03:30 UTC covers Tue 21:30 in US Eastern (EST/EDT).
-    - cron: '30 1,2,3 * * 3'
+    # GitHub cron is UTC and delivery can be late by hours. These cover Tue 21:30 ET
+    # in both EDT (01:30 UTC Wed) and EST (02:30 UTC Wed); the 10:00 UTC Wed run is a
+    # morning safety net if all Tuesday-night runs are dropped. The script validates
+    # America/New_York wall-clock time and is idempotent, so extra runs are no-ops.
+    - cron: '30 1,2 * * 3'
+    - cron: '0 10 * * 3'
   workflow_dispatch:
     inputs:
+      dry_run:
+        description: Report what would happen without writing
+        required: false
+        default: 'false'
+        type: choice
+        options: ['true', 'false']
+      meeting_date:
+        description: Eastern meeting date to process (YYYY-MM-DD). Blank = auto.
+        required: false
+        default: ''
+        type: string
       force_run:
-        description: Run immediately (skip Tuesday 9:30 PM gate)
+        description: Run immediately (skip the Tuesday 9:30 PM gate)
         required: false
         default: 'true'
         type: choice
-        options:
-          - 'true'
-          - 'false'
+        options: ['true', 'false']
+      skip_schedule_gate:
+        description: Alias for force_run
+        required: false
+        default: 'false'
+        type: choice
+        options: ['true', 'false']
+
+concurrency:
+  group: force-checkout
+  cancel-in-progress: false
 
 jobs:
   force-checkout:
@@ -24,21 +47,22 @@ jobs:
       FIREBASE_PROJECT_ID: tn170-attendance
       SCHEDULE_TIMEZONE: America/New_York
       MEETING_DAY: Tuesday
-      FORCE_HOUR: '21'
+      DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+      MEETING_DATE: ${{ github.event.inputs.meeting_date || '' }}
       FORCE_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.force_run || 'false' }}
+      SKIP_SCHEDULE_GATE: ${{ github.event.inputs.skip_schedule_gate || 'false' }}
       FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+      GITHUB_RUN_ID: ${{ github.run_id }}
+      GITHUB_EVENT_NAME: ${{ github.event_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
-
       - name: Install dependencies
         run: npm ci
-
       - name: System force checkout
         run: npm run force:checkout

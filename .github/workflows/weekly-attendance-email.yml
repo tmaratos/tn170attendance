@@ -1,19 +1,48 @@
-name: Weekly attendance email
+name: Weekly attendance report
 
 on:
   schedule:
-    # GitHub cron is UTC. Wed 02:00–04:00 UTC covers Tue 22:00 in US Eastern (EST/EDT).
-    - cron: '0 2,3,4 * * 3'
+    # Tue 22:30 ET → 02:30 UTC Wed (EDT) and 03:30 UTC Wed (EST). The 11:00 UTC Wed
+    # run is a morning safety net if the Tuesday-night runs are dropped/delayed past
+    # midnight ET. The script validates America/New_York time; delivery is idempotent
+    # (report posts to Discord exactly once per meeting date).
+    - cron: '30 2,3 * * 3'
+    - cron: '0 11 * * 3'
   workflow_dispatch:
     inputs:
+      dry_run:
+        description: Report what would happen without delivering
+        required: false
+        default: 'false'
+        type: choice
+        options: ['true', 'false']
+      meeting_date:
+        description: Eastern meeting date to report (YYYY-MM-DD). Blank = auto.
+        required: false
+        default: ''
+        type: string
+      delivery_mode:
+        description: What to deliver
+        required: false
+        default: 'full'
+        type: choice
+        options: ['full', 'discord_only', 'email_only']
       force_send:
-        description: Send immediately (skip Tuesday 10 PM gate)
+        description: Send immediately (skip the Tuesday 10:30 PM gate)
         required: false
         default: 'true'
         type: choice
-        options:
-          - 'true'
-          - 'false'
+        options: ['true', 'false']
+      force_resend:
+        description: Re-post even if this meeting was already delivered
+        required: false
+        default: 'false'
+        type: choice
+        options: ['true', 'false']
+
+concurrency:
+  group: weekly-report
+  cancel-in-progress: false
 
 jobs:
   send-report:
@@ -24,8 +53,13 @@ jobs:
       FIREBASE_PROJECT_ID: tn170-attendance
       SCHEDULE_TIMEZONE: America/New_York
       MEETING_DAY: Tuesday
-      SEND_HOUR: '22'
+      REPORT_TIME: '22:30'
+      ARTIFACT_DIR: ./report-artifacts
+      DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+      MEETING_DATE: ${{ github.event.inputs.meeting_date || '' }}
+      DELIVERY_MODE: ${{ github.event.inputs.delivery_mode || 'full' }}
       FORCE_SEND: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.force_send || 'false' }}
+      FORCE_RESEND: ${{ github.event.inputs.force_resend || 'false' }}
       EMAIL_RECIPIENTS: ${{ secrets.EMAIL_RECIPIENTS }}
       EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
       SMTP_HOST: ${{ secrets.SMTP_HOST }}
@@ -36,18 +70,25 @@ jobs:
       RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
       FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
       DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+      GITHUB_RUN_ID: ${{ github.run_id }}
+      GITHUB_EVENT_NAME: ${{ github.event_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
-
       - name: Install dependencies
         run: npm ci
-
-      - name: Send weekly attendance email
+      - name: Deliver weekly attendance report
         run: npm run email:weekly
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tn170-attendance-report
+          path: report-artifacts/
+          if-no-files-found: ignore
+          retention-days: 30

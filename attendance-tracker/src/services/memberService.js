@@ -19,40 +19,16 @@ import {
 } from './kioskPin';
 import {
   buildMemberDocument,
-  isValidMemberGrade,
   resolveMemberAdminPermissions,
 } from '../data/rosterData';
+import {
+  validateCapid,
+  validateMemberNames,
+  validateMemberGrade,
+} from '../data/memberValidation';
 import { appendActivityLogSpark, ensureActiveMeeting } from './attendanceService';
 
 export { subscribeMemberPins, verifyMemberPinInFirestore };
-
-function validateCapid(capid) {
-  const capidStr = String(capid || '').trim();
-  if (!/^\d{6,8}$/.test(capidStr)) {
-    throw new Error('CAPID must be 6–8 digits.');
-  }
-  return capidStr;
-}
-
-function validateMemberNames(firstName, lastName) {
-  const fn = String(firstName || '').trim();
-  const ln = String(lastName || '').trim();
-  if (!fn || !ln) {
-    throw new Error('First and last name are required.');
-  }
-  return { firstName: fn, lastName: ln };
-}
-
-function validateMemberGrade(grade) {
-  const gradeStr = String(grade || '').trim();
-  if (!gradeStr) {
-    throw new Error('Grade/rank is required.');
-  }
-  if (!isValidMemberGrade(gradeStr)) {
-    throw new Error('Select a valid grade/rank from the list.');
-  }
-  return gradeStr;
-}
 
 async function requireManageMembersAuth(actorCapid, actorPin) {
   const db = getDb();
