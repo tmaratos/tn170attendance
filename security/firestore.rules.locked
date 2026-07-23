@@ -1,0 +1,72 @@
+rules_version = '2';
+
+// =============================================================================
+// TN-170 Attendance — LOCKED-DOWN rules (deploy AFTER the Worker + client are live)
+// =============================================================================
+// This is the target state for the Worker architecture. It removes ALL public
+// access to sensitive data. The public (unauthenticated) kiosk can read ONLY:
+//   - settings/squadron            (squadron name / meeting times — not sensitive)
+//   - publicPresence/current       (sanitized: first name + last initial, no PII)
+//
+// Everything else — the roster, PIN hashes, attendance, guest email/phone,
+// activity, reports — is readable ONLY by an authenticated senior member
+// (a Firebase custom token minted by the Worker after PIN verification, carrying
+// `senior == true`). All client WRITES are denied: the Worker performs writes
+// with the service account, which bypasses these rules. GitHub Actions automation
+// also uses the service account and is unaffected.
+//
+// Deploy order (see docs/SECURE_ARCHITECTURE.md): 1) deploy Worker, 2) ship the
+// client build that calls the Worker, 3) copy this file over firestore.rules and
+// `firebase deploy --only firestore:rules`. Do NOT deploy this before steps 1-2 or
+// the current kiosk will stop working.
+// =============================================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSenior() {
+      return request.auth != null && request.auth.token.senior == true;
+    }
+
+    // Public, non-sensitive squadron settings (name, meeting times).
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Sanitized live presence board — the ONLY attendance data the kiosk reads.
+    // Contains first name + last initial + role + times. No CAPID/email/phone/PIN.
+    // Written only by the Worker (service account).
+    match /publicPresence/{docId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Roster — authenticated seniors only. No public read. Writes via Worker.
+    match /members/{capid} {
+      allow read: if isSenior();
+      allow write: if false;
+    }
+
+    // PIN hashes — NOBODY reads these from a client anymore (the Worker verifies
+    // server-side). Fully locked; the crackable-hash exposure is closed.
+    match /memberPins/{capid} {
+      allow read, write: if false;
+    }
+
+    // Meetings, attendance, guests, activity, reports, automation records —
+    // authenticated seniors may READ (for the admin dashboard / exports); all
+    // writes happen server-side (Worker or GitHub Actions service account).
+    match /meetings/{id}                 { allow read: if isSenior(); allow write: if false; }
+    match /attendanceRecords/{id}        { allow read: if isSenior(); allow write: if false; }
+    match /guestAttendanceRecords/{id}   { allow read: if isSenior(); allow write: if false; }
+    match /guests/{id}                   { allow read: if isSenior(); allow write: if false; }
+    match /activityLog/{id}              { allow read: if isSenior(); allow write: if false; }
+    match /automationRuns/{id}           { allow read: if isSenior(); allow write: if false; }
+    match /reportExports/{id}            { allow read: if isSenior(); allow write: if false; }
+
+    // Anything not matched above is denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
