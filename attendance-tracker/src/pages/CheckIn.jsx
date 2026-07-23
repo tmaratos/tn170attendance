@@ -4,6 +4,7 @@ export default function CheckIn({ attendance }) {
   const {
     members,
     searchMembers,
+    publicSearchMembers,
     verifyPin,
     checkInMember,
     checkOutMember,
@@ -17,7 +18,7 @@ export default function CheckIn({ attendance }) {
     <PublicMemberFlow
       mode="check-in"
       members={members}
-      searchMembers={searchMembers}
+      searchMembers={publicSearchMembers || searchMembers}
       verifyPin={verifyPin}
       onCheckIn={checkInMember}
       onCheckOut={checkOutMember}

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import PinPad from './PinPad';
 import { formatDateTime, formatDuration, formatTime, getInitials } from '../data/mockData';
@@ -67,13 +67,28 @@ export default function PublicMemberFlow({
   const confirmStep = isCheckIn ? 2 : 1;
   const successStep = isCheckIn ? 3 : 2;
 
-  const results = useMemo(() => {
-    if (!query.trim()) return [];
-    return searchMembers(query).slice(0, 8);
+  const [results, setResults] = useState([]);
+  useEffect(() => {
+    let active = true;
+    if (!query.trim()) {
+      setResults([]);
+      return undefined;
+    }
+    Promise.resolve(searchMembers(query))
+      .then((list) => {
+        if (active) setResults((list || []).slice(0, 8));
+      })
+      .catch(() => {
+        if (active) setResults([]);
+      });
+    return () => {
+      active = false;
+    };
   }, [query, searchMembers]);
 
+  // Prefer the member's own flag (from Worker search) over the local hook lookup.
   const pinSetupRequired = selected
-    ? Boolean(needsPinSetup?.(selected.id))
+    ? (selected.needsPinSetup ?? Boolean(needsPinSetup?.(selected.id)))
     : false;
 
   const reset = () => {

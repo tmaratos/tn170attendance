@@ -86,10 +86,20 @@ curl https://tn170-attendance-api.<subdomain>.workers.dev/selftest
 ```
 If `/selftest` returns an error, the service-account secret or `PROJECT_ID` is wrong.
 
-### 7. Point the app at the Worker (done in the next code change)
-The kiosk build will read the API URL from `VITE_ATTENDANCE_API` at build time.
-Set it in `attendance-tracker/.env` (and the Pages build) to your Worker URL, then
-rebuild Pages. *(This step lands with the client-rewiring commit — see task list.)*
+### 7. Point the app at the Worker, then rebuild + deploy Pages
+The client is already wired for this. Set the Worker URL and rebuild the Pages build:
+```bash
+cd attendance-tracker
+echo "VITE_ATTENDANCE_API=https://tn170-attendance-api.<your-subdomain>.workers.dev" >> .env
+cd ..
+npm run build:pages     # rebuilds and copies assets to the repo root
+git add -A && git commit -m "chore: point kiosk at Worker API" && git push
+```
+With `VITE_ATTENDANCE_API` set, the kiosk routes check-in/out, guest sign-in, PIN
+creation, member search, and admin login through the Worker, and reads only the
+sanitized presence board. With it **blank**, the app keeps its current
+direct-Firestore behavior (safe default) — so you can build/deploy this safely and
+flip it on when ready.
 
 ### 8. LAST: lock down Firestore
 Only after steps 5–7 are live and the kiosk is confirmed working through the Worker:
@@ -123,6 +133,14 @@ The Worker can stay deployed; it does no harm even if rules are open.
 - Add an `X-Api-Key`/App-Check header check in the Worker to further limit direct abuse.
 - Move from 4-digit PINs to 6-digit once verification is server-side (trivial now).
 
-## What still needs building (tracked)
-- Client rewiring: kiosk calls the Worker; admin uses `signInWithCustomToken`; the
-  kiosk reads only `settings` + `publicPresence`. (Task in progress.)
+## Status
+- ✅ Worker API, locked rules, deploy runbook.
+- ✅ Client rewiring: the kiosk calls the Worker (gated by `VITE_ATTENDANCE_API`),
+  admin logs in via `signInWithCustomToken`, and the public kiosk reads only
+  `settings` + `publicPresence`. Build + tests green.
+- ⏳ Your end-to-end test against the live Worker (runbook checklist), then deploy
+  the locked rules (step 8).
+
+Because the Worker path is gated behind `VITE_ATTENDANCE_API`, deploying this build
+with that variable **unset** does not change current behavior — zero risk. Set it to
+turn the secure path on and test before locking the rules.

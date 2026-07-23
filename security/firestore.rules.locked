@@ -3,22 +3,25 @@ rules_version = '2';
 // =============================================================================
 // TN-170 Attendance — LOCKED-DOWN rules (deploy AFTER the Worker + client are live)
 // =============================================================================
-// This is the target state for the Worker architecture. It removes ALL public
-// access to sensitive data. The public (unauthenticated) kiosk can read ONLY:
-//   - settings/squadron            (squadron name / meeting times — not sensitive)
-//   - publicPresence/current       (sanitized: first name + last initial, no PII)
+// Removes ALL public access to sensitive data. Unauthenticated visitors (the
+// public kiosk) can read ONLY:
+//   - settings/squadron       (squadron name / meeting times — not sensitive)
+//   - publicPresence/current  (sanitized: first name + last initial, no PII)
 //
-// Everything else — the roster, PIN hashes, attendance, guest email/phone,
-// activity, reports — is readable ONLY by an authenticated senior member
-// (a Firebase custom token minted by the Worker after PIN verification, carrying
-// `senior == true`). All client WRITES are denied: the Worker performs writes
-// with the service account, which bypasses these rules. GitHub Actions automation
-// also uses the service account and is unaffected.
+// The roster, PIN hashes, attendance, guest email/phone, activity, and reports
+// are readable/writable ONLY by an authenticated senior — a Firebase custom token
+// minted by the Worker after PIN verification (claim `senior == true`). The public
+// kiosk performs check-in/out and guest sign-in THROUGH THE WORKER, which uses the
+// service account and bypasses these rules. GitHub Actions automation likewise uses
+// the service account and is unaffected.
 //
-// Deploy order (see docs/SECURE_ARCHITECTURE.md): 1) deploy Worker, 2) ship the
-// client build that calls the Worker, 3) copy this file over firestore.rules and
-// `firebase deploy --only firestore:rules`. Do NOT deploy this before steps 1-2 or
-// the current kiosk will stop working.
+// Result: with these rules deployed, an unauthenticated person cannot read the
+// roster, any PIN hash, or any guest contact info — for every member, not just cadets.
+//
+// Deploy order (docs/SECURE_ARCHITECTURE.md): 1) deploy Worker, 2) ship the client
+// build with VITE_ATTENDANCE_API set and confirm the kiosk works through it, 3) copy
+// this file over firestore.rules and `firebase deploy --only firestore:rules`.
+// Do NOT deploy this before steps 1-2 or the current kiosk stops working.
 // =============================================================================
 
 service cloud.firestore {
@@ -27,44 +30,46 @@ service cloud.firestore {
       return request.auth != null && request.auth.token.senior == true;
     }
 
-    // Public, non-sensitive squadron settings (name, meeting times).
+    // Public, non-sensitive.
     match /settings/{docId} {
       allow read: if true;
-      allow write: if false;
+      allow write: if false;               // changed via console/import only
     }
 
-    // Sanitized live presence board — the ONLY attendance data the kiosk reads.
-    // Contains first name + last initial + role + times. No CAPID/email/phone/PIN.
-    // Written only by the Worker (service account).
+    // Sanitized live board — the ONLY attendance data the kiosk reads.
+    // Written only by the Worker (service account); never client-writable.
     match /publicPresence/{docId} {
       allow read: if true;
       allow write: if false;
     }
 
-    // Roster — authenticated seniors only. No public read. Writes via Worker.
+    // Roster — authenticated seniors only. No public read. Worker writes via SA.
     match /members/{capid} {
       allow read: if isSenior();
-      allow write: if false;
+      allow create, update: if isSenior();
+      allow delete: if false;
     }
 
-    // PIN hashes — NOBODY reads these from a client anymore (the Worker verifies
-    // server-side). Fully locked; the crackable-hash exposure is closed.
+    // PIN hashes — no public access at all. Authenticated seniors may read/reset
+    // (needed for admin PIN management); the public never sees a hash. New PINs are
+    // created through the Worker at first check-in.
     match /memberPins/{capid} {
-      allow read, write: if false;
+      allow read: if isSenior();
+      allow create, update, delete: if isSenior();
     }
 
-    // Meetings, attendance, guests, activity, reports, automation records —
-    // authenticated seniors may READ (for the admin dashboard / exports); all
-    // writes happen server-side (Worker or GitHub Actions service account).
-    match /meetings/{id}                 { allow read: if isSenior(); allow write: if false; }
-    match /attendanceRecords/{id}        { allow read: if isSenior(); allow write: if false; }
-    match /guestAttendanceRecords/{id}   { allow read: if isSenior(); allow write: if false; }
-    match /guests/{id}                   { allow read: if isSenior(); allow write: if false; }
-    match /activityLog/{id}              { allow read: if isSenior(); allow write: if false; }
-    match /automationRuns/{id}           { allow read: if isSenior(); allow write: if false; }
-    match /reportExports/{id}            { allow read: if isSenior(); allow write: if false; }
+    // Meetings / attendance / guests / activity / reports — authenticated seniors
+    // read (admin dashboard) and write (force actions); the public goes via the
+    // Worker (service account), which bypasses these rules.
+    match /meetings/{id}               { allow read, write: if isSenior(); }
+    match /attendanceRecords/{id}      { allow read, write: if isSenior(); }
+    match /guestAttendanceRecords/{id} { allow read, write: if isSenior(); }
+    match /guests/{id}                 { allow read, write: if isSenior(); }
+    match /activityLog/{id}            { allow read: if isSenior(); allow create: if isSenior(); }
+    match /automationRuns/{id}         { allow read: if isSenior(); allow write: if false; }
+    match /reportExports/{id}          { allow read: if isSenior(); allow write: if false; }
 
-    // Anything not matched above is denied.
+    // Everything else denied.
     match /{document=**} {
       allow read, write: if false;
     }

@@ -96,6 +96,24 @@ export function subscribeTodaysMeeting(callback, onError) {
   return subscribeToActiveMeeting(callback, onError);
 }
 
+/**
+ * Sanitized public presence board (publicPresence/current), maintained by the
+ * Worker. The ONLY attendance data the locked-down kiosk reads — contains first
+ * name + last initial + role + times, never CAPID/email/phone/PIN.
+ */
+export function subscribePublicPresence(callback, onError) {
+  const db = getDb();
+  if (!db) return () => {};
+  return onSnapshot(
+    doc(db, 'publicPresence', 'current'),
+    (snap) => callback(snap.exists() ? { id: snap.id, ...snap.data() } : null),
+    () => {
+      if (onError) onError();
+      else callback(null);
+    }
+  );
+}
+
 async function appendActivityLog(db, payload) {
   await addDoc(collection(db, 'activityLog'), {
     meetingId: payload.meetingId || null,

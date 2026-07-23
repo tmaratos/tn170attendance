@@ -14,7 +14,8 @@ export default function AdminLogin({ attendance, onLogin }) {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { dateStr, shortTimeStr } = useLocalTime();
-  const needsCapid = attendance.isCloudBackend;
+  // Worker mode has no public roster, so seniors sign in by CAPID + PIN.
+  const needsCapid = attendance.isCloudBackend || attendance.isApiMode;
   const isKioskMode = attendance.isKioskMode;
   const adminMembers = attendance.adminMembers || [];
   const logoSrc = `${import.meta.env.BASE_URL}squadron-logo.jpeg`;
@@ -54,7 +55,7 @@ export default function AdminLogin({ attendance, onLogin }) {
       }
 
       if (isKioskMode && attendance.authenticateKioskAdmin) {
-        await attendance.authenticateKioskAdmin(selectedAdminId, pin);
+        await attendance.authenticateKioskAdmin(needsCapid ? capid.trim() : selectedAdminId, pin);
       } else if (needsCapid) {
         const ok = await attendance.verifyAdminPin(capid.trim(), pin);
         if (!ok) {
