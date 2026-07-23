@@ -23,4 +23,4 @@ PIN_WINDOW_SECONDS = "900"
 # then paste the returned id below.
 [[kv_namespaces]]
 binding = "RATELIMIT"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "b8b914ff246b49469fb65f46f2f58a33"
