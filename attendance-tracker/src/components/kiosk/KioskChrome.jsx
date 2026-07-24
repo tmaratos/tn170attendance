@@ -20,14 +20,14 @@ export function KioskBranding({ squadronName, designator }) {
  * Official Civil Air Patrol mark (secondary identity). Renders the supplied asset
  * at public/civil-air-patrol-logo.png exactly as provided — the wordmark ("Civil Air
  * Patrol" / "U.S. Air Force Auxiliary") is baked into the artwork, so no adjacent text
- * is drawn. If the asset is ever missing it degrades to a tasteful "CAP" placeholder;
- * the official logo is never fabricated or redrawn.
+ * is drawn. If the official image genuinely fails to load it degrades to an accessible
+ * TEXT label only — never a fabricated or redrawn logo.
  */
 export function KioskCapLogo() {
   const handleError = (e) => {
     e.currentTarget.style.display = 'none';
     const fb = e.currentTarget.parentElement?.querySelector('.k-caplogo-fallback');
-    if (fb) fb.style.display = 'grid';
+    if (fb) fb.style.display = 'block';
   };
   return (
     <div className="k-caplogo">
@@ -37,9 +37,9 @@ export function KioskCapLogo() {
         alt="Civil Air Patrol, U.S. Air Force Auxiliary"
         onError={handleError}
       />
-      <div className="k-caplogo-fallback" role="img" aria-label="Civil Air Patrol, U.S. Air Force Auxiliary" style={{ display: 'none' }}>
-        CAP
-      </div>
+      <span className="k-caplogo-fallback" style={{ display: 'none' }}>
+        Civil Air Patrol · U.S. Air Force Auxiliary
+      </span>
     </div>
   );
 }

@@ -97,11 +97,12 @@
    exact aspect ratio, wording, and colours; a little inline padding preserves clear
    space from the connection status to its left. */
 .k-caplogo { display: flex; align-items: center; justify-content: flex-end; padding-left: clamp(0.5rem, 1.2vw, 1rem); }
-.k-caplogo-img { height: clamp(26px, 3.4vw, 40px); width: auto; max-width: 100%; display: block; }
+.k-caplogo-img { height: clamp(28px, 3.4vw, 40px); width: auto; max-width: 100%; display: block; }
+/* Accessible text-only fallback — shown ONLY if the official image fails to load.
+   Never a fabricated/redrawn logo. */
 .k-caplogo-fallback {
-  width: clamp(38px, 4.5vw, 50px); height: clamp(38px, 4.5vw, 50px); border-radius: 50%;
-  border: 2px solid var(--k-blue); color: var(--k-blue); display: grid; place-items: center;
-  font-weight: 800; font-size: 0.62rem; text-align: center; line-height: 1; padding: 3px;
+  font-size: 0.72rem; font-weight: 700; color: var(--k-navy); line-height: 1.2;
+  text-align: right; max-width: 12rem;
 }
 
 /* ---- Connection chip -------------------------------------------------- */
@@ -342,6 +343,11 @@
   .k-card.primary { grid-column: auto; }
   .k-card { flex-wrap: wrap; }
   .k-header { grid-template-columns: 1fr auto; }
+  /* Give the official CAP wordmark its own centered, legible line so it is never
+     cramped or mistaken for a placeholder at narrow widths (aspect ratio preserved). */
+  .k-caplogo { grid-column: 1 / -1; order: 4; justify-content: center; padding-left: 0; padding-top: 0.35rem; }
+  .k-caplogo-img { height: 34px; }
+  .k-caplogo-fallback { text-align: center; }
   .k-footer { flex-direction: column; align-items: flex-start; }
   .k-btn-row { flex-direction: column; }
   .k-btn-row .k-btn { width: 100%; }
