@@ -93,16 +93,16 @@
 .k-meeting-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--k-muted); flex: none; }
 .k-meeting-dot.open { background: var(--k-green); }
 
-.k-caplogo { display: flex; align-items: center; gap: 0.6rem; }
-.k-caplogo img { width: clamp(38px, 4.5vw, 52px); height: auto; }
+/* Official CAP wordmark (~4:1). Sized by height so the supplied artwork keeps its
+   exact aspect ratio, wording, and colours; a little inline padding preserves clear
+   space from the connection status to its left. */
+.k-caplogo { display: flex; align-items: center; justify-content: flex-end; padding-left: clamp(0.5rem, 1.2vw, 1rem); }
+.k-caplogo-img { height: clamp(26px, 3.4vw, 40px); width: auto; max-width: 100%; display: block; }
 .k-caplogo-fallback {
   width: clamp(38px, 4.5vw, 50px); height: clamp(38px, 4.5vw, 50px); border-radius: 50%;
   border: 2px solid var(--k-blue); color: var(--k-blue); display: grid; place-items: center;
   font-weight: 800; font-size: 0.62rem; text-align: center; line-height: 1; padding: 3px;
 }
-.k-caplogo-text { display: flex; flex-direction: column; line-height: 1.1; }
-.k-caplogo-text b { color: var(--k-navy); font-size: 0.8rem; font-weight: 800; letter-spacing: 0.02em; }
-.k-caplogo-text span { color: var(--k-muted); font-size: 0.66rem; font-weight: 600; }
 
 /* ---- Connection chip -------------------------------------------------- */
 .k-chip {
@@ -341,7 +341,6 @@
   .k-actions { grid-template-columns: 1fr; }
   .k-card.primary { grid-column: auto; }
   .k-card { flex-wrap: wrap; }
-  .k-caplogo-text { display: none; }
   .k-header { grid-template-columns: 1fr auto; }
   .k-footer { flex-direction: column; align-items: flex-start; }
   .k-btn-row { flex-direction: column; }

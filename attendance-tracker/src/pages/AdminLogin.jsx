@@ -2,11 +2,15 @@ import { useMemo, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { KioskShell, KioskFlowTopBar } from '../components/kiosk/KioskChrome';
 import KioskPinPad from '../components/kiosk/KioskPinPad';
-import { KioskStateMessage } from '../components/kiosk/KioskFlow';
+import { KioskStepHeader, KioskStateMessage } from '../components/kiosk/KioskFlow';
 import Icon from '../components/kiosk/icons';
+import { getInitials } from '../data/mockData';
 import { getCallableError } from '../services/errors';
 
+const STEPS = ['Identify', 'PIN'];
+
 export default function AdminLogin({ attendance, onLogin }) {
+  const [step, setStep] = useState(0);
   const [selectedAdminId, setSelectedAdminId] = useState('');
   const [capid, setCapid] = useState('');
   const [pin, setPin] = useState('');
@@ -17,7 +21,9 @@ export default function AdminLogin({ attendance, onLogin }) {
   const navigate = useNavigate();
   const { settings, syncState } = attendance;
 
-  // Worker/cloud mode has no public roster, so seniors sign in by CAPID + PIN.
+  // Worker/cloud mode has no public roster, so seniors sign in by CAPID + PIN and the
+  // client cannot (and must not) resolve a name from a CAPID — doing so would leak PII
+  // to the public kiosk. Local mode picks a known admin from the in-memory roster.
   const needsCapid = attendance.isCloudBackend || attendance.isApiMode;
   const isKioskMode = attendance.isKioskMode;
   const adminMembers = attendance.adminMembers || [];
@@ -30,11 +36,27 @@ export default function AdminLogin({ attendance, onLogin }) {
   const adminNeedsPinSetup =
     !needsCapid && selectedAdmin && attendance.needsPinSetup?.(selectedAdmin.id);
 
+  const canIdentify = needsCapid ? Boolean(capid.trim()) : Boolean(selectedAdminId);
+
+  const goToPin = () => {
+    if (!canIdentify) return;
+    setError('');
+    setPin('');
+    setConfirmPin('');
+    setStep(1);
+  };
+
+  const backToIdentify = () => {
+    setError('');
+    setPin('');
+    setConfirmPin('');
+    setShowForgotHelp(false);
+    setStep(0);
+  };
+
   const submitDisabled =
     loading ||
     pin.length !== 4 ||
-    (needsCapid && !capid.trim()) ||
-    (!needsCapid && !selectedAdminId) ||
     (adminNeedsPinSetup && confirmPin.length !== 4);
 
   const submit = async () => {
@@ -98,6 +120,7 @@ export default function AdminLogin({ attendance, onLogin }) {
     if (event.key !== 'Enter') return;
     if (event.target.closest?.('button,a')) return;
     event.preventDefault();
+    if (step === 0) { goToPin(); return; }
     submit();
   };
 
@@ -118,92 +141,122 @@ export default function AdminLogin({ attendance, onLogin }) {
             Senior member tools are protected from public kiosk use.
           </p>
 
-          {needsCapid ? (
-            <div className="k-field">
-              <label className="k-label" htmlFor="admin-capid">CAPID</label>
-              <input
-                id="admin-capid"
-                className="k-input"
-                value={capid}
-                onChange={(event) => { setCapid(event.target.value); setError(''); }}
-                inputMode="numeric"
-                autoComplete="off"
-                placeholder="Senior member CAPID"
-              />
-            </div>
-          ) : (
-            <div className="k-field">
-              <label className="k-label" htmlFor="admin-select">Select your name</label>
-              <select
-                id="admin-select"
-                className="k-input"
-                value={selectedAdminId}
-                onChange={(event) => {
-                  setSelectedAdminId(event.target.value);
-                  setPin('');
-                  setConfirmPin('');
-                  setError('');
-                  setShowForgotHelp(false);
-                }}
-              >
-                <option value="">Choose your name…</option>
-                {adminMembers.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.name} — {member.grade} — CAPID {member.capid}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+          <KioskStepHeader steps={STEPS} current={step} />
 
-          {adminNeedsPinSetup && (
-            <KioskStateMessage type="info">
-              No PIN set yet. Create your 4-digit PIN below — you’ll use it for check-in,
-              check-out, and admin login on any kiosk device.
-            </KioskStateMessage>
-          )}
+          {/* Step 1 — identify */}
+          {step === 0 && (
+            <div>
+              {needsCapid ? (
+                <div className="k-field">
+                  <label className="k-label" htmlFor="admin-capid">Your CAPID</label>
+                  <p className="k-hint">Enter your senior member CAPID to continue.</p>
+                  <input
+                    id="admin-capid"
+                    className="k-input"
+                    value={capid}
+                    onChange={(event) => { setCapid(event.target.value); setError(''); }}
+                    inputMode="numeric"
+                    autoComplete="off"
+                    autoFocus
+                    placeholder="Senior member CAPID"
+                  />
+                </div>
+              ) : (
+                <div className="k-field">
+                  <label className="k-label" htmlFor="admin-select">Select your name</label>
+                  <select
+                    id="admin-select"
+                    className="k-input"
+                    value={selectedAdminId}
+                    onChange={(event) => { setSelectedAdminId(event.target.value); setError(''); }}
+                    autoFocus
+                  >
+                    <option value="">Choose your name…</option>
+                    {adminMembers.map((member) => (
+                      <option key={member.id} value={member.id}>
+                        {member.name} — {member.grade} — CAPID {member.capid}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
-          {error && <KioskStateMessage type="error">{error}</KioskStateMessage>}
-
-          <h2 className="k-label" style={{ fontSize: '1.1rem', textAlign: 'center', marginTop: '1rem' }}>{pinLabel}</h2>
-          <KioskPinPad value={pin} onChange={(next) => { setError(''); setPin(next); }} disabled={loading} label="PIN" />
-
-          {adminNeedsPinSetup && pin.length === 4 && (
-            <>
-              <h2 className="k-label" style={{ fontSize: '1.1rem', textAlign: 'center', marginTop: '1.5rem' }}>Confirm your PIN</h2>
-              <KioskPinPad value={confirmPin} onChange={(next) => { setError(''); setConfirmPin(next); }} disabled={loading} label="Confirm PIN" />
-            </>
-          )}
-
-          {isKioskMode && !adminNeedsPinSetup && (
-            <button
-              type="button"
-              className="k-btn k-btn-ghost"
-              onClick={() => setShowForgotHelp((current) => !current)}
-              aria-expanded={showForgotHelp}
-            >
-              Forgot your PIN?
-            </button>
-          )}
-
-          {showForgotHelp && (
-            <div className="k-state info" role="region" aria-label="PIN help" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
-              <p style={{ fontWeight: 700 }}>If you forgot your PIN:</p>
-              <ul style={{ margin: '0.5rem 0 0 1.1rem', display: 'grid', gap: '0.4rem' }}>
-                <li>Ask another admin to reset your PIN in Admin Tools — then create a new one at check-in or admin login.</li>
-                <li>Or go to <Link className="k-inline-link" to="/check-in">Check In</Link>, select your name, and create a new PIN if an admin has reset yours.</li>
-                <li>Emergency access: use the shared admin PIN from Settings only if configured for your squadron.</li>
-              </ul>
+              <div className="k-btn-row">
+                <button type="button" className="k-btn k-btn-navy" onClick={goToPin} aria-disabled={!canIdentify} disabled={!canIdentify}>
+                  Continue <Icon name="arrow" size={18} />
+                </button>
+              </div>
             </div>
           )}
 
-          <div className="k-btn-row">
-            <button type="button" className="k-btn k-btn-navy" onClick={submit} disabled={submitDisabled}>
-              {loading
-                ? <><span className="k-spin" /> Checking…</>
-                : <><Icon name="admin" size={20} /> {adminNeedsPinSetup ? 'Create PIN & open dashboard' : 'Open admin dashboard'}</>}
-            </button>
-          </div>
+          {/* Step 2 — resolved identity + PIN */}
+          {step === 1 && (
+            <div>
+              <div className="k-result selected" style={{ cursor: 'default', marginBottom: '1.25rem' }}>
+                <span className="k-avatar" aria-hidden="true">
+                  {needsCapid ? <Icon name="admin" size={22} /> : getInitials(selectedAdmin?.name || 'Senior')}
+                </span>
+                <span className="k-result-body">
+                  <strong>{needsCapid ? 'Senior member' : selectedAdmin?.name}</strong>
+                  <small>
+                    {needsCapid
+                      ? `CAPID ${capid.trim()}`
+                      : `${selectedAdmin?.grade} · CAPID ${selectedAdmin?.capid}`}
+                  </small>
+                </span>
+              </div>
+
+              {adminNeedsPinSetup && (
+                <KioskStateMessage type="info">
+                  No PIN set yet. Create your 4-digit PIN below — you’ll use it for check-in,
+                  check-out, and admin login on any kiosk device.
+                </KioskStateMessage>
+              )}
+
+              {error && <KioskStateMessage type="error">{error}</KioskStateMessage>}
+
+              <h2 className="k-label" style={{ fontSize: '1.1rem', textAlign: 'center' }}>{pinLabel}</h2>
+              <KioskPinPad value={pin} onChange={(next) => { setError(''); setPin(next); }} disabled={loading} label="PIN" />
+
+              {adminNeedsPinSetup && pin.length === 4 && (
+                <>
+                  <h2 className="k-label" style={{ fontSize: '1.1rem', textAlign: 'center', marginTop: '1.5rem' }}>Confirm your PIN</h2>
+                  <KioskPinPad value={confirmPin} onChange={(next) => { setError(''); setConfirmPin(next); }} disabled={loading} label="Confirm PIN" />
+                </>
+              )}
+
+              {isKioskMode && !adminNeedsPinSetup && (
+                <button
+                  type="button"
+                  className="k-btn k-btn-ghost"
+                  onClick={() => setShowForgotHelp((current) => !current)}
+                  aria-expanded={showForgotHelp}
+                >
+                  Forgot your PIN?
+                </button>
+              )}
+
+              {showForgotHelp && (
+                <div className="k-state info" role="region" aria-label="PIN help" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+                  <p style={{ fontWeight: 700 }}>If you forgot your PIN:</p>
+                  <ul style={{ margin: '0.5rem 0 0 1.1rem', display: 'grid', gap: '0.4rem' }}>
+                    <li>Ask another admin to reset your PIN in Admin Tools — then create a new one at check-in or admin login.</li>
+                    <li>Or go to <Link className="k-inline-link" to="/check-in">Check In</Link>, select your name, and create a new PIN if an admin has reset yours.</li>
+                    <li>Emergency access: use the shared admin PIN from Settings only if configured for your squadron.</li>
+                  </ul>
+                </div>
+              )}
+
+              <div className="k-btn-row">
+                <button type="button" className="k-btn k-btn-outline" onClick={backToIdentify} disabled={loading}>Back</button>
+                <button type="button" className="k-btn k-btn-navy" onClick={submit} disabled={submitDisabled}>
+                  {loading
+                    ? <><span className="k-spin" /> Checking…</>
+                    : <><Icon name="admin" size={20} /> {adminNeedsPinSetup ? 'Create PIN & open dashboard' : 'Open admin dashboard'}</>}
+                </button>
+              </div>
+            </div>
+          )}
         </section>
       </div>
     </KioskShell>

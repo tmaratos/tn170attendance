@@ -17,9 +17,11 @@ export function KioskBranding({ squadronName, designator }) {
 }
 
 /**
- * Official Civil Air Patrol mark (secondary identity). Loads a real supplied asset
- * at public/civil-air-patrol-logo.png; until that asset is added it shows a tasteful
- * text mark. The official logo is never fabricated/redrawn here.
+ * Official Civil Air Patrol mark (secondary identity). Renders the supplied asset
+ * at public/civil-air-patrol-logo.png exactly as provided — the wordmark ("Civil Air
+ * Patrol" / "U.S. Air Force Auxiliary") is baked into the artwork, so no adjacent text
+ * is drawn. If the asset is ever missing it degrades to a tasteful "CAP" placeholder;
+ * the official logo is never fabricated or redrawn.
  */
 export function KioskCapLogo() {
   const handleError = (e) => {
@@ -29,13 +31,14 @@ export function KioskCapLogo() {
   };
   return (
     <div className="k-caplogo">
-      <img src={`${BASE}civil-air-patrol-logo.png`} alt="Civil Air Patrol, U.S. Air Force Auxiliary" onError={handleError} />
+      <img
+        className="k-caplogo-img"
+        src={`${BASE}civil-air-patrol-logo.png`}
+        alt="Civil Air Patrol, U.S. Air Force Auxiliary"
+        onError={handleError}
+      />
       <div className="k-caplogo-fallback" role="img" aria-label="Civil Air Patrol, U.S. Air Force Auxiliary" style={{ display: 'none' }}>
         CAP
-      </div>
-      <div className="k-caplogo-text" aria-hidden="true">
-        <b>Civil Air Patrol</b>
-        <span>U.S. Air Force Auxiliary</span>
       </div>
     </div>
   );
@@ -100,7 +103,10 @@ export function KioskFooter() {
         </span>
       </p>
       <p className="k-attrib">
-        <a href="https://tristanmaratos.com" target="_blank" rel="noopener noreferrer" aria-label="Built by Tristan Maratos (opens in a new tab)">
+        {/* Real external anchor. Accessible name is exactly the visible text
+            ("Built by Tristan Maratos"); target=_blank opens a new tab, rel prevents
+            reverse-tabnabbing, and .k-attrib a:focus-visible gives a visible ring. */}
+        <a href="https://tristanmaratos.com" target="_blank" rel="noopener noreferrer">
           Built by Tristan Maratos
         </a>
       </p>
