@@ -4,6 +4,8 @@ import Sidebar from './components/Sidebar';
 import AdminTopBar from './components/AdminTopBar';
 import StatusStrip from './components/StatusStrip';
 import PublicKiosk from './pages/PublicKiosk';
+import MemberHub from './pages/MemberHub';
+import GuestHub from './pages/GuestHub';
 import Dashboard from './pages/Dashboard';
 import CheckIn from './pages/CheckIn';
 import CheckOut from './pages/CheckOut';
@@ -27,6 +29,7 @@ import './styles/tables.css';
 import './styles/forms.css';
 import './styles/kiosk.css';
 import './styles/redesign.css';
+import './styles/kiosk-redesign.css';
 
 const ADMIN_PAGES = {
   '/admin/dashboard': { title: 'Dashboard', subtitle: 'Squadron attendance overview' },
@@ -114,6 +117,8 @@ function AppShell({ attendance }) {
           <Routes>
             <Route path="/" element={<PublicKiosk attendance={attendance} />} />
             <Route path="/kiosk" element={<PublicKiosk attendance={attendance} />} />
+            <Route path="/member" element={<MemberHub attendance={attendance} />} />
+            <Route path="/guest" element={<GuestHub attendance={attendance} />} />
             <Route path="/check-in" element={<CheckIn attendance={attendance} />} />
             <Route path="/check-out" element={<CheckOut attendance={attendance} />} />
             <Route path="/guest-sign-in" element={<GuestSignIn attendance={attendance} />} />
