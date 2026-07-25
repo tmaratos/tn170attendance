@@ -2,13 +2,12 @@ import PublicMemberFlow from '../components/PublicMemberFlow';
 
 export default function CheckIn({ attendance }) {
   const {
-    members,
     searchMembers,
+    publicSearchMembers,
     verifyPin,
     checkInMember,
     checkOutMember,
     isFirebase,
-    memberHasPin,
     needsPinSetup,
     createMemberPin,
   } = attendance;
@@ -16,13 +15,12 @@ export default function CheckIn({ attendance }) {
   return (
     <PublicMemberFlow
       mode="check-in"
-      members={members}
-      searchMembers={searchMembers}
+      attendance={attendance}
+      searchMembers={publicSearchMembers || searchMembers}
       verifyPin={verifyPin}
       onCheckIn={checkInMember}
       onCheckOut={checkOutMember}
       isFirebase={isFirebase}
-      memberHasPin={memberHasPin}
       needsPinSetup={needsPinSetup}
       createMemberPin={createMemberPin}
     />

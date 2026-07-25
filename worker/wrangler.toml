@@ -1,0 +1,26 @@
+# TN-170 Attendance API — Cloudflare Worker (FREE plan only).
+# Free tiers used: Workers (100k req/day) + Workers KV (rate-limit counters).
+# NO Durable Objects, NO paid Rate-Limiting product, NO billing card required.
+name = "tn170-attendance-api"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+workers_dev = true
+
+# Public, non-secret config. The service-account JSON is a SECRET set separately:
+#   wrangler secret put FIREBASE_SERVICE_ACCOUNT_JSON
+[vars]
+PROJECT_ID = "tn170-attendance"
+# Comma-separated origins allowed to call this API (the kiosk site).
+ALLOWED_ORIGINS = "https://tmaratos.github.io"
+# Must match the client PIN salt (attendance-tracker/src/services/kioskPin.js).
+PIN_SALT = "tn170-kiosk-v1"
+# Failed-PIN lockout: max attempts per member per window (seconds).
+PIN_MAX_ATTEMPTS = "5"
+PIN_WINDOW_SECONDS = "900"
+
+# Free Workers KV namespace for rate-limit counters.
+# Create it once:  wrangler kv namespace create RATELIMIT
+# then paste the returned id below.
+[[kv_namespaces]]
+binding = "RATELIMIT"
+id = "b8b914ff246b49469fb65f46f2f58a33"

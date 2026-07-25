@@ -1,5 +1,11 @@
 import { initializeApp } from 'firebase/app';
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
+import {
+  getAuth as fbGetAuth,
+  signInWithCustomToken,
+  onAuthStateChanged,
+  signOut as fbSignOut,
+} from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { getFunctions, connectFunctionsEmulator, httpsCallable } from 'firebase/functions';
 import { getStorage, connectStorageEmulator } from 'firebase/storage';
@@ -72,6 +78,33 @@ let app = null;
 let db = null;
 let functions = null;
 let storage = null;
+let auth = null;
+
+export function getFirebaseAuth() {
+  if (!isFirebaseConfigured()) return null;
+  if (!auth) auth = fbGetAuth(getFirebaseApp());
+  return auth;
+}
+
+/** Sign in with a custom token minted by the Worker after PIN verification. */
+export async function signInWithWorkerToken(token) {
+  const a = getFirebaseAuth();
+  if (!a) throw new Error('Firebase is not configured.');
+  const cred = await signInWithCustomToken(a, token);
+  return cred.user;
+}
+
+/** Subscribe to auth state; callback receives the Firebase user (or null). */
+export function subscribeFirebaseAuth(callback) {
+  const a = getFirebaseAuth();
+  if (!a) return () => {};
+  return onAuthStateChanged(a, callback);
+}
+
+export async function firebaseSignOut() {
+  const a = getFirebaseAuth();
+  if (a) await fbSignOut(a);
+}
 
 export function getFirebaseApp() {
   if (!isFirebaseConfigured()) return null;

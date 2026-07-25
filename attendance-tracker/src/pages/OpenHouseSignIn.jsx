@@ -1,18 +1,37 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { formatDateTime } from '../data/mockData';
+import { KioskShell, KioskFlowTopBar } from '../components/kiosk/KioskChrome';
+import {
+  KioskStepHeader,
+  KioskStateMessage,
+  KioskSuccessScreen,
+} from '../components/kiosk/KioskFlow';
+import Icon from '../components/kiosk/icons';
+import { getInitials } from '../data/mockData';
 import { getCallableError } from '../services/errors';
-import { useLocalTime } from '../hooks/useLocalTime';
+import { formatEastern } from '../hooks/useEasternClock';
 import {
   formatGuestPhone,
   isValidGuestEmail,
   isValidGuestPhone,
 } from '../services/guestService';
 
-const STEPS = ['Guest', 'Confirm', 'Success'];
+const STEPS = ['Your info', 'Confirm', 'Done'];
+
+function Field({ id, label, error, children }) {
+  return (
+    <div className="k-field">
+      <label className="k-label" htmlFor={id}>{label}</label>
+      {children}
+      {error && (
+        <p className="k-field-error"><Icon name="alert" size={15} /> {error}</p>
+      )}
+    </div>
+  );
+}
 
 export default function OpenHouseSignIn({ attendance }) {
-  const { checkInOpenHouseGuest } = attendance;
+  const { checkInOpenHouseGuest, settings, syncState } = attendance;
   const [step, setStep] = useState(0);
   const [guestName, setGuestName] = useState('');
   const [email, setEmail] = useState('');
@@ -22,7 +41,6 @@ export default function OpenHouseSignIn({ attendance }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [successTime, setSuccessTime] = useState(null);
-  const { dateStr, shortTimeStr } = useLocalTime();
 
   const reset = () => {
     setStep(0);
@@ -37,35 +55,29 @@ export default function OpenHouseSignIn({ attendance }) {
   };
 
   const validateStepZero = () => {
-    const nextErrors = {};
-    if (!guestName.trim()) {
-      nextErrors.name = 'Name is required.';
-    }
-    if (!email.trim()) {
-      nextErrors.email = 'Email is required.';
-    } else if (!isValidGuestEmail(email)) {
-      nextErrors.email = 'Enter a valid email address.';
-    }
-    if (!phone.trim()) {
-      nextErrors.phone = 'Phone number is required.';
-    } else if (!isValidGuestPhone(phone)) {
-      nextErrors.phone = 'Enter a valid 10-digit phone number.';
-    }
-    setFieldErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
+    const next = {};
+    if (!guestName.trim()) next.name = 'Please enter your name.';
+    if (!email.trim()) next.email = 'Please enter your email.';
+    else if (!isValidGuestEmail(email)) next.email = 'Enter a valid email address.';
+    if (!phone.trim()) next.phone = 'Please enter your phone number.';
+    else if (!isValidGuestPhone(phone)) next.phone = 'Enter a valid 10-digit phone number.';
+    setFieldErrors(next);
+    return Object.keys(next).length === 0;
   };
 
-  const canContinue = guestName.trim()
-    && email.trim()
-    && phone.trim()
-    && isValidGuestEmail(email)
-    && isValidGuestPhone(phone);
+  const canContinue = guestName.trim() && email.trim() && phone.trim()
+    && isValidGuestEmail(email) && isValidGuestPhone(phone);
+
+  const goToConfirm = () => {
+    if (!validateStepZero()) return;
+    setError('');
+    setStep(1);
+  };
 
   const confirmSignIn = async () => {
-    if (!canContinue) return;
+    if (!canContinue || loading) return;
     setLoading(true);
     setError('');
-
     try {
       await checkInOpenHouseGuest({
         name: guestName.trim(),
@@ -76,191 +88,133 @@ export default function OpenHouseSignIn({ attendance }) {
       setSuccessTime(new Date().toISOString());
       setStep(2);
     } catch (err) {
-      setError(getCallableError(err) || 'Open house sign-in failed.');
+      setError(getCallableError(err) || 'Open house sign-in could not be completed. Please try again.');
     } finally {
       setLoading(false);
     }
-  };
-
-  const goToConfirm = () => {
-    if (!validateStepZero()) return;
-    setError('');
-    setStep(1);
   };
 
   const handleFlowEnter = (event) => {
     if (event.key !== 'Enter') return;
     if (event.target.closest?.('button,a,textarea')) return;
     event.preventDefault();
+    if (step === 0) { goToConfirm(); return; }
+    if (step === 1 && !loading) confirmSignIn();
+  };
 
-    if (step === 0 && canContinue) {
-      goToConfirm();
-      return;
-    }
-    if (step === 1 && !loading) {
-      confirmSignIn();
-    }
+  const clearErr = (key, setter) => (event) => {
+    setter(event.target.value);
+    if (fieldErrors[key]) setFieldErrors((prev) => ({ ...prev, [key]: undefined }));
   };
 
   return (
-    <div className="public-flow-page guest-flow open-house-flow" onKeyDown={handleFlowEnter}>
-      <div className="public-flow-body">
-        <div className="public-flow-shell">
-          <div className="public-flow-header">
-            <Link to="/" className="public-back-link">Home</Link>
+    <KioskShell settings={settings} syncState={syncState || 'connected'} header={false}>
+      <div className="k-flow" onKeyDown={handleFlowEnter}>
+        <KioskFlowTopBar />
+        <section className="k-flow-card">
+          <span className="k-flow-eyebrow">Open house</span>
+          <h1 className="k-flow-title">Welcome, visitors!</h1>
+          <p className="k-hint" style={{ marginTop: '0.25rem' }}>No host required — just tell us a little about you.</p>
+
+          {step !== 2 && <KioskStepHeader steps={STEPS} current={step} />}
+
+          {/* Step 0 — form */}
+          {step === 0 && (
             <div>
-              <p>{dateStr}</p>
-              <strong>{shortTimeStr}</strong>
-            </div>
-          </div>
-
-          <section className="public-flow-card">
-            <div className="public-flow-title">
-              <span>OPEN HOUSE</span>
-              <h1>Guest sign-in</h1>
-              <p className="open-house-subtitle">No host required — welcome, visitors!</p>
-            </div>
-
-            <div className="public-flow-steps open-house-steps">
-              {STEPS.map((label, index) => (
-                <div
-                  key={label}
-                  className={`public-flow-step ${index === step ? 'active' : ''} ${index < step ? 'done' : ''}`}
-                >
-                  <span>{index + 1}</span>
-                  {label}
-                </div>
-              ))}
-            </div>
-
-            {step === 0 && (
-              <div className="public-flow-section open-house-form">
-                <label htmlFor="open-house-guest-name">Your name</label>
+              <Field id="oh-name" label="Your name" error={fieldErrors.name}>
                 <input
-                  id="open-house-guest-name"
-                  className={`public-flow-search${fieldErrors.name ? ' invalid' : ''}`}
+                  id="oh-name"
+                  className={`k-input${fieldErrors.name ? ' invalid' : ''}`}
                   value={guestName}
-                  onChange={(event) => {
-                    setGuestName(event.target.value);
-                    if (fieldErrors.name) {
-                      setFieldErrors((prev) => ({ ...prev, name: undefined }));
-                    }
-                  }}
+                  onChange={clearErr('name', setGuestName)}
                   autoFocus
                   autoComplete="name"
                   placeholder="First and last name"
+                  aria-invalid={Boolean(fieldErrors.name)}
                 />
-                {fieldErrors.name && <p className="public-flow-field-error">{fieldErrors.name}</p>}
-
-                <label htmlFor="open-house-email">Email</label>
+              </Field>
+              <Field id="oh-email" label="Email" error={fieldErrors.email}>
                 <input
-                  id="open-house-email"
+                  id="oh-email"
                   type="email"
                   inputMode="email"
                   autoComplete="email"
-                  className={`public-flow-search${fieldErrors.email ? ' invalid' : ''}`}
+                  className={`k-input${fieldErrors.email ? ' invalid' : ''}`}
                   value={email}
-                  onChange={(event) => {
-                    setEmail(event.target.value);
-                    if (fieldErrors.email) {
-                      setFieldErrors((prev) => ({ ...prev, email: undefined }));
-                    }
-                  }}
+                  onChange={clearErr('email', setEmail)}
                   placeholder="you@example.com"
+                  aria-invalid={Boolean(fieldErrors.email)}
                 />
-                {fieldErrors.email && <p className="public-flow-field-error">{fieldErrors.email}</p>}
-
-                <label htmlFor="open-house-phone">Phone number</label>
+              </Field>
+              <Field id="oh-phone" label="Phone number" error={fieldErrors.phone}>
                 <input
-                  id="open-house-phone"
+                  id="oh-phone"
                   type="tel"
                   inputMode="tel"
                   autoComplete="tel"
-                  className={`public-flow-search${fieldErrors.phone ? ' invalid' : ''}`}
+                  className={`k-input${fieldErrors.phone ? ' invalid' : ''}`}
                   value={phone}
-                  onChange={(event) => {
-                    setPhone(event.target.value);
-                    if (fieldErrors.phone) {
-                      setFieldErrors((prev) => ({ ...prev, phone: undefined }));
-                    }
-                  }}
+                  onChange={clearErr('phone', setPhone)}
                   placeholder="(555) 555-5555"
+                  aria-invalid={Boolean(fieldErrors.phone)}
                 />
-                {fieldErrors.phone && <p className="public-flow-field-error">{fieldErrors.phone}</p>}
-
-                <label htmlFor="open-house-reason">Organization or reason for visit (optional)</label>
+              </Field>
+              <Field id="oh-reason" label="Organization or reason for visit (optional)">
                 <input
-                  id="open-house-reason"
-                  className="public-flow-search"
+                  id="oh-reason"
+                  className="k-input"
                   value={visitReason}
                   onChange={(event) => setVisitReason(event.target.value)}
                   placeholder="e.g. Prospective cadet, community partner"
                 />
-                <button
-                  type="button"
-                  className="public-confirm-button open-house"
-                  onClick={goToConfirm}
-                  disabled={!canContinue}
-                >
+              </Field>
+              <div className="k-btn-row">
+                <button type="button" className="k-btn k-btn-primary" onClick={goToConfirm} aria-disabled={!canContinue}>
                   Continue
                 </button>
-                <p className="public-flow-alt-link">
-                  Need a host?{' '}
-                  <Link to="/guest-sign-in">Use regular Guest Sign In</Link>
-                </p>
               </div>
-            )}
+              <p className="k-hint" style={{ textAlign: 'center', marginTop: '1rem', marginBottom: 0 }}>
+                Here to see a specific member? <Link className="k-inline-link" to="/guest-sign-in">Use Guest Sign In</Link>
+              </p>
+            </div>
+          )}
 
-            {step === 1 && (
-              <div className="public-flow-section">
-                <div className="public-confirm-card open-house">
-                  <span className="public-member-avatar large">{guestName.slice(0, 1).toUpperCase()}</span>
-                  <h2>{guestName}</h2>
-                  <p>Open House visitor</p>
-                  {visitReason.trim() && <p className="open-house-reason-display">{visitReason.trim()}</p>}
-                  <dl>
-                    <dt>Email</dt>
-                    <dd>{email.trim()}</dd>
-                    <dt>Phone</dt>
-                    <dd>{formatGuestPhone(phone)}</dd>
-                    <dt>Date</dt>
-                    <dd>{new Date().toLocaleDateString('en-US')}</dd>
-                    <dt>Time</dt>
-                    <dd>{new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}</dd>
-                  </dl>
-                </div>
-                {error && <div className="public-flow-error">{error}</div>}
-                <button
-                  type="button"
-                  className="public-confirm-button open-house"
-                  onClick={confirmSignIn}
-                  disabled={loading}
-                >
-                  {loading ? 'Signing in...' : 'CONFIRM SIGN IN'}
+          {/* Step 1 — confirm */}
+          {step === 1 && (
+            <div className="k-confirm">
+              <span className="k-avatar lg" aria-hidden="true">{getInitials(guestName)}</span>
+              <h2>{guestName}</h2>
+              <p>Open house visitor</p>
+              {visitReason.trim() && <p className="k-hint" style={{ textAlign: 'center' }}>{visitReason.trim()}</p>}
+              <dl className="k-dl">
+                <dt>Email</dt>
+                <dd>{email.trim()}</dd>
+                <dt>Phone</dt>
+                <dd>{formatGuestPhone(phone)}</dd>
+              </dl>
+              {error && <KioskStateMessage type="error">{error}</KioskStateMessage>}
+              <div className="k-btn-row">
+                <button type="button" className="k-btn k-btn-outline" onClick={() => setStep(0)} disabled={loading}>Back</button>
+                <button type="button" className="k-btn k-btn-primary" onClick={confirmSignIn} disabled={loading}>
+                  {loading ? <><span className="k-spin" /> Signing in…</> : <><Icon name="check" size={20} /> Confirm sign in</>}
                 </button>
-                <div className="public-flow-actions">
-                  <button type="button" className="btn btn-outline" onClick={() => setStep(0)}>Back</button>
-                  <button type="button" className="public-cancel-button inline" onClick={reset}>Cancel</button>
-                </div>
               </div>
-            )}
+              <button type="button" className="k-btn k-btn-ghost" onClick={reset} disabled={loading} style={{ marginTop: '0.5rem' }}>
+                Start over
+              </button>
+            </div>
+          )}
 
-            {step === 2 && (
-              <div className="public-success-screen">
-                <div className="public-success-icon open-house">
-                  <svg width="72" height="72" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="m5 12 4 4L19 6" />
-                  </svg>
-                </div>
-                <h2>WELCOME!</h2>
-                <strong>{guestName}</strong>
-                <span>{successTime ? formatDateTime(successTime) : formatDateTime(new Date().toISOString())}</span>
-                <Link to="/" className="btn btn-blue btn-lg">Return Home</Link>
-              </div>
-            )}
-          </section>
-        </div>
+          {/* Step 2 — success */}
+          {step === 2 && (
+            <KioskSuccessScreen
+              title="Welcome — thanks for visiting!"
+              name={guestName}
+              meta={formatEastern(successTime || new Date().toISOString())}
+            />
+          )}
+        </section>
       </div>
-    </div>
+    </KioskShell>
   );
 }

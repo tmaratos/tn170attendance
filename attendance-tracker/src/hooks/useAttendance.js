@@ -61,7 +61,23 @@ import {
   guestCheckOutFirestore,
 } from '../services/guestService';
 import { resolveMemberAdminPermissions } from '../data/rosterData';
-import { firebaseConfig } from '../services/firebase';
+import {
+  firebaseConfig,
+  signInWithWorkerToken,
+  subscribeFirebaseAuth,
+  firebaseSignOut,
+} from '../services/firebase';
+import { subscribePublicPresence } from '../services/attendanceService';
+import {
+  isApiConfigured,
+  apiCheckIn,
+  apiCheckOut,
+  apiCreatePin,
+  apiGuestSignIn,
+  apiGuestSignOut,
+  apiSearchMembers,
+  apiAdminLogin,
+} from '../services/attendanceApi';
 
 /** Build-time app version (commit SHA or timestamp), injected by vite.config.js. */
 const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev';
@@ -219,6 +235,14 @@ function useSparkKioskAttendance() {
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
   const [hasSyncedOnce, setHasSyncedOnce] = useState(false);
 
+  // Worker mode: when VITE_ATTENDANCE_API is set, the public kiosk goes through the
+  // trusted Worker and reads only the sanitized presence board; the full roster/
+  // attendance load ONLY after a senior authenticates (Firebase custom token).
+  const useWorker = isApiConfigured();
+  const [presence, setPresence] = useState(null);
+  const [authedClaims, setAuthedClaims] = useState(null);
+  const isAuthedSenior = !useWorker || !!authedClaims?.senior;
+
   const markSyncUnavailable = useCallback(() => {
     setIsSyncAvailable(false);
     setSyncError(SYNC_UNAVAILABLE);
@@ -235,57 +259,100 @@ function useSparkKioskAttendance() {
     saveOfflineCache(payload);
   }, []);
 
+  // Track senior authentication (Worker-minted Firebase custom token).
+  useEffect(() => {
+    if (!useWorker) return undefined;
+    return subscribeFirebaseAuth(async (user) => {
+      if (!user) {
+        setAuthedClaims(null);
+        return;
+      }
+      try {
+        const res = await user.getIdTokenResult(true);
+        setAuthedClaims(res.claims || null);
+      } catch {
+        setAuthedClaims(null);
+      }
+    });
+  }, [useWorker]);
+
+  // Public sanitized presence board (kiosk display) — Worker mode only.
+  useEffect(() => {
+    if (!useWorker) return undefined;
+    return subscribePublicPresence(
+      (p) => {
+        setPresence(p);
+        setLoading(false);
+        markSyncAvailable();
+      },
+      () => markSyncUnavailable()
+    );
+  }, [useWorker, markSyncAvailable, markSyncUnavailable]);
+
   useEffect(() => {
     const embedded = getEmbeddedRosterMembers();
     const unsubs = [
-      subscribeMembers(
-        (members) => {
-          if (members.length > 0) {
-            setRawMembers(members.map(enrichMemberDoc));
-            setUsingLocalRoster(false);
-          } else {
-            setRawMembers(embedded.map(enrichMemberDoc));
-            setUsingLocalRoster(true);
-          }
-          setLoading(false);
-          markSyncAvailable();
-        },
-        () => {
-          markSyncUnavailable();
-          setLoading(false);
-        }
-      ),
+      // settings/squadron is public in every mode.
       subscribeSettings(
         (settingsDoc) => {
           setRemoteSettings(settingsDoc);
           markSyncAvailable();
         },
-        () => markSyncUnavailable()
-      ),
-      subscribeMemberPins(
-        (pins) => {
-          setMemberPinHashes(pins);
-          markSyncAvailable();
-        },
-        () => markSyncUnavailable()
-      ),
-      subscribeToActiveMeeting(
-        (activeMeeting) => {
-          setMeeting(activeMeeting);
-          markSyncAvailable();
-        },
-        () => markSyncUnavailable()
-      ),
-      subscribeRecurringGuests(
-        (guests) => {
-          setRecurringGuests(guests);
-          markSyncAvailable();
-        },
-        () => markSyncUnavailable()
+        () => {
+          if (!useWorker) markSyncUnavailable();
+        }
       ),
     ];
+
+    // Roster/PINs/meeting/guests are readable only pre-lockdown, or by an
+    // authenticated senior in Worker mode. Skip them on the public kiosk.
+    if (isAuthedSenior) {
+      unsubs.push(
+        subscribeMembers(
+          (members) => {
+            if (members.length > 0) {
+              setRawMembers(members.map(enrichMemberDoc));
+              setUsingLocalRoster(false);
+            } else {
+              setRawMembers(embedded.map(enrichMemberDoc));
+              setUsingLocalRoster(true);
+            }
+            setLoading(false);
+            markSyncAvailable();
+          },
+          () => {
+            markSyncUnavailable();
+            setLoading(false);
+          }
+        ),
+        subscribeMemberPins(
+          (pins) => {
+            setMemberPinHashes(pins);
+            markSyncAvailable();
+          },
+          () => markSyncUnavailable()
+        ),
+        subscribeToActiveMeeting(
+          (activeMeeting) => {
+            setMeeting(activeMeeting);
+            markSyncAvailable();
+          },
+          () => markSyncUnavailable()
+        ),
+        subscribeRecurringGuests(
+          (guests) => {
+            setRecurringGuests(guests);
+            markSyncAvailable();
+          },
+          () => markSyncUnavailable()
+        )
+      );
+    } else {
+      setLoading(false);
+    }
+
     return () => unsubs.forEach((unsub) => unsub());
-  }, [markSyncAvailable, markSyncUnavailable]);
+  }, [useWorker, isAuthedSenior, markSyncAvailable, markSyncUnavailable]);
 
   useEffect(() => {
     if (!meeting?.id) {
@@ -363,7 +430,38 @@ function useSparkKioskAttendance() {
     };
   }, [remoteSettings, localUiPrefs]);
 
-  const members = useMemo(() => {
+  // Sanitized present/checked-out board for the PUBLIC kiosk (no CAPID/PII).
+  const presenceView = useMemo(() => {
+    if (!presence) return { members: [], guests: [], counts: null };
+    const toStatus = (s) => (s === 'checked_in' ? 'checked-in' : 'checked-out');
+    return {
+      members: (presence.members || []).map((m) => ({
+        id: m.key,
+        name: m.name,
+        grade: m.role,
+        role: m.role,
+        capid: '',
+        status: toStatus(m.status),
+        checkInTime: m.checkInTime || null,
+        checkOutTime: m.checkOutTime || null,
+        forceAction: false,
+        forceNote: null,
+      })),
+      guests: (presence.guests || []).map((g) => ({
+        id: g.key,
+        name: g.name,
+        status: toStatus(g.status),
+        checkInTime: g.checkInTime || null,
+        checkOutTime: g.checkOutTime || null,
+        isOpenHouse: !!g.isOpenHouse,
+        forceAction: false,
+        forceNote: null,
+      })),
+      counts: presence.counts || null,
+    };
+  }, [presence]);
+
+  const firestoreMembers = useMemo(() => {
     const merged = mergeMembersWithAttendance(rawMembers, attendanceRecords);
     return merged.map((member) => {
       const memberId = String(member.id);
@@ -377,17 +475,20 @@ function useSparkKioskAttendance() {
     });
   }, [rawMembers, attendanceRecords, memberPinHashes]);
 
-  const guests = useMemo(
-    () =>
-      guestRecords.map((guest) => ({
-        ...guest,
-        status: guest.status === 'checked_in' ? 'checked-in' : 'checked-out',
-        forceAction: !!guest.forceAction,
-        forceType: guest.forceType || null,
-        forceNote: guest.forceNote || guest.notes || null,
-      })),
-    [guestRecords]
-  );
+  // Public kiosk (Worker mode, not signed in) sees only the sanitized board.
+  // Admins (or pre-lockdown) see the full Firestore roster.
+  const members = useWorker && !isAuthedSenior ? presenceView.members : firestoreMembers;
+
+  const guests = useMemo(() => {
+    if (useWorker && !isAuthedSenior) return presenceView.guests;
+    return guestRecords.map((guest) => ({
+      ...guest,
+      status: guest.status === 'checked_in' ? 'checked-in' : 'checked-out',
+      forceAction: !!guest.forceAction,
+      forceType: guest.forceType || null,
+      forceNote: guest.forceNote || guest.notes || null,
+    }));
+  }, [useWorker, isAuthedSenior, presenceView, guestRecords]);
 
   const adminMembers = useMemo(
     () =>
@@ -401,6 +502,18 @@ function useSparkKioskAttendance() {
     async (memberId, pinOrForce = false) => {
       const force = pinOrForce === true;
       const id = String(memberId);
+
+      // Public kiosk → Worker verifies the PIN and checks in server-side.
+      if (useWorker && !force) {
+        try {
+          await apiCheckIn(id, typeof pinOrForce === 'string' ? pinOrForce : '');
+          markSyncAvailable();
+        } catch (err) {
+          throw err;
+        }
+        return;
+      }
+
       const member = rawMembers.find((m) => memberStorageKey(m) === id);
       if (!member) throw new Error('Member not found.');
 
@@ -424,13 +537,20 @@ function useSparkKioskAttendance() {
         throw err;
       }
     },
-    [rawMembers, memberPinHashes, meeting?.id, kioskAdminSession, markSyncAvailable, markSyncUnavailable]
+    [useWorker, rawMembers, memberPinHashes, meeting?.id, kioskAdminSession, markSyncAvailable, markSyncUnavailable]
   );
 
   const checkOutMember = useCallback(
     async (memberId, pinOrForce = false, note = null) => {
       const force = pinOrForce === true;
       const id = String(memberId);
+
+      if (useWorker && !force) {
+        await apiCheckOut(id);
+        markSyncAvailable();
+        return;
+      }
+
       const member = rawMembers.find((m) => memberStorageKey(m) === id);
 
       try {
@@ -457,6 +577,11 @@ function useSparkKioskAttendance() {
 
   const checkInGuest = useCallback(
     async (guestData) => {
+      if (useWorker) {
+        await apiGuestSignIn(guestData);
+        markSyncAvailable();
+        return;
+      }
       const host = rawMembers.find((m) => memberStorageKey(m) === String(guestData.hostId));
       try {
         await guestCheckInFirestore({
@@ -478,6 +603,11 @@ function useSparkKioskAttendance() {
 
   const checkInOpenHouseGuest = useCallback(
     async (guestData) => {
+      if (useWorker) {
+        await apiGuestSignIn({ ...guestData, openHouse: true });
+        markSyncAvailable();
+        return;
+      }
       try {
         await guestOpenHouseCheckInFirestore({
           guestName: guestData.name,
@@ -539,17 +669,25 @@ function useSparkKioskAttendance() {
 
   const verifyPin = useCallback(
     async (memberId, pin) => {
+      // Worker mode: the PIN is verified server-side during check-in, so this
+      // gate just lets the flow advance (a wrong PIN fails at the check-in call).
+      if (useWorker) return true;
       const storedHash = memberPinHashes[String(memberId)];
       if (storedHash) {
         return verifyKioskPin(pin, String(memberId), storedHash);
       }
       return verifyPinSpark(memberId, pin);
     },
-    [memberPinHashes]
+    [useWorker, memberPinHashes]
   );
 
   const checkOutGuest = useCallback(
     async (guestId) => {
+      if (useWorker) {
+        await apiGuestSignOut({ guestRecordId: guestId });
+        markSyncAvailable();
+        return;
+      }
       const guest = guestRecords.find((g) => g.id === guestId);
       if (!guest) throw new Error('Guest not found.');
       if (guest.status !== 'checked_in') throw new Error('Guest is not currently signed in.');
@@ -562,7 +700,7 @@ function useSparkKioskAttendance() {
         throw err;
       }
     },
-    [guestRecords, markSyncAvailable, markSyncUnavailable]
+    [useWorker, guestRecords, markSyncAvailable, markSyncUnavailable]
   );
 
   const verifyAdminPin = useCallback(
@@ -582,6 +720,26 @@ function useSparkKioskAttendance() {
 
   const authenticateKioskAdmin = useCallback(
     async (adminId, pin) => {
+      // Worker mode: verify CAPID+PIN server-side, then sign in with the custom
+      // token so this device becomes an authenticated senior (Firestore unlocks).
+      if (useWorker) {
+        const { token, profile } = await apiAdminLogin(String(adminId), pin);
+        await signInWithWorkerToken(token);
+        const session = {
+          capid: profile.capid,
+          memberId: profile.memberId || profile.capid,
+          displayName: profile.displayName,
+          isAdmin: !!profile.senior,
+          canManageMembers: !!profile.canManageMembers,
+          canResetPins: !!profile.canResetPins,
+          canExportReports: !!profile.canExportReports,
+          canForceAttendance: !!profile.canForceAttendance,
+        };
+        setKioskAdminSession(session);
+        saveKioskAdminSession(session);
+        return session;
+      }
+
       const ok = await verifyAdminPin(adminId, pin);
       if (!ok) {
         throw new Error('Invalid admin credentials.');
@@ -595,7 +753,7 @@ function useSparkKioskAttendance() {
       saveKioskAdminSession(session);
       return session;
     },
-    [verifyAdminPin, rawMembers]
+    [useWorker, verifyAdminPin, rawMembers]
   );
 
   const memberHasPin = useCallback(
@@ -618,6 +776,9 @@ function useSparkKioskAttendance() {
 
   const createMemberPin = useCallback(
     async (memberId, pin, confirmPin) => {
+      if (useWorker) {
+        return apiCreatePin(String(memberId), pin, confirmPin);
+      }
       const result = await createPinSpark(memberId, pin, confirmPin);
       const member = rawMembers.find((m) => memberStorageKey(m) === String(memberId));
       try {
@@ -709,9 +870,32 @@ function useSparkKioskAttendance() {
   );
 
   const clearKioskAdminSession = useCallback(() => {
+    if (useWorker) firebaseSignOut().catch(() => {});
     setKioskAdminSession(null);
     saveKioskAdminSession(null);
-  }, []);
+  }, [useWorker]);
+
+  // Public check-in search: Worker (name-only matches) when locked, else local roster.
+  const publicSearchMembers = useCallback(
+    async (query) => {
+      if (useWorker) {
+        const res = await apiSearchMembers(query);
+        return (res.members || []).map((m) => ({
+          id: m.memberId,
+          memberId: m.memberId,
+          capid: m.memberId,
+          name: m.displayName,
+          grade: m.grade,
+          role: m.role,
+          hasPin: m.hasPin,
+          needsPinSetup: m.needsPinSetup,
+          status: 'absent',
+        }));
+      }
+      return searchMembers(query);
+    },
+    [useWorker, searchMembers]
+  );
 
   return {
     members,
@@ -720,6 +904,9 @@ function useSparkKioskAttendance() {
     settings,
     recurringGuests,
     meeting,
+    presence: presenceView,
+    publicSearchMembers,
+    isApiMode: useWorker,
     seniorSession: kioskAdminSession,
     isFirebase: true,
     isCloudBackend: false,
