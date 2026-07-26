@@ -558,3 +558,6 @@ input, select, textarea {
   text-align: center;
   font-size: 0.95rem;
 }
+
+/* allow public kiosk to scroll (iPad landscape) */
+.public-main-content, .ipad-main-content { height: auto !important; overflow: visible !important; }
