@@ -1,255 +1,113 @@
 import { Link } from 'react-router-dom';
-import Header from '../components/Header';
-import StatCard from '../components/StatCard';
-import AttendanceTable from '../components/AttendanceTable';
-import GuestTable from '../components/GuestTable';
 import ActivityFeed from '../components/ActivityFeed';
-import CheckInWizard from '../components/CheckInWizard';
+import AttendanceTable from '../components/AttendanceTable';
+import BadgeScannerPanel from '../components/BadgeScannerPanel';
+import GuestTable from '../components/GuestTable';
 import LocalClock from '../components/LocalClock';
 import PrintableAttendanceLog from '../components/PrintableAttendanceLog';
-import AttendanceCsvExport from '../components/AttendanceCsvExport';
-import { isMeetingInProgress, formatMeetingTime } from '../data/mockData';
+import { formatMeetingTime, isMeetingInProgress } from '../data/mockData';
 import { useLocalTime } from '../hooks/useLocalTime';
 
-function ActionIcon({ type }) {
-  const common = {
-    width: 23,
-    height: 23,
-    viewBox: '0 0 24 24',
-    fill: 'none',
-    stroke: 'currentColor',
-    strokeWidth: 2,
-    strokeLinecap: 'round',
-    strokeLinejoin: 'round',
-    'aria-hidden': true,
+function Icon({ name }) {
+  const paths = {
+    kiosk: <><rect x="5" y="2" width="14" height="20" rx="2" /><path d="M12 18h.01" /></>,
+    attendance: <><path d="M8 6h13M8 12h13M8 18h13" /><path d="M3 6h.01M3 12h.01M3 18h.01" /></>,
+    tools: <><path d="m14.7 6.3 3-3a4.2 4.2 0 0 1-5.4 5.4l-6.6 6.6a2.1 2.1 0 1 0 3 3l6.6-6.6a4.2 4.2 0 0 1 5.4-5.4l-3 3" /></>,
+    roster: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /></>,
   };
-
-  const icons = {
-    in: <><path d="M3 12h11" /><path d="m11 8 4 4-4 4" /><path d="M20 4v16" /></>,
-    out: <><path d="M21 12H10" /><path d="m13 8-4 4 4 4" /><path d="M4 4v16" /></>,
-    list: <><path d="M8 6h13" /><path d="M8 12h13" /><path d="M8 18h13" /><path d="M3 6h.01" /><path d="M3 12h.01" /><path d="M3 18h.01" /></>,
-    print: <><path d="M6 9V3h12v6" /><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" /><path d="M6 14h12v7H6z" /></>,
-    add: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M19 8v6" /><path d="M22 11h-6" /></>,
-  };
-
-  return <svg {...common}>{icons[type]}</svg>;
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">{paths[name]}</svg>;
 }
 
 export default function Dashboard({ attendance }) {
-  const {
-    members,
-    guests,
-    activity,
-    settings,
-    getStats,
-    checkInMember,
-    checkOutMember,
-    searchMembers,
-    verifyPin,
-    isFirebase,
-    meeting,
-    seniorSession,
-    addActivity,
-    memberHasPin,
-    needsPinSetup,
-    createMemberPin,
-    createMember,
-    updateMember,
-    deactivateMember,
-    reactivateMember,
-  } = attendance;
+  const { members, guests, activity, settings, getStats, seniorSession } = attendance;
   const stats = getStats();
   const { shortDateStr } = useLocalTime();
-  const canManageMembers = isFirebase && seniorSession?.canManageMembers;
-
-  const checkedInMembers = members.filter((m) => m.status === 'checked-in');
-  const checkedOutMembers = members.filter((m) => m.status === 'checked-out');
-  const presentGuests = guests.filter((g) => g.status === 'checked-in');
   const meetingActive = isMeetingInProgress(settings);
-
-  const handlePrint = () => window.print();
+  const checkedInMembers = members.filter((member) => member.status === 'checked-in');
+  const presentGuests = guests.filter((guest) => guest.status === 'checked-in');
+  const operatorName = seniorSession?.displayName || seniorSession?.fullName || 'meeting operator';
 
   return (
     <>
       <PrintableAttendanceLog members={members} guests={guests} settings={settings} />
-      <div className="dashboard-page no-print">
-        <Header
-          title="Welcome!"
-          subtitle={<LocalClock />}
-        />
+      <div className="operator-dashboard no-print">
+        <section className="operator-hero">
+          <div>
+            <div className="eyebrow">Meeting operator home</div>
+            <h1>Everything needed to run tonight’s attendance</h1>
+            <p>
+              Signed in as {operatorName}. Start the public kiosk for normal member use,
+              or start the badge scanner for a faster check-in line.
+            </p>
+          </div>
+          <div className="meeting-summary">
+            <span>{shortDateStr}</span>
+            <strong>{formatMeetingTime(settings.meetingStart)}–{formatMeetingTime(settings.meetingEnd)}</strong>
+            <em className={meetingActive ? 'active' : ''}>{meetingActive ? 'Meeting in progress' : 'Meeting scheduled'}</em>
+            <small><LocalClock /></small>
+          </div>
+        </section>
 
-      <div className="stats-grid">
-        <StatCard
-          label="Checked In"
-          value={stats.checkedIn}
-          color="green"
-          linkTo="/admin/members?filter=checked-in"
-        />
-        <StatCard
-          label="Checked Out"
-          value={stats.checkedOut}
-          color="red"
-          linkTo="/admin/members?filter=checked-out"
-        />
-        <StatCard
-          label="Guests Present"
-          value={stats.guestsPresent}
-          color="gold"
-          linkTo="/admin/guests"
-        />
-        <StatCard
-          label="Total Present"
-          value={stats.totalPresent}
-          subtext={`of ${stats.totalMembers} Members`}
-          color="blue"
-        />
-        <StatCard
-          label="Tonight's Meeting"
-          variant="meeting-card"
-        >
-          <div className="meeting-card-content">
-            <div className="meeting-date">{shortDateStr}</div>
-            <div className="meeting-row">
-              <div className="meeting-time">
-                {formatMeetingTime(settings.meetingStart)} - {formatMeetingTime(settings.meetingEnd)}
-              </div>
-              <span className={`badge ${meetingActive ? 'badge-green' : 'badge-blue'}`}>
-                {meetingActive ? 'IN PROGRESS' : 'SCHEDULED'}
-              </span>
-            </div>
+        <section className="operator-steps" aria-label="Meeting workflow">
+          <div className="operator-step">
+            <span>1</span><div><strong>Choose check-in method</strong><small>Public kiosk or badge scanner</small></div>
           </div>
-        </StatCard>
-      </div>
+          <div className="operator-step">
+            <span>2</span><div><strong>Watch attendance</strong><small>Confirm the present count increases</small></div>
+          </div>
+          <div className="operator-step">
+            <span>3</span><div><strong>Fix exceptions</strong><small>Use Manual Corrections when needed</small></div>
+          </div>
+        </section>
 
-      <div className="dashboard-panels">
-        <div className="panel checked-in-panel">
-          <div className="panel-header panel-header-blue">
-            <h3 className="panel-title panel-title-white">
-              Checked In ({checkedInMembers.length})
-            </h3>
-          </div>
-          <div className="panel-body">
-            <AttendanceTable
-              members={checkedInMembers.slice(0, 8)}
-              compact
-              meetingEnd={settings.meetingEnd}
-            />
-          </div>
-          <div className="panel-footer">
-            <Link to="/admin/members?filter=checked-in" className="panel-footer-link">
-              View All Checked In <span aria-hidden="true">&rarr;</span>
-            </Link>
-          </div>
+        <div className="operator-primary-grid">
+          <section className="operator-card start-card">
+            <div className="eyebrow">Standard setup</div>
+            <h2>Run the public kiosk</h2>
+            <p>Best when members will find their own name and use their PIN. Opens the large touch-friendly screen used on iPad.</p>
+            <Link to="/" className="operator-primary-button"><Icon name="kiosk" />Open public kiosk</Link>
+            <p className="operator-tip"><strong>Before members arrive:</strong> keep the iPad awake, connected to power, and on the kiosk home screen.</p>
+          </section>
+
+          <BadgeScannerPanel attendance={attendance} />
         </div>
 
-        <div className="panel checked-out-panel">
-          <div className="panel-header panel-header-red">
-            <h3 className="panel-title panel-title-white">
-              Checked Out ({checkedOutMembers.length})
-            </h3>
+        <section className="live-overview" aria-labelledby="live-heading">
+          <div className="section-heading">
+            <div><div className="eyebrow">Live meeting</div><h2 id="live-heading">Attendance at a glance</h2></div>
+            <Link to="/admin/members">View full attendance →</Link>
           </div>
-          <div className="panel-body">
-            <AttendanceTable
-              members={checkedOutMembers.slice(0, 8)}
-              showCheckOut
-              compact
-              meetingEnd={settings.meetingEnd}
-            />
+          <div className="operator-stats">
+            <Link to="/admin/members?filter=checked-in" className="operator-stat present"><span>Members present</span><strong>{stats.checkedIn}</strong></Link>
+            <Link to="/admin/guests" className="operator-stat guests"><span>Guests present</span><strong>{stats.guestsPresent}</strong></Link>
+            <div className="operator-stat total"><span>Total people present</span><strong>{stats.totalPresent}</strong></div>
+            <div className="operator-stat absent"><span>Not currently present</span><strong>{Math.max(0, stats.totalMembers - stats.checkedIn)}</strong></div>
           </div>
-          <div className="panel-footer">
-            <Link to="/admin/members?filter=checked-out" className="panel-footer-link">
-              View All Checked Out <span aria-hidden="true">&rarr;</span>
-            </Link>
+        </section>
+
+        <section className="operator-actions" aria-labelledby="help-heading">
+          <div className="section-heading"><div><div className="eyebrow">When something goes wrong</div><h2 id="help-heading">Common operator tasks</h2></div></div>
+          <div className="operator-action-grid">
+            <Link to="/admin/members" className="operator-action"><Icon name="attendance" /><div><strong>See who is here</strong><span>Full member attendance list</span></div></Link>
+            <Link to="/admin/tools" className="operator-action"><Icon name="tools" /><div><strong>Manual corrections</strong><span>Force check-in, check-out, or reset a PIN</span></div></Link>
+            <Link to="/admin/roster" className="operator-action"><Icon name="roster" /><div><strong>Manage members</strong><span>Add, edit, disable, or restore someone</span></div></Link>
           </div>
+        </section>
+
+        <div className="operator-detail-grid">
+          <section className="operator-card">
+            <div className="section-heading compact"><h2>Currently checked in ({checkedInMembers.length})</h2></div>
+            <AttendanceTable members={checkedInMembers.slice(0, 8)} compact meetingEnd={settings.meetingEnd} />
+          </section>
+          <section className="operator-card">
+            <div className="section-heading compact"><h2>Guests present ({presentGuests.length})</h2></div>
+            <GuestTable guests={presentGuests.slice(0, 8)} compact meetingEnd={settings.meetingEnd} />
+          </section>
+          <section className="operator-card activity-card">
+            <div className="section-heading compact"><h2>Recent activity</h2></div>
+            <ActivityFeed activities={activity} limit={8} />
+          </section>
         </div>
-
-        <div className="dashboard-col-stack">
-          <div className="panel guests-panel">
-            <div className="panel-header panel-header-gold">
-              <h3 className="panel-title">
-                Guests Present ({presentGuests.length})
-              </h3>
-            </div>
-            <div className="panel-body">
-              <GuestTable guests={presentGuests} compact meetingEnd={settings.meetingEnd} />
-            </div>
-            <div className="panel-footer">
-              <Link to="/admin/guests" className="panel-footer-link">
-                View All Guests <span aria-hidden="true">&rarr;</span>
-              </Link>
-            </div>
-          </div>
-
-          <div className="panel activity-panel">
-            <div className="panel-header panel-header-dark">
-              <h3 className="panel-title panel-title-white">Recent Activity</h3>
-            </div>
-            <div className="panel-body">
-              <ActivityFeed activities={activity} limit={6} showFooter />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="dashboard-bottom">
-        <div className="dashboard-wizard-wrap">
-          <CheckInWizard
-            members={members}
-            searchMembers={searchMembers}
-            verifyPin={verifyPin}
-            onCheckIn={checkInMember}
-            onCheckOut={checkOutMember}
-            mode="check-in"
-            compact
-            isFirebase={isFirebase}
-            memberHasPin={memberHasPin}
-            needsPinSetup={needsPinSetup}
-            createMemberPin={createMemberPin}
-          />
-        </div>
-
-        <div className="quick-actions no-print">
-          <h3 className="quick-actions-title">Quick Actions</h3>
-          <Link to="/admin/tools?action=check-in" className="btn btn-green">
-            <ActionIcon type="in" />
-            <span><strong>Force Check In</strong><small>Check in a member</small></span>
-          </Link>
-          <Link to="/admin/tools?action=check-out" className="btn btn-red">
-            <ActionIcon type="out" />
-            <span><strong>Force Check Out</strong><small>Check out a member</small></span>
-          </Link>
-          <Link to="/admin/members" className="btn btn-blue">
-            <ActionIcon type="list" />
-            <span><strong>View Attendance</strong><small>Tonight's full list</small></span>
-          </Link>
-          {canManageMembers && (
-            <Link to="/admin/roster" className="btn btn-gold">
-              <ActionIcon type="add" />
-              <span><strong>Add Member</strong><small>Manage the roster</small></span>
-            </Link>
-          )}
-          <button type="button" className="btn btn-gray" onClick={handlePrint}>
-            <ActionIcon type="print" />
-            <span><strong>Print Sign In Sheet</strong><small>Print attendance sheet</small></span>
-          </button>
-        </div>
-
-        <div className="panel" style={{ marginTop: 24 }}>
-          <h3 className="quick-actions-title">Export Attendance</h3>
-          <AttendanceCsvExport
-            members={members}
-            guests={guests}
-            isFirebase={isFirebase}
-            meeting={meeting}
-            seniorSession={seniorSession}
-            addActivity={addActivity}
-            title="Download CSV"
-            description="Senior members: enter CAPID and PIN to export tonight's full attendance roster."
-            buttonClassName="btn btn-blue"
-          />
-        </div>
-
-      </div>
       </div>
     </>
   );
