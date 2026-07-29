@@ -1,4 +1,4 @@
-# Weekly attendance report (Tuesday 10:30 PM ET)
+# Weekly attendance report (Tuesday 10:00 PM ET)
 
 Automated attendance delivery runs via **GitHub Actions** — no Firebase Cloud
 Functions or Blaze billing required. **Discord is the required destination and is
@@ -12,7 +12,7 @@ audit and Discord-failure recovery.
 
 ## Schedule
 
-- **When:** Every **Tuesday at 10:30 PM** in `America/New_York` (Oak Ridge, TN — Eastern Time)
+- **When:** Every **Tuesday at 10:00 PM** in `America/New_York` (Oak Ridge, TN — Eastern Time)
 - **What:** Resolves the Eastern-date meeting from Firestore, builds the CSV, and
   posts a **ZIP + embed** to Discord channel `1517911401224736971`.
 - **Email:** OPTIONAL. If `EMAIL_RECIPIENTS` + a transport are set, the CSV is also
@@ -32,7 +32,7 @@ Override with repository **Variables** (optional):
 | --- | --- | --- |
 | `SCHEDULE_TIMEZONE` | `America/New_York` | IANA timezone for the send window |
 | `MEETING_DAY` | `Tuesday` | Weekday name for the gate check |
-| `REPORT_TIME` | `22:30` | Local time (HH:MM) to deliver |
+| `REPORT_TIME` | `22:00` | Local time (HH:MM) to deliver |
 
 ## Default recipients
 

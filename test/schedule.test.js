@@ -14,7 +14,7 @@ import {
 const force = (iso, thresholdTime) => evaluateWindow(new Date(iso), { thresholdTime });
 
 const FORCE = '21:30'; // 9:30 PM force checkout threshold
-const REPORT = '22:30'; // 10:30 PM report threshold
+const REPORT = '22:00'; // 10:00 PM report threshold
 
 test('force checkout — EDT Tuesday time matrix', () => {
   // Tue 2026-07-21, EDT (UTC-4): ET = UTC - 4h
@@ -40,11 +40,12 @@ test('force checkout — EST Tuesday time matrix', () => {
   assert.equal(force('2026-01-14T02:30:00Z', FORCE).meetingDate, '2026-01-13');
 });
 
-test('report — 10:30 PM threshold matrix (EDT + EST)', () => {
-  assert.equal(force('2026-07-22T02:00:00Z', REPORT).run, false, 'EDT 10:00 PM → no');
-  assert.equal(force('2026-07-22T02:30:00Z', REPORT).run, true, 'EDT 10:30 PM → yes');
-  assert.equal(force('2026-07-22T02:31:00Z', REPORT).run, true, 'EDT 10:31 PM → yes');
-  assert.equal(force('2026-01-14T03:30:00Z', REPORT).run, true, 'EST 10:30 PM → yes');
+test('report — 10:00 PM threshold matrix (EDT + EST)', () => {
+  assert.equal(force('2026-07-22T01:59:00Z', REPORT).run, false, 'EDT 9:59 PM → no');
+  assert.equal(force('2026-07-22T02:00:00Z', REPORT).run, true, 'EDT 10:00 PM → yes');
+  assert.equal(force('2026-07-22T02:01:00Z', REPORT).run, true, 'EDT 10:01 PM → yes');
+  assert.equal(force('2026-01-14T02:59:00Z', REPORT).run, false, 'EST 9:59 PM → no');
+  assert.equal(force('2026-01-14T03:00:00Z', REPORT).run, true, 'EST 10:00 PM → yes');
 });
 
 test('delayed GitHub cron (the Jul 14/21 failure) still processes the right meeting', () => {
