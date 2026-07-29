@@ -306,7 +306,12 @@ export default function Roster({ attendance }) {
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <input
               type="text"
+              name="reactivate-member-capid"
               className="form-input"
+              inputMode="numeric"
+              autoComplete="off"
+              data-lpignore="true"
+              data-1p-ignore="true"
               placeholder="CAPID"
               value={reactivateCapid}
               onChange={(e) => setReactivateCapid(e.target.value.replace(/\D/g, ''))}
@@ -360,8 +365,12 @@ export default function Roster({ attendance }) {
               <label className="form-label">CAPID</label>
               <input
                 type="text"
+                name="roster-member-capid"
                 className="form-input"
                 inputMode="numeric"
+                autoComplete="off"
+                data-lpignore="true"
+                data-1p-ignore="true"
                 placeholder="6–8 digit CAPID"
                 value={form.capid}
                 onChange={(e) => setForm((p) => ({ ...p, capid: e.target.value.replace(/\D/g, '') }))}

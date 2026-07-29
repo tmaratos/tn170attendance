@@ -32,10 +32,8 @@ export default function AdminTools({ attendance }) {
   const initialAction = searchParams.get('action') || 'check-in';
 
   const [authenticated, setAuthenticated] = useState(!!seniorSession);
-  const [adminCapid, setAdminCapid] = useState(seniorSession?.capid || '');
-  const [adminMemberId, setAdminMemberId] = useState(
-    seniorSession?.memberId || seniorSession?.capid || ''
-  );
+  const [adminCapid, setAdminCapid] = useState('');
+  const [adminMemberId, setAdminMemberId] = useState('');
   const [adminPin, setAdminPin] = useState('');
   const [pinError, setPinError] = useState('');
   const [query, setQuery] = useState('');
@@ -50,8 +48,6 @@ export default function AdminTools({ attendance }) {
   useEffect(() => {
     if (seniorSession) {
       setAuthenticated(true);
-      setAdminMemberId(seniorSession.memberId || seniorSession.capid || '');
-      setAdminCapid(seniorSession.capid || '');
     }
   }, [seniorSession]);
 
@@ -199,6 +195,11 @@ export default function AdminTools({ attendance }) {
             <div className="form-group" style={{ marginBottom: 16 }}>
               <input
                 type="text"
+                name="manual-corrections-capid"
+                inputMode="numeric"
+                autoComplete="off"
+                data-lpignore="true"
+                data-1p-ignore="true"
                 className="form-input form-input-lg"
                 placeholder="Your CAPID"
                 value={adminCapid}
@@ -353,6 +354,11 @@ export default function AdminTools({ attendance }) {
                 <label className="form-label">Member CAPID to reset</label>
                 <input
                   type="text"
+                  name="pin-reset-target-capid"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
                   className="form-input"
                   placeholder="CAPID"
                   value={resetTarget}
