@@ -11,11 +11,10 @@ export default function Reports({ attendance }) {
     isFirebase,
     isCloudBackend,
     meeting,
-    seniorSession,
     addActivity,
   } = attendance;
   const stats = getStats();
-  const [exportCapid, setExportCapid] = useState(seniorSession?.capid || '');
+  const [exportCapid, setExportCapid] = useState('');
   const [exportPin, setExportPin] = useState('');
   const [exportError, setExportError] = useState('');
   const [exporting, setExporting] = useState(false);
@@ -108,7 +107,6 @@ export default function Reports({ attendance }) {
           guests={guests}
           isFirebase={isFirebase}
           meeting={meeting}
-          seniorSession={seniorSession}
           addActivity={addActivity}
           title="Full Attendance CSV"
           description="Export all member and guest attendance records with Type column, CAPID, check-in/out times, and force-action notes."
@@ -124,6 +122,11 @@ export default function Reports({ attendance }) {
               <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
                 <input
                   type="text"
+                  name="report-export-capid"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
                   className="form-input"
                   placeholder="CAPID"
                   value={exportCapid}
@@ -132,6 +135,8 @@ export default function Reports({ attendance }) {
                 />
                 <input
                   type="password"
+                  name="report-export-pin"
+                  autoComplete="new-password"
                   className="form-input"
                   placeholder="4-digit PIN"
                   maxLength={4}

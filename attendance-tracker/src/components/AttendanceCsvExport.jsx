@@ -18,14 +18,13 @@ export default function AttendanceCsvExport({
   guests = [],
   isFirebase,
   meeting,
-  seniorSession,
   addActivity,
   title = 'Export Attendance CSV',
   description = 'Download members and guests with Type, CAPID, check-in/out times, and force-action notes.',
   buttonClassName = 'btn btn-blue',
   showAuth = true,
 }) {
-  const [exportCapid, setExportCapid] = useState(seniorSession?.capid || '');
+  const [exportCapid, setExportCapid] = useState('');
   const [exportPin, setExportPin] = useState('');
   const [exportError, setExportError] = useState('');
   const [exporting, setExporting] = useState(false);
@@ -77,6 +76,11 @@ export default function AttendanceCsvExport({
           <div style={{ display: 'flex', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
             <input
               type="text"
+              name="attendance-export-capid"
+              inputMode="numeric"
+              autoComplete="off"
+              data-lpignore="true"
+              data-1p-ignore="true"
               className="form-input"
               placeholder="CAPID"
               value={exportCapid}
@@ -85,6 +89,8 @@ export default function AttendanceCsvExport({
             />
             <input
               type="password"
+              name="attendance-export-pin"
+              autoComplete="new-password"
               className="form-input"
               placeholder="4-digit PIN"
               maxLength={4}

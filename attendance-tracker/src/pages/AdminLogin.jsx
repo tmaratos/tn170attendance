@@ -152,11 +152,14 @@ export default function AdminLogin({ attendance, onLogin }) {
                   <p className="k-hint">Enter your senior member CAPID to continue.</p>
                   <input
                     id="admin-capid"
+                    name="admin-login-capid"
                     className="k-input"
                     value={capid}
                     onChange={(event) => { setCapid(event.target.value); setError(''); }}
                     inputMode="numeric"
                     autoComplete="off"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
                     autoFocus
                     placeholder="Senior member CAPID"
                   />
