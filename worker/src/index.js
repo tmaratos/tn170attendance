@@ -352,6 +352,48 @@ async function handleAdminResetPin(env, request, body) {
   return json(env, request, { success: true, targetName: member.displayName || member.fullName });
 }
 
+async function handleAdminForceAttendance(env, request, body) {
+  const auth = await requireAdminActor(env, body, 'canForceAttendance');
+  if (auth.error) return json(env, request, { error: auth.error }, auth.status);
+  const target = String(body.targetMemberId || '').trim();
+  const member = await fsGet(env, `members/${target}`);
+  if (!member || member.active === false) return json(env, request, { error: 'Active member not found.' }, 404);
+  const meeting = await ensureMeeting(env);
+  const records = await fsQuery(env, 'attendanceRecords', { meetingId: meeting.id });
+  const open = records.find((r) => String(r.memberId) === target && r.status === 'checked_in');
+  const action = body.action === 'check_out' ? 'check_out' : 'check_in';
+  const now = new Date();
+  if (action === 'check_in') {
+    if (open) return json(env, request, { error: 'Member is already checked in.' }, 409);
+    await fsCreate(env, 'attendanceRecords', {
+      meetingId: meeting.id, memberId: target, capid: target,
+      memberName: member.displayName || member.fullName, grade: member.grade, role: member.role,
+      status: 'checked_in', checkInTime: now, checkOutTime: null, durationMinutes: null,
+      checkedInBy: auth.actor.capid, forceAction: true, forceActionBy: auth.actor.capid,
+      forceType: 'admin', notes: String(body.note || '').trim() || null,
+      createdAt: now, updatedAt: now,
+    });
+  } else {
+    if (!open) return json(env, request, { error: 'Member is not currently checked in.' }, 409);
+    const durationMinutes = open.checkInTime
+      ? Math.max(0, Math.round((now - new Date(open.checkInTime)) / 60000))
+      : null;
+    await fsUpdate(env, `attendanceRecords/${open.id}`, {
+      status: 'checked_out', checkOutTime: now, durationMinutes,
+      checkedOutBy: auth.actor.capid, forceAction: true, forceActionBy: auth.actor.capid,
+      forceType: 'admin', notes: String(body.note || '').trim() || null, updatedAt: now,
+    });
+  }
+  await logActivity(env, meeting.id, {
+    type: action === 'check_in' ? 'force_check_in' : 'force_check_out',
+    actorCapid: auth.actor.capid, actorName: auth.actor.displayName,
+    targetCapid: target, targetName: member.displayName || member.fullName,
+    details: { note: body.note || null },
+  });
+  await refreshPresence(env, meeting.id, meeting.meetingDate);
+  return json(env, request, { success: true, action, timestamp: now.toISOString() });
+}
+
 async function verifyMemberPin(env, capid, pin) {
   const rl = await rateLimit(env, `pin:${capid}`, Number(env.PIN_MAX_ATTEMPTS || 5), Number(env.PIN_WINDOW_SECONDS || 900));
   if (!rl.ok) return { ok: false, status: 429, error: 'Too many attempts. Try again later.' };
@@ -469,6 +511,7 @@ const ROUTES = {
   'POST /admin/member/update': handleAdminUpdateMember,
   'POST /admin/member/set-active': handleAdminSetMemberActive,
   'POST /admin/member/reset-pin': handleAdminResetPin,
+  'POST /admin/attendance/force': handleAdminForceAttendance,
   'POST /member/search': handleSearch,
   'POST /member/create-pin': handleCreatePin,
   'POST /member/check-in': handleCheckIn,

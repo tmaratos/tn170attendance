@@ -91,6 +91,12 @@ export function apiAdminResetPin(actorCapid, actorPin, targetCapid) {
   return post('/admin/member/reset-pin', { actorCapid, actorPin, targetCapid });
 }
 
+export function apiAdminForceAttendance(actorCapid, actorPin, targetMemberId, action, note = null) {
+  return post('/admin/attendance/force', {
+    actorCapid, actorPin, targetMemberId, action, note,
+  });
+}
+
 export async function apiHealth() {
   const res = await fetch(`${BASE}/health`);
   return res.json();
