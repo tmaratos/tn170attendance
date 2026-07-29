@@ -4,7 +4,7 @@ import { DEFAULT_SETTINGS } from '../data/mockData';
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 export default function Settings({ attendance }) {
-  const { settings, updateSettings, resetData, isCloudBackend, isKioskMode } = attendance;
+  const { settings, updateSettings, resetData, isApiMode } = attendance;
   const [form, setForm] = useState({ ...DEFAULT_SETTINGS, ...settings });
   const [saved, setSaved] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -118,48 +118,15 @@ export default function Settings({ attendance }) {
 
           <div className="settings-section">
             <h3 className="settings-section-title">Security</h3>
-            {isCloudBackend ? (
-              <p className="report-card-desc">
-                Cloud mode uses per-member PINs verified by Cloud Functions. Admin access requires a senior member CAPID and PIN — there is no shared admin PIN.
-              </p>
-            ) : isKioskMode ? (
-              <>
-                <p className="report-card-desc">
-                  Kiosk mode stores member PIN hashes in Firestore (hashed in the browser before upload). Attendance stays on each device. Cloud Functions verification is preferred when Blaze billing is available.
-                </p>
-                <p className="report-card-desc pin-setup-hint">
-                  On first use of each tablet or browser, every member must create their PIN once at check-in.
-                  PINs do not sync across devices.
-                </p>
-                <div className="settings-grid">
-                  <div className="form-group">
-                    <label className="form-label">Admin PIN (4 digits)</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      maxLength={4}
-                      pattern="\d{4}"
-                      value={form.adminPin}
-                      onChange={(e) => handleChange('adminPin', e.target.value.replace(/\D/g, '').slice(0, 4))}
-                    />
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="settings-grid">
-                <div className="form-group">
-                  <label className="form-label">Admin PIN (4 digits)</label>
-                  <input
-                    type="text"
-                    className="form-input"
-                    maxLength={4}
-                    pattern="\d{4}"
-                    value={form.adminPin}
-                    onChange={(e) => handleChange('adminPin', e.target.value.replace(/\D/g, '').slice(0, 4))}
-                  />
-                </div>
-              </div>
-            )}
+            <p className="report-card-desc">
+              Attendance, member PINs, and roster changes are stored in the shared TN-170 cloud database.
+              An action completed on the iPad appears on every connected laptop and tablet automatically.
+            </p>
+            <p className="report-card-desc pin-setup-hint">
+              Member PINs are verified by the trusted attendance service and are never displayed to operators.
+              Admin access requires a senior member CAPID and personal PIN; there is no shared admin PIN.
+              {!isApiMode && ' The trusted attendance service is not configured in this build.'}
+            </p>
           </div>
 
           <div className="form-actions">
@@ -172,16 +139,13 @@ export default function Settings({ attendance }) {
       <div className="panel">
         <h3 className="settings-section-title" style={{ color: 'var(--red)' }}>Danger Zone</h3>
         <p className="report-card-desc" style={{ marginBottom: 16 }}>
-          {isCloudBackend
-            ? 'Clear your senior member session. Firestore data is not affected.'
-            : isKioskMode
-              ? 'Clear local attendance, guest records, and device PINs. The Firestore member roster is not affected.'
-              : 'Reset all attendance data to the original mock data. This cannot be undone.'}
+          Clear the signed-in administrator and this device&apos;s display preferences.
+          Shared attendance, roster, guest, and PIN records are not deleted.
         </p>
         {confirmReset ? (
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             <button className="btn btn-red" onClick={handleReset}>
-              Confirm Reset
+              Confirm Device Reset
             </button>
             <button className="btn btn-outline" onClick={() => setConfirmReset(false)}>
               Cancel
@@ -189,7 +153,7 @@ export default function Settings({ attendance }) {
           </div>
         ) : (
           <button className="btn btn-red" onClick={handleReset}>
-            Reset All Data
+            Reset This Device
           </button>
         )}
       </div>
