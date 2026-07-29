@@ -77,6 +77,10 @@ import {
   apiGuestSignOut,
   apiSearchMembers,
   apiAdminLogin,
+  apiAdminCreateMember,
+  apiAdminUpdateMember,
+  apiAdminSetMemberActive,
+  apiAdminResetPin,
 } from '../services/attendanceApi';
 
 /** Build-time app version (commit SHA or timestamp), injected by vite.config.js. */
@@ -805,6 +809,9 @@ function useSparkKioskAttendance() {
       if (!actorId) {
         throw new Error('Select your admin account before resetting a PIN.');
       }
+      if (useWorker) {
+        return apiAdminResetPin(String(actorId), actorPin, String(targetCapid));
+      }
       const result = await resetMemberPinSpark(actorId, actorPin, targetCapid);
       try {
         const activeMeeting = meeting || (await ensureActiveMeeting());
@@ -821,31 +828,36 @@ function useSparkKioskAttendance() {
       }
       return result;
     },
-    [kioskAdminSession, meeting, markSyncAvailable, markSyncUnavailable]
+    [useWorker, kioskAdminSession, meeting, markSyncAvailable, markSyncUnavailable]
   );
 
   const createMemberFn = useCallback(
     async (payload, actorPin) => {
       const actorId = kioskAdminSession?.memberId || kioskAdminSession?.capid;
       if (!actorId) throw new Error('Admin authentication required.');
+      if (useWorker) return apiAdminCreateMember(String(actorId), actorPin, payload);
       return createMemberSpark({ actorCapid: actorId, actorPin, ...payload });
     },
-    [kioskAdminSession]
+    [useWorker, kioskAdminSession]
   );
 
   const updateMemberFn = useCallback(
     async (payload, actorPin) => {
       const actorId = kioskAdminSession?.memberId || kioskAdminSession?.capid;
       if (!actorId) throw new Error('Admin authentication required.');
+      if (useWorker) return apiAdminUpdateMember(String(actorId), actorPin, payload);
       return updateMemberSpark({ actorCapid: actorId, actorPin, ...payload });
     },
-    [kioskAdminSession]
+    [useWorker, kioskAdminSession]
   );
 
   const deactivateMemberFn = useCallback(
     async (targetMemberId, actorPin, reason) => {
       const actorId = kioskAdminSession?.memberId || kioskAdminSession?.capid;
       if (!actorId) throw new Error('Admin authentication required.');
+      if (useWorker) {
+        return apiAdminSetMemberActive(String(actorId), actorPin, String(targetMemberId), false, reason);
+      }
       return deactivateMemberSpark({
         actorCapid: actorId,
         actorPin,
@@ -853,20 +865,23 @@ function useSparkKioskAttendance() {
         reason,
       });
     },
-    [kioskAdminSession]
+    [useWorker, kioskAdminSession]
   );
 
   const reactivateMemberFn = useCallback(
     async (targetMemberId, actorPin) => {
       const actorId = kioskAdminSession?.memberId || kioskAdminSession?.capid;
       if (!actorId) throw new Error('Admin authentication required.');
+      if (useWorker) {
+        return apiAdminSetMemberActive(String(actorId), actorPin, String(targetMemberId), true);
+      }
       return reactivateMemberSpark({
         actorCapid: actorId,
         actorPin,
         targetMemberId,
       });
     },
-    [kioskAdminSession]
+    [useWorker, kioskAdminSession]
   );
 
   const clearKioskAdminSession = useCallback(() => {

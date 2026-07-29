@@ -73,6 +73,24 @@ export function apiAdminLogin(capid, pin) {
   return post('/admin/login', { capid, pin });
 }
 
+export function apiAdminCreateMember(actorCapid, actorPin, member) {
+  return post('/admin/member/create', { actorCapid, actorPin, ...member });
+}
+
+export function apiAdminUpdateMember(actorCapid, actorPin, member) {
+  return post('/admin/member/update', { actorCapid, actorPin, ...member });
+}
+
+export function apiAdminSetMemberActive(actorCapid, actorPin, targetMemberId, active, reason = null) {
+  return post('/admin/member/set-active', {
+    actorCapid, actorPin, targetMemberId, active, reason,
+  });
+}
+
+export function apiAdminResetPin(actorCapid, actorPin, targetCapid) {
+  return post('/admin/member/reset-pin', { actorCapid, actorPin, targetCapid });
+}
+
 export async function apiHealth() {
   const res = await fetch(`${BASE}/health`);
   return res.json();

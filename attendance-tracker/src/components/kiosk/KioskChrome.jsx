@@ -102,14 +102,6 @@ export function KioskFooter() {
           you’ll be prompted to create one. Semper Vigilans — thanks for keeping attendance ready.
         </span>
       </p>
-      <p className="k-attrib">
-        {/* Real external anchor. Accessible name is exactly the visible text
-            ("Built by Tristan Maratos"); target=_blank opens a new tab, rel prevents
-            reverse-tabnabbing, and .k-attrib a:focus-visible gives a visible ring. */}
-        <a href="https://tristanmaratos.com" target="_blank" rel="noopener noreferrer">
-          Built by Tristan Maratos
-        </a>
-      </p>
     </footer>
   );
 }

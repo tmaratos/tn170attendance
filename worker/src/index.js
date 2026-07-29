@@ -38,6 +38,51 @@ function seniorClaims(m, capid) {
     canForceAttendance: senior || !!m.canForceAttendance,
   };
 }
+function normalizedName(...parts) {
+  return parts.filter(Boolean).join(' ').trim().replace(/\s+/g, ' ');
+}
+function memberRoleForGrade(grade) {
+  const value = String(grade || '').toUpperCase();
+  return value.startsWith('C/') || value === 'CADET' ? 'Cadet' : 'Senior Member';
+}
+function memberPermissionsForGrade(grade) {
+  const senior = memberRoleForGrade(grade) === 'Senior Member';
+  return {
+    role: senior ? 'Senior Member' : 'Cadet',
+    isCadet: !senior,
+    isSeniorMember: senior,
+    isAdmin: senior,
+    canForceAttendance: senior,
+    canResetPins: senior,
+    canExportReports: senior,
+    canManageMembers: senior,
+    canManageGuests: senior,
+  };
+}
+async function requireAdminActor(env, body, permission) {
+  const actorCapid = String(body.actorCapid || '').trim();
+  const actorPin = String(body.actorPin || '');
+  if (!/^\d{6,8}$/.test(actorCapid) || !/^\d{4}$/.test(actorPin)) {
+    return { error: 'Invalid admin credentials.', status: 401 };
+  }
+  const actor = await fsGet(env, `members/${actorCapid}`);
+  if (!actor || actor.active === false) return { error: 'Invalid admin credentials.', status: 401 };
+  const claims = seniorClaims(actor, actorCapid);
+  if (!claims.senior || (permission && !claims[permission])) {
+    return { error: 'You do not have permission for this action.', status: 403 };
+  }
+  const pinDoc = await fsGet(env, `memberPins/${actorCapid}`);
+  if (!(await verifyPinHash(actorPin, actorCapid, pinDoc?.pinHash, env.PIN_SALT))) {
+    return { error: 'Invalid admin credentials.', status: 401 };
+  }
+  return {
+    actor: {
+      ...actor,
+      capid: actorCapid,
+      displayName: actor.displayName || actor.fullName || actorCapid,
+    },
+  };
+}
 
 // ---------- CORS ----------
 function corsHeaders(env, request) {
@@ -199,6 +244,114 @@ async function handleCreatePin(env, request, body) {
   return json(env, request, { success: true });
 }
 
+async function handleAdminCreateMember(env, request, body) {
+  const auth = await requireAdminActor(env, body, 'canManageMembers');
+  if (auth.error) return json(env, request, { error: auth.error }, auth.status);
+  const capid = String(body.capid || '').trim();
+  const firstName = String(body.firstName || '').trim();
+  const middleName = String(body.middleName || '').trim();
+  const lastName = String(body.lastName || '').trim();
+  const grade = String(body.grade || '').trim();
+  if (!/^\d{6,8}$/.test(capid)) return json(env, request, { error: 'CAPID must be 6–8 digits.' }, 400);
+  if (!firstName || !lastName || !grade) return json(env, request, { error: 'First name, last name, and grade are required.' }, 400);
+  if (await fsGet(env, `members/${capid}`)) return json(env, request, { error: 'CAPID already exists on the roster.' }, 409);
+  const fullName = normalizedName(firstName, middleName, lastName);
+  const perms = memberPermissionsForGrade(grade);
+  await fsSet(env, `members/${capid}`, {
+    memberId: capid,
+    capid,
+    temporaryId: null,
+    firstName,
+    middleName,
+    lastName,
+    fullName,
+    displayName: fullName,
+    normalizedName: fullName.toLowerCase(),
+    grade,
+    ...perms,
+    isProspective: false,
+    hasPin: false,
+    pinResetRequired: false,
+    active: true,
+    createdByCapid: auth.actor.capid,
+    createdByName: auth.actor.displayName,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+  await logActivity(env, null, {
+    type: 'member_created',
+    actorCapid: auth.actor.capid,
+    actorName: auth.actor.displayName,
+    targetCapid: capid,
+    targetName: fullName,
+  });
+  return json(env, request, { success: true, capid, displayName: fullName });
+}
+
+async function handleAdminUpdateMember(env, request, body) {
+  const auth = await requireAdminActor(env, body, 'canManageMembers');
+  if (auth.error) return json(env, request, { error: auth.error }, auth.status);
+  const capid = String(body.capid || '').trim();
+  const current = await fsGet(env, `members/${capid}`);
+  if (!current) return json(env, request, { error: 'Member not found.' }, 404);
+  const firstName = String(body.firstName || '').trim();
+  const middleName = String(body.middleName || '').trim();
+  const lastName = String(body.lastName || '').trim();
+  const grade = String(body.grade || '').trim();
+  if (!firstName || !lastName || !grade) return json(env, request, { error: 'First name, last name, and grade are required.' }, 400);
+  const fullName = normalizedName(firstName, middleName, lastName);
+  await fsUpdate(env, `members/${capid}`, {
+    firstName, middleName, lastName, fullName, displayName: fullName,
+    normalizedName: fullName.toLowerCase(), grade, ...memberPermissionsForGrade(grade),
+    updatedByCapid: auth.actor.capid, updatedByName: auth.actor.displayName, updatedAt: new Date(),
+  });
+  await logActivity(env, null, {
+    type: 'member_updated', actorCapid: auth.actor.capid, actorName: auth.actor.displayName,
+    targetCapid: capid, targetName: fullName, details: { previous: current },
+  });
+  return json(env, request, { success: true, capid, displayName: fullName });
+}
+
+async function handleAdminSetMemberActive(env, request, body) {
+  const auth = await requireAdminActor(env, body, 'canManageMembers');
+  if (auth.error) return json(env, request, { error: auth.error }, auth.status);
+  const target = String(body.targetMemberId || '').trim();
+  const member = await fsGet(env, `members/${target}`);
+  if (!member) return json(env, request, { error: 'Member not found.' }, 404);
+  const active = !!body.active;
+  const now = new Date();
+  await fsUpdate(env, `members/${target}`, active ? {
+    active: true, reactivatedAt: now, reactivatedByCapid: auth.actor.capid, updatedAt: now,
+  } : {
+    active: false, deactivatedAt: now, deactivatedByCapid: auth.actor.capid,
+    deactivationReason: String(body.reason || '').trim() || null, updatedAt: now,
+  });
+  await logActivity(env, null, {
+    type: active ? 'member_reactivated' : 'member_deactivated',
+    actorCapid: auth.actor.capid, actorName: auth.actor.displayName,
+    targetCapid: target, targetName: member.displayName || member.fullName,
+    details: { reason: body.reason || null },
+  });
+  return json(env, request, { success: true });
+}
+
+async function handleAdminResetPin(env, request, body) {
+  const auth = await requireAdminActor(env, body, 'canResetPins');
+  if (auth.error) return json(env, request, { error: auth.error }, auth.status);
+  const target = String(body.targetCapid || '').trim();
+  const member = await fsGet(env, `members/${target}`);
+  if (!member) return json(env, request, { error: 'Member not found.' }, 404);
+  await fsSet(env, `memberPins/${target}`, {
+    pinHash: null, pinCreatedAt: null, pinUpdatedAt: new Date(),
+  });
+  await fsUpdate(env, `members/${target}`, { hasPin: false, pinResetRequired: true, updatedAt: new Date() });
+  await logActivity(env, null, {
+    type: 'pin_reset', actorCapid: auth.actor.capid, actorName: auth.actor.displayName,
+    targetCapid: target, targetName: member.displayName || member.fullName,
+  });
+  return json(env, request, { success: true, targetName: member.displayName || member.fullName });
+}
+
 async function verifyMemberPin(env, capid, pin) {
   const rl = await rateLimit(env, `pin:${capid}`, Number(env.PIN_MAX_ATTEMPTS || 5), Number(env.PIN_WINDOW_SECONDS || 900));
   if (!rl.ok) return { ok: false, status: 429, error: 'Too many attempts. Try again later.' };
@@ -312,6 +465,10 @@ async function handleGuestSignOut(env, request, body) {
 
 const ROUTES = {
   'POST /admin/login': handleAdminLogin,
+  'POST /admin/member/create': handleAdminCreateMember,
+  'POST /admin/member/update': handleAdminUpdateMember,
+  'POST /admin/member/set-active': handleAdminSetMemberActive,
+  'POST /admin/member/reset-pin': handleAdminResetPin,
   'POST /member/search': handleSearch,
   'POST /member/create-pin': handleCreatePin,
   'POST /member/check-in': handleCheckIn,

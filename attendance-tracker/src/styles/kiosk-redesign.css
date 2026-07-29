@@ -196,10 +196,6 @@
 .k-footer-help { display: flex; align-items: center; gap: 0.6rem; color: var(--k-muted); font-size: 0.9rem; max-width: 42rem; }
 .k-footer-help svg { flex: none; color: var(--k-blue); }
 .k-footer-help strong { color: var(--k-navy); }
-.k-attrib { font-size: 0.85rem; color: var(--k-muted); font-weight: 600; }
-.k-attrib a { color: var(--k-blue); font-weight: 800; text-decoration: none; border-bottom: 1.5px solid transparent; border-radius: 3px; padding: 2px 3px; }
-.k-attrib a:hover { border-bottom-color: var(--k-blue); }
-.k-attrib a:focus-visible { outline: none; box-shadow: var(--k-focus); }
 
 /* ---- Flow (wizard) layout -------------------------------------------- */
 .k-flow { width: 100%; max-width: 720px; margin: 0 auto; }
