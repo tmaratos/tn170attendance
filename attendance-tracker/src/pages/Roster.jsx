@@ -35,6 +35,10 @@ export default function Roster({ attendance }) {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [reactivateCapid, setReactivateCapid] = useState('');
+  const [deactivateTarget, setDeactivateTarget] = useState(null);
+  const [deactivatePin, setDeactivatePin] = useState('');
+  const [deactivateReason, setDeactivateReason] = useState('');
+  const [reactivatePin, setReactivatePin] = useState('');
 
   const rows = useMemo(() => {
     let list = members;
@@ -128,12 +132,27 @@ export default function Roster({ attendance }) {
     });
 
   const handleDeactivate = (m) => {
-    const enteredPin = window.prompt(`Enter your 4-digit PIN to deactivate ${m.name}:`);
-    if (!enteredPin) return;
+    setDeactivateTarget(m);
+    setDeactivatePin('');
+    setDeactivateReason('');
+    setError('');
+  };
+
+  const confirmDeactivate = () => {
+    if (!deactivateTarget || deactivatePin.length !== 4) return;
     setLoading(true);
     setError('');
-    deactivateMember(m.id, enteredPin, 'Deactivated via roster')
-      .then(() => setMessage(`${m.name} deactivated.`))
+    deactivateMember(
+      deactivateTarget.id,
+      deactivatePin,
+      deactivateReason.trim() || 'Deactivated via roster'
+    )
+      .then(() => {
+        setMessage(`${deactivateTarget.name} deactivated.`);
+        setDeactivateTarget(null);
+        setDeactivatePin('');
+        setDeactivateReason('');
+      })
       .catch((err) => setError(getCallableError(err) || err.message || 'Deactivate failed.'))
       .finally(() => setLoading(false));
   };
@@ -234,11 +253,57 @@ export default function Roster({ attendance }) {
 
       {canManage && (
         <div className="card card-pad" style={{ maxWidth: 520 }}>
+          {deactivateTarget && (
+            <div style={{ marginBottom: 24 }}>
+              <h3 className="panel-title" style={{ marginBottom: 6 }}>
+                Disable {deactivateTarget.name}
+              </h3>
+              <p className="report-card-desc" style={{ marginBottom: 12 }}>
+                Attendance history is retained and the member can be re-enabled later.
+              </p>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="Reason for disabling member"
+                value={deactivateReason}
+                onChange={(e) => setDeactivateReason(e.target.value)}
+                style={{ marginBottom: 10 }}
+              />
+              <input
+                type="password"
+                className="form-input"
+                inputMode="numeric"
+                maxLength={4}
+                placeholder="4-digit PIN to disable"
+                value={deactivatePin}
+                onChange={(e) => setDeactivatePin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                style={{ marginBottom: 10 }}
+              />
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button
+                  type="button"
+                  className="btn btn-red"
+                  disabled={loading || deactivatePin.length !== 4}
+                  onClick={confirmDeactivate}
+                >
+                  {loading ? 'Disabling…' : 'Confirm Disable'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  disabled={loading}
+                  onClick={() => setDeactivateTarget(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
           <h3 className="panel-title" style={{ marginBottom: 6 }}>Reactivate a member</h3>
           <p className="report-card-desc" style={{ marginBottom: 12 }}>
-            Enter a former member&apos;s CAPID to restore them. Use your authorization PIN in the prompt.
+            Enter a former member&apos;s CAPID and your authorization PIN to restore them.
           </p>
-          <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <input
               type="text"
               className="form-input"
@@ -247,17 +312,29 @@ export default function Roster({ attendance }) {
               onChange={(e) => setReactivateCapid(e.target.value.replace(/\D/g, ''))}
               style={{ maxWidth: 160 }}
             />
+            <input
+              type="password"
+              className="form-input"
+              inputMode="numeric"
+              maxLength={4}
+              placeholder="4-digit PIN to reactivate"
+              value={reactivatePin}
+              onChange={(e) => setReactivatePin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              style={{ maxWidth: 220 }}
+            />
             <button
               type="button"
               className="btn btn-green"
-              disabled={!/^\d{6,8}$/.test(reactivateCapid) || loading}
+              disabled={!/^\d{6,8}$/.test(reactivateCapid) || reactivatePin.length !== 4 || loading}
               onClick={() => {
-                const enteredPin = window.prompt('Enter your 4-digit PIN to reactivate:');
-                if (!enteredPin) return;
                 setLoading(true);
                 setError('');
-                reactivateMember(reactivateCapid, enteredPin)
-                  .then(() => { setMessage(`CAPID ${reactivateCapid} reactivated.`); setReactivateCapid(''); })
+                reactivateMember(reactivateCapid, reactivatePin)
+                  .then(() => {
+                    setMessage(`CAPID ${reactivateCapid} reactivated.`);
+                    setReactivateCapid('');
+                    setReactivatePin('');
+                  })
                   .catch((err) => setError(getCallableError(err) || err.message || 'Reactivate failed.'))
                   .finally(() => setLoading(false));
               }}
