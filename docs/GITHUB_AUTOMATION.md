@@ -7,7 +7,7 @@ no longer performs any global force checkout.
 | Time (America/New_York) | Workflow | What happens |
 | --- | --- | --- |
 | **9:30 PM Tuesday** | [System force checkout](../.github/workflows/system-force-checkout.yml) | Force-checks-out all open member + guest attendance for that Eastern meeting date, exactly once |
-| **10:00 PM Tuesday** | [Weekly attendance report](../.github/workflows/weekly-attendance-email.yml) | Posts the attendance ZIP to Discord channel `1517911401224736971` (required); optionally emails it |
+| **10:00 PM Tuesday target** | [Weekly attendance report](../.github/workflows/weekly-attendance-email.yml) | Attempts at 10:00 and every five minutes through 10:30, posting the attendance ZIP exactly once to Discord channel `1517911401224736971`; optionally emails it |
 
 > **Why the crons look "wrong":** GitHub delivers scheduled runs in **UTC** and can
 > be **hours late**. Both scripts validate `America/New_York` wall-clock time, target
@@ -43,6 +43,12 @@ Local test: `FIREBASE_SERVICE_ACCOUNT_JSON='<json>' FORCE_RUN=true DRY_RUN=true 
 ---
 
 ## Weekly attendance report (10:00 PM ET)
+
+GitHub Actions does not guarantee an exact cron start time. The workflow therefore
+has retry opportunities every five minutes from 10:00 through 10:30 PM Eastern.
+The server-side time gate rejects early DST-hour runs, and the Firestore delivery
+marker ensures only the first successful attempt posts to Discord. An 11:00 UTC
+Wednesday run remains as a morning recovery path.
 
 - **Script:** `scripts/weekly-attendance-email.js` · **Workflow:** `weekly-attendance-email.yml`
 - **Discord is required and independent of email** — missing/failed email never

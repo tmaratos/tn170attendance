@@ -12,7 +12,7 @@ audit and Discord-failure recovery.
 
 ## Schedule
 
-- **When:** Every **Tuesday at 10:00 PM** in `America/New_York` (Oak Ridge, TN — Eastern Time)
+- **When:** Every **Tuesday at 10:00 PM** in `America/New_York` (Oak Ridge, TN — Eastern Time), with five-minute retry opportunities through 10:30 PM if GitHub delays or drops the first cron
 - **What:** Resolves the Eastern-date meeting from Firestore, builds the CSV, and
   posts a **ZIP + embed** to Discord channel `1517911401224736971`.
 - **Email:** OPTIONAL. If `EMAIL_RECIPIENTS` + a transport are set, the CSV is also
