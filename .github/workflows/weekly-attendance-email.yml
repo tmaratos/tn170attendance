@@ -2,11 +2,12 @@ name: Weekly attendance report
 
 on:
   schedule:
-    # Tue 22:00 ET → 02:00 UTC Wed (EDT) and 03:00 UTC Wed (EST). The 11:00 UTC Wed
-    # run is a morning safety net if the Tuesday-night runs are dropped/delayed past
-    # midnight ET. The script validates America/New_York time; delivery is idempotent
-    # (report posts to Discord exactly once per meeting date).
-    - cron: '0 2,3 * * 3'
+    # Tue 22:00 ET → 02:00 UTC Wed (EDT) or 03:00 UTC Wed (EST). GitHub cron can
+    # be delayed or dropped, so retry opportunities run every five minutes through
+    # 22:30. The script validates America/New_York time, rejects the pre-22:00 DST
+    # hour, and posts exactly once per meeting date via the Firestore delivery lock.
+    - cron: '0,5,10,15,20,25,30 2,3 * * 3'
+    # Morning recovery if every Tuesday-night opportunity is dropped.
     - cron: '0 11 * * 3'
   workflow_dispatch:
     inputs:
