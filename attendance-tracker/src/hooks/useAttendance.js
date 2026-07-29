@@ -81,6 +81,7 @@ import {
   apiAdminUpdateMember,
   apiAdminSetMemberActive,
   apiAdminResetPin,
+  apiAdminForceAttendance,
 } from '../services/attendanceApi';
 
 /** Build-time app version (commit SHA or timestamp), injected by vite.config.js. */
@@ -831,6 +832,32 @@ function useSparkKioskAttendance() {
     [useWorker, kioskAdminSession, meeting, markSyncAvailable, markSyncUnavailable]
   );
 
+  const forceCheckInMemberFn = useCallback(
+    async (targetMemberId, actorPin, note = null) => {
+      const actorId = kioskAdminSession?.memberId || kioskAdminSession?.capid;
+      if (!actorId) throw new Error('Admin authentication required.');
+      if (useWorker) {
+        return apiAdminForceAttendance(String(actorId), actorPin, String(targetMemberId), 'check_in', note);
+      }
+      const member = rawMembers.find((m) => memberStorageKey(m) === String(targetMemberId));
+      if (!member) throw new Error('Member not found.');
+      return forceCheckInFirestore(actorId, member, note, meeting?.id);
+    },
+    [useWorker, kioskAdminSession, rawMembers, meeting?.id]
+  );
+
+  const forceCheckOutMemberFn = useCallback(
+    async (targetMemberId, actorPin, note = null) => {
+      const actorId = kioskAdminSession?.memberId || kioskAdminSession?.capid;
+      if (!actorId) throw new Error('Admin authentication required.');
+      if (useWorker) {
+        return apiAdminForceAttendance(String(actorId), actorPin, String(targetMemberId), 'check_out', note);
+      }
+      return forceCheckOutFirestore(actorId, String(targetMemberId), note, meeting?.id);
+    },
+    [useWorker, kioskAdminSession, meeting?.id]
+  );
+
   const createMemberFn = useCallback(
     async (payload, actorPin) => {
       const actorId = kioskAdminSession?.memberId || kioskAdminSession?.capid;
@@ -962,6 +989,8 @@ function useSparkKioskAttendance() {
     createMemberPin,
     authenticateSenior: authenticateKioskAdmin,
     resetMemberPin: resetMemberPinFn,
+    forceCheckInMember: forceCheckInMemberFn,
+    forceCheckOutMember: forceCheckOutMemberFn,
     createMember: createMemberFn,
     updateMember: updateMemberFn,
     deactivateMember: deactivateMemberFn,

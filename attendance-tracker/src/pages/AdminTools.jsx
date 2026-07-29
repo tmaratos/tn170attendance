@@ -151,10 +151,14 @@ export default function AdminTools({ attendance }) {
           setMessage('Member force checked out.');
         }
       } else if (action === 'check-in') {
-        checkInMember(memberId, true);
+        await (forceCheckInMember
+          ? forceCheckInMember(memberId, adminPin)
+          : checkInMember(memberId, true));
         setMessage('Member force checked in.');
       } else {
-        checkOutMember(memberId, true, 'Admin force logout - manually signed out by senior member.');
+        await (forceCheckOutMember
+          ? forceCheckOutMember(memberId, adminPin, 'Admin force logout - manually signed out by senior member.')
+          : checkOutMember(memberId, true, 'Admin force logout - manually signed out by senior member.'));
         setMessage('Member force checked out.');
       }
       setTimeout(() => setMessage(''), 3000);
