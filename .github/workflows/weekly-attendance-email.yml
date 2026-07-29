@@ -2,11 +2,11 @@ name: Weekly attendance report
 
 on:
   schedule:
-    # Tue 22:30 ET → 02:30 UTC Wed (EDT) and 03:30 UTC Wed (EST). The 11:00 UTC Wed
+    # Tue 22:00 ET → 02:00 UTC Wed (EDT) and 03:00 UTC Wed (EST). The 11:00 UTC Wed
     # run is a morning safety net if the Tuesday-night runs are dropped/delayed past
     # midnight ET. The script validates America/New_York time; delivery is idempotent
     # (report posts to Discord exactly once per meeting date).
-    - cron: '30 2,3 * * 3'
+    - cron: '0 2,3 * * 3'
     - cron: '0 11 * * 3'
   workflow_dispatch:
     inputs:
@@ -28,7 +28,7 @@ on:
         type: choice
         options: ['full', 'discord_only', 'email_only']
       force_send:
-        description: Send immediately (skip the Tuesday 10:30 PM gate)
+        description: Send immediately (skip the Tuesday 10:00 PM gate)
         required: false
         default: 'true'
         type: choice
@@ -53,7 +53,7 @@ jobs:
       FIREBASE_PROJECT_ID: tn170-attendance
       SCHEDULE_TIMEZONE: America/New_York
       MEETING_DAY: Tuesday
-      REPORT_TIME: '22:30'
+      REPORT_TIME: '22:00'
       ARTIFACT_DIR: ./report-artifacts
       DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
       MEETING_DATE: ${{ github.event.inputs.meeting_date || '' }}

@@ -10,7 +10,7 @@
 export const DEFAULT_TIMEZONE = 'America/New_York';
 export const DEFAULT_MEETING_DAY = 'Tuesday';
 export const DEFAULT_MEETING_END = '21:30'; // 9:30 PM
-export const DEFAULT_REPORT_TIME = '22:30'; // 10:30 PM
+export const DEFAULT_REPORT_TIME = '22:00'; // 10:00 PM
 
 const WEEKDAYS = [
   'Sunday',

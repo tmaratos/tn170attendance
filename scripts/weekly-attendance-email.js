@@ -12,7 +12,7 @@
  *   DISCORD_WEBHOOK_URL — webhook created in the attendance channel (never logged)
  * Optional env:
  *   FIREBASE_PROJECT_ID, SCHEDULE_TIMEZONE (America/New_York), MEETING_DAY (Tuesday)
- *   REPORT_TIME (default 22:30 — 10:30 PM local)
+ *   REPORT_TIME (default 22:00 — 10:00 PM local)
  *   DELIVERY_MODE = full | discord_only | email_only   (default full)
  *   DRY_RUN=true, MEETING_DATE=YYYY-MM-DD
  *   FORCE_SEND=true  — skip the schedule gate [alias SKIP_SCHEDULE_GATE]

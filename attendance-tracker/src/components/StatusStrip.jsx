@@ -43,7 +43,7 @@ export default function StatusStrip({ attendance }) {
     { icon: conn.icon, tone: conn.tone, label: conn.label, value: conn.sub },
     { icon: 'users', tone: 'blue', label: 'Meeting ID', value: d.currentMeetingId || d.currentMeetingDate || '—' },
     { icon: 'sync', tone: 'green', label: 'Last sync', value: fmtTime(d.lastSyncedAt) },
-    { icon: 'clock', tone: 'gold', label: 'Report', value: '10:30 PM ET' },
+    { icon: 'clock', tone: 'gold', label: 'Report target', value: '10:00 PM ET' },
     { icon: 'info', tone: 'gray', label: 'Version', value: d.appVersion || '—' },
   ];
 

@@ -7,7 +7,7 @@ no longer performs any global force checkout.
 | Time (America/New_York) | Workflow | What happens |
 | --- | --- | --- |
 | **9:30 PM Tuesday** | [System force checkout](../.github/workflows/system-force-checkout.yml) | Force-checks-out all open member + guest attendance for that Eastern meeting date, exactly once |
-| **10:30 PM Tuesday** | [Weekly attendance report](../.github/workflows/weekly-attendance-email.yml) | Posts the attendance ZIP to Discord channel `1517911401224736971` (required); optionally emails it |
+| **10:00 PM Tuesday** | [Weekly attendance report](../.github/workflows/weekly-attendance-email.yml) | Posts the attendance ZIP to Discord channel `1517911401224736971` (required); optionally emails it |
 
 > **Why the crons look "wrong":** GitHub delivers scheduled runs in **UTC** and can
 > be **hours late**. Both scripts validate `America/New_York` wall-clock time, target
@@ -42,7 +42,7 @@ Local test: `FIREBASE_SERVICE_ACCOUNT_JSON='<json>' FORCE_RUN=true DRY_RUN=true 
 
 ---
 
-## Weekly attendance report (10:30 PM ET)
+## Weekly attendance report (10:00 PM ET)
 
 - **Script:** `scripts/weekly-attendance-email.js` · **Workflow:** `weekly-attendance-email.yml`
 - **Discord is required and independent of email** — missing/failed email never
@@ -62,7 +62,7 @@ Local test: `FIREBASE_SERVICE_ACCOUNT_JSON='<json>' FORCE_RUN=true DRY_RUN=true 
 | `dry_run` | Report what would happen; deliver nothing |
 | `meeting_date` | Report a specific Eastern date |
 | `delivery_mode` | `full` (default), `discord_only`, or `email_only` |
-| `force_send` / `skip_schedule_gate` | Skip the 10:30 PM gate |
+| `force_send` / `skip_schedule_gate` | Skip the 10:00 PM gate |
 | `force_resend` | Re-post even if already delivered |
 
 See [WEEKLY_EMAIL.md](./WEEKLY_EMAIL.md) for email options and
