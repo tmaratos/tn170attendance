@@ -32,13 +32,13 @@ import './styles/redesign.css';
 import './styles/kiosk-redesign.css';
 
 const ADMIN_PAGES = {
-  '/admin/dashboard': { title: 'Dashboard', subtitle: 'Squadron attendance overview' },
-  '/admin/members': { title: 'Attendance', subtitle: "Tonight's meeting" },
-  '/admin/roster': { title: 'Roster', subtitle: 'Squadron members' },
-  '/admin/reports': { title: 'Reports', subtitle: 'Automated attendance exports' },
-  '/admin/tools': { title: 'Overrides & PINs', subtitle: 'Force actions and PIN resets' },
-  '/admin/settings': { title: 'Settings', subtitle: 'Squadron configuration' },
-  '/admin/guests': { title: 'Guests', subtitle: 'Guest attendance' },
+  '/admin/dashboard': { title: 'Meeting Home', subtitle: 'Start here to run attendance' },
+  '/admin/members': { title: 'Tonight’s Attendance', subtitle: 'Everyone recorded for this meeting' },
+  '/admin/roster': { title: 'Member Roster', subtitle: 'Add, edit, disable, or restore members' },
+  '/admin/reports': { title: 'History & Reports', subtitle: 'Past meetings and attendance exports' },
+  '/admin/tools': { title: 'Manual Corrections', subtitle: 'Fix attendance and reset member PINs' },
+  '/admin/settings': { title: 'System Settings', subtitle: 'Advanced squadron configuration' },
+  '/admin/guests': { title: 'Guest Attendance', subtitle: 'Visitors recorded for this meeting' },
 };
 
 export default function App() {

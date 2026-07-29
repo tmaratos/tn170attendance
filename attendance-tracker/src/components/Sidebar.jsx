@@ -2,12 +2,12 @@ import { NavLink, Link } from 'react-router-dom';
 import { useState } from 'react';
 
 const NAV_ITEMS = [
-  { to: '/admin/dashboard', label: 'Dashboard', icon: 'home' },
-  { to: '/admin/members', label: 'Attendance', icon: 'clipboard' },
-  { to: '/admin/roster', label: 'Roster', icon: 'users' },
-  { to: '/admin/reports', label: 'Reports', icon: 'file' },
-  { to: '/admin/tools', label: 'Overrides & PINs', icon: 'shield' },
-  { to: '/admin/settings', label: 'Settings', icon: 'gear' },
+  { to: '/admin/dashboard', label: 'Meeting Home', icon: 'home' },
+  { to: '/admin/members', label: "Tonight's Attendance", icon: 'clipboard' },
+  { to: '/admin/tools', label: 'Manual Corrections', icon: 'shield' },
+  { to: '/admin/roster', label: 'Member Roster', icon: 'users' },
+  { to: '/admin/reports', label: 'History & Reports', icon: 'file' },
+  { to: '/admin/settings', label: 'System Settings', icon: 'gear' },
 ];
 
 function NavIcon({ name }) {
@@ -61,7 +61,7 @@ export default function Sidebar({ settings, attendance }) {
         </div>
 
         <nav className="sidebar-nav">
-          <div className="sidebar-nav-group-label">Administration</div>
+          <div className="sidebar-nav-group-label">Meeting operations</div>
           {NAV_ITEMS.map((item) => (
             <NavLink
               key={item.to}

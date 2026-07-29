@@ -9,7 +9,7 @@
     "email:weekly": "node scripts/weekly-attendance-email.js",
     "report:weekly": "node scripts/weekly-attendance-email.js",
     "force:checkout": "node scripts/system-force-checkout.js",
-    "test": "node --test test/csv.test.js test/discord.test.js test/meeting.test.js test/member.test.js test/schedule.test.js",
+    "test": "node --test test/csv.test.js test/discord.test.js test/meeting.test.js test/member.test.js test/scanner.test.js test/schedule.test.js",
     "build:app": "npm run build --prefix attendance-tracker",
     "build:pages": "npm run build:app && node scripts/sync-github-pages.js",
     "deploy": "npm run deploy:spark",
