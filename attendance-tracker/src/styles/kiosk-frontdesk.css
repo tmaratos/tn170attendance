@@ -1,0 +1,55 @@
+/* ---- Front desk badge scanner ---------------------------------------- */
+.k-side { display: grid; gap: clamp(0.85rem, 1.6vw, 1.15rem); align-content: start; }
+
+.k-frontdesk {
+  background: var(--k-surface); border: 1.5px solid var(--k-line); border-radius: var(--k-radius);
+  box-shadow: var(--k-shadow); padding: clamp(1rem, 2.2vw, 1.4rem); color: var(--k-text);
+}
+.k-frontdesk.live { border-color: var(--k-blue); }
+.k-frontdesk-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
+.k-frontdesk-head h2 { color: var(--k-navy); font-size: clamp(1.05rem, 1.7vw, 1.3rem); font-weight: 800; line-height: 1.2; }
+.k-frontdesk-head p { color: var(--k-muted); font-size: 0.9rem; margin-top: 0.3rem; }
+.k-frontdesk-state {
+  flex-shrink: 0; display: inline-flex; align-items: center; gap: 0.4rem;
+  font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--k-muted); background: var(--k-line); border-radius: 999px; padding: 0.3rem 0.65rem;
+}
+.k-frontdesk-state.live { color: #0b5c2e; background: #d6f3e2; }
+.k-frontdesk-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; animation: k-fd-pulse 1.6s ease-in-out infinite; }
+@keyframes k-fd-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+@media (prefers-reduced-motion: reduce) { .k-frontdesk-dot { animation: none; } }
+
+.k-frontdesk-signin, .k-frontdesk-walkin, .k-frontdesk-manual { display: grid; gap: 0.35rem; margin-top: 0.9rem; }
+.k-frontdesk label { font-size: 0.82rem; font-weight: 700; color: var(--k-navy); }
+.k-frontdesk input {
+  width: 100%; font-size: 1rem; padding: 0.6rem 0.7rem;
+  border: 1.5px solid var(--k-line); border-radius: 10px; background: #fff; color: var(--k-text);
+}
+.k-frontdesk input:focus-visible { outline: none; border-color: var(--k-blue); box-shadow: var(--k-focus); }
+.k-frontdesk button {
+  margin-top: 0.4rem; font-size: 0.95rem; font-weight: 700; cursor: pointer;
+  padding: 0.6rem 0.9rem; border-radius: 10px; border: none;
+  background: var(--k-blue); color: #fff;
+}
+.k-frontdesk button:disabled { opacity: 0.5; cursor: not-allowed; }
+.k-frontdesk button.ghost { background: transparent; color: var(--k-muted); border: 1.5px solid var(--k-line); }
+
+.k-frontdesk-status { margin-top: 0.9rem; display: grid; gap: 0.2rem; padding: 0.7rem 0.8rem; border-radius: 10px; background: var(--k-line); }
+.k-frontdesk-status strong { color: var(--k-navy); font-size: 0.98rem; }
+.k-frontdesk-status span { color: var(--k-muted); font-size: 0.85rem; }
+.k-frontdesk-status.success { background: #d6f3e2; }
+.k-frontdesk-status.success strong { color: #0b5c2e; }
+.k-frontdesk-status.warn { background: #fdf0d5; }
+.k-frontdesk-status.warn strong { color: #8a5a00; }
+.k-frontdesk-status.error { background: #fbe0e0; }
+.k-frontdesk-status.error strong { color: #8a1c1c; }
+
+.k-frontdesk-walkin { border-top: 1.5px solid var(--k-line); padding-top: 0.8rem; }
+.k-frontdesk-walkin h3 { color: var(--k-navy); font-size: 0.98rem; font-weight: 800; margin-bottom: 0.2rem; }
+.k-frontdesk-walkin-actions { display: flex; gap: 0.5rem; }
+.k-frontdesk-walkin-actions button { flex: 1; }
+.k-frontdesk-manual > div { display: flex; gap: 0.5rem; }
+.k-frontdesk-manual button { margin-top: 0; flex-shrink: 0; }
+.k-frontdesk-error { color: #8a1c1c; font-size: 0.85rem; margin-top: 0.4rem; }
+.k-frontdesk-note { color: var(--k-muted); font-size: 0.8rem; margin-top: 0.7rem; line-height: 1.4; }
+.k-frontdesk-end { width: 100%; background: transparent !important; color: var(--k-muted) !important; border: 1.5px solid var(--k-line) !important; }
