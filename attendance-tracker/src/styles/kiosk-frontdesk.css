@@ -66,3 +66,25 @@
   color: var(--k-blue); font-size: 0.85rem; font-weight: 700; text-decoration: underline; cursor: pointer;
 }
 .k-frontdesk-state.ready { color: #0b5c2e; background: #d6f3e2; }
+
+/* ---- Confirmation + staff selection ---------------------------------- */
+.k-frontdesk-confirm {
+  margin-top: 0.9rem; display: grid; gap: 0.25rem; justify-items: center; text-align: center;
+  padding: 1rem 0.8rem; border-radius: 10px; background: #d6f3e2;
+}
+.k-frontdesk-confirm.out { background: #e5e9f5; }
+.k-frontdesk-confirm strong { font-size: 1rem; letter-spacing: 0.06em; color: #0b5c2e; }
+.k-frontdesk-confirm.out strong { color: var(--k-navy); }
+.k-frontdesk-confirm-name { font-size: 1.25rem; font-weight: 800; color: var(--k-navy); }
+.k-frontdesk-confirm-meta { font-size: 0.85rem; color: var(--k-muted); text-transform: capitalize; }
+
+.k-frontdesk-choice { margin-top: 0.9rem; }
+.k-frontdesk-choice h3 { color: var(--k-navy); font-size: 1rem; font-weight: 800; }
+.k-frontdesk-choice p { color: var(--k-muted); font-size: 0.85rem; margin-bottom: 0.5rem; }
+.k-frontdesk-choice ul { list-style: none; display: grid; gap: 0.4rem; }
+.k-frontdesk-choice li button {
+  margin: 0; width: 100%; display: grid; gap: 0.1rem; text-align: left;
+  background: #fff; color: var(--k-text); border: 1.5px solid var(--k-line);
+}
+.k-frontdesk-choice li button strong { color: var(--k-navy); font-size: 0.95rem; }
+.k-frontdesk-choice li button span { color: var(--k-muted); font-size: 0.8rem; font-weight: 500; }
