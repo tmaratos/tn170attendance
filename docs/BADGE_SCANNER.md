@@ -9,6 +9,25 @@ tells the kiosk who they are; the payload decides.
 | Member or cadet | Driver's license | Name matched to roster → member attendance |
 | Guest or visitor | Driver's license | No roster match → guest visit |
 
+## Authorization
+
+There is none. The scanner panel is live whenever the home page is open: no
+sign-in, no operator PIN, no button. A scan is the credential.
+
+This is a deliberate squadron decision, taken so the front desk runs unattended.
+Two things follow from it, and both are worth knowing:
+
+- Scans write through the no-Auth kiosk path that `firestore.rules` already
+  documents for `attendanceRecords`, not the Worker's `/member/check-in`, which
+  verifies the member's own PIN. That rule predates this feature.
+- Holding someone's badge or licence is enough to check them in or out. There
+  is no second factor.
+
+What limits the exposure is that **the panel acts only on what is physically
+scanned**. Manual CAPID entry was deliberately removed from it, so attendance
+cannot be recorded from a keyboard alone. Anyone without a badge or licence
+uses *Check in / Check out*, which still verifies their own PIN.
+
 ## Scanner hardware assumptions
 
 These are assumptions, not measurements — the scanner is attached to the

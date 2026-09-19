@@ -723,6 +723,35 @@ function useSparkKioskAttendance() {
     [settings.adminPin, rawMembers]
   );
 
+  // Badge/licence scan: check a member in or out from their CAPID alone.
+  //
+  // Writes through the same no-Auth kiosk path that firestore.rules documents
+  // for attendanceRecords ("kiosk check-in/out (no Auth)"), not the Worker's
+  // /member/check-in, which verifies the member's own PIN. The scan is the
+  // credential: an explicit squadron decision so the front desk runs unattended.
+  // Manual CAPID entry is deliberately absent from the scanner UI, so this can
+  // only be reached by physically scanning a badge or licence.
+  const badgeScanMember = useCallback(
+    async (capid) => {
+      const id = String(capid);
+      const member = rawMembers.find((m) => memberStorageKey(m) === id);
+      if (!member) throw new Error('That badge is not on the active roster.');
+      if (member.active === false) throw new Error('That member is not active.');
+
+      const open = attendanceRecords.find(
+        (r) => String(r.memberId) === id && r.status === 'checked_in'
+      );
+      const name = member.displayName || member.fullName || id;
+      if (open) {
+        await checkOutMemberFirestore(id, meeting?.id);
+        return { action: 'check-out', name, member };
+      }
+      await checkInMemberFirestore(id, member, meeting?.id);
+      return { action: 'check-in', name, member };
+    },
+    [rawMembers, attendanceRecords, meeting?.id]
+  );
+
   const authenticateKioskAdmin = useCallback(
     async (adminId, pin) => {
       // Worker mode: verify CAPID+PIN server-side, then sign in with the custom
@@ -984,6 +1013,7 @@ function useSparkKioskAttendance() {
     verifyPin,
     verifyAdminPin,
     authenticateKioskAdmin,
+    badgeScanMember,
     memberHasPin,
     needsPinSetup,
     createMemberPin,

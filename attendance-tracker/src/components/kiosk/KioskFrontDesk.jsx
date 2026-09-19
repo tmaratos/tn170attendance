@@ -26,37 +26,24 @@ export default function KioskFrontDesk({ attendance }) {
   const {
     members,
     guests,
-    seniorSession,
-    authenticateSenior,
-    forceCheckInMember,
-    forceCheckOutMember,
-    checkInGuest,
+    badgeScanMember,
+    checkInOpenHouseGuest,
     checkOutGuest,
-    clearSeniorSession,
   } = attendance;
 
-  const [capid, setCapid] = useState('');
-  const [pin, setPin] = useState('');
-  const [signingIn, setSigningIn] = useState(false);
-  const [signInError, setSignInError] = useState('');
   const [status, setStatus] = useState(READY);
   const [confirmation, setConfirmation] = useState(null);
   const [choice, setChoice] = useState(null);
   const [busy, setBusy] = useState(false);
   const [sawScanBurst, setSawScanBurst] = useState(false);
 
-  // The operator PIN authorises every write. Held in a ref for the session
-  // only: never in rendered state, never persisted.
-  const operatorPin = useRef('');
   const busyRef = useRef(false);
   const stateRef = useRef({ members, guests });
   stateRef.current = { members, guests };
   const scanner = useScannerPresence();
   const resetTimer = useRef(null);
 
-  const supported =
-    typeof forceCheckInMember === 'function' && typeof authenticateSenior === 'function';
-  const active = Boolean(seniorSession) && Boolean(operatorPin.current);
+  const supported = typeof badgeScanMember === 'function';
 
   useEffect(() => () => clearTimeout(resetTimer.current), []);
 
@@ -82,26 +69,16 @@ export default function KioskFrontDesk({ attendance }) {
   }, [backToReady]);
 
   const toggleMember = useCallback(async (member) => {
-    const checkingIn = member.status !== 'checked-in';
-    const note = 'Front desk scan';
-    if (checkingIn) await forceCheckInMember(member.id, operatorPin.current, note);
-    else await forceCheckOutMember(member.id, operatorPin.current, note);
-    confirm(checkingIn ? 'in' : 'out', member.name, roleLabel(member));
-  }, [forceCheckInMember, forceCheckOutMember, confirm]);
+    const { action, name } = await badgeScanMember(member.capid || member.memberId || member.id);
+    confirm(action === 'check-in' ? 'in' : 'out', name, roleLabel(member));
+  }, [badgeScanMember, confirm]);
 
   const checkGuestIn = useCallback(async (firstName, lastName) => {
     const name = `${firstName} ${lastName}`.trim();
-    const hostId = seniorSession?.memberId || seniorSession?.capid;
     // Only the guest's name leaves the browser — no licence data of any kind.
-    await checkInGuest({
-      name,
-      hostId,
-      hostCapid: hostId,
-      hostPin: operatorPin.current,
-      hostName: seniorSession?.displayName || '',
-    });
+    await checkInOpenHouseGuest({ name });
     confirm('in', name, 'Guest');
-  }, [checkInGuest, seniorSession, confirm]);
+  }, [checkInOpenHouseGuest, confirm]);
 
   const checkGuestOut = useCallback(async (visit) => {
     await checkOutGuest(visit.id);
@@ -111,14 +88,8 @@ export default function KioskFrontDesk({ attendance }) {
   const applyDecision = useCallback(async (decision) => {
     switch (decision.kind) {
       case 'cap-id': {
-        const member = stateRef.current.members.find(
-          (item) => String(item.capid || item.memberId || item.id) === decision.capid
-        );
-        if (!member) {
-          fail(`CAP ID ${decision.capid} not found`, 'Check the roster, or use Guest options.');
-          return;
-        }
-        await toggleMember(member);
+        const { action, name } = await badgeScanMember(decision.capid);
+        confirm(action === 'check-in' ? 'in' : 'out', name, 'Member');
         return;
       }
       case 'member':
@@ -192,35 +163,7 @@ export default function KioskFrontDesk({ attendance }) {
     runDecision(routeScan(scan, stateRef.current));
   }, [runDecision, fail, choice]);
 
-  useBadgeScanner({ enabled: active && !busy && !choice, onScan: handleScan });
-
-  const signIn = async (event) => {
-    event.preventDefault();
-    if (capid.trim().length < 6 || pin.length !== 4) return;
-    setSigningIn(true);
-    setSignInError('');
-    try {
-      const session = await authenticateSenior(capid.trim(), pin);
-      if (!session) throw new Error('That CAPID and PIN did not match a senior member.');
-      operatorPin.current = pin;
-      setPin('');
-      setStatus(READY);
-    } catch (error) {
-      setSignInError(getCallableError(error) || error.message || 'Sign-in failed.');
-    } finally {
-      setSigningIn(false);
-    }
-  };
-
-  const endShift = () => {
-    operatorPin.current = '';
-    clearTimeout(resetTimer.current);
-    setChoice(null);
-    setConfirmation(null);
-    setStatus(READY);
-    setCapid('');
-    clearSeniorSession?.();
-  };
+  useBadgeScanner({ enabled: supported && !busy && !choice, onScan: handleScan });
 
   if (!supported) return null;
 
@@ -242,38 +185,6 @@ export default function KioskFrontDesk({ attendance }) {
       )}
     </div>
   );
-
-  if (!active) {
-    return (
-      <section className="k-frontdesk" aria-labelledby="frontdesk-title">
-        <div className="k-frontdesk-head">
-          <div>
-            <span className="k-eyebrow">Front desk</span>
-            <h2 id="frontdesk-title">Badge scanning</h2>
-            <p>Unlock once and the kiosk will scan CAP IDs and driver’s licenses all meeting.</p>
-          </div>
-          <span className="k-frontdesk-state">Locked</span>
-        </div>
-        {deviceRow}
-        <form className="k-frontdesk-signin" onSubmit={signIn}>
-          <label htmlFor="fd-capid">Your CAPID</label>
-          <input id="fd-capid" inputMode="numeric" autoComplete="off" value={capid}
-            onChange={(e) => setCapid(e.target.value.replace(/\D/g, '').slice(0, 8))} placeholder="123456" />
-          <label htmlFor="fd-pin">Your 4-digit PIN</label>
-          <input id="fd-pin" type="password" inputMode="numeric" autoComplete="off" maxLength="4" value={pin}
-            onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="••••" />
-          <button type="submit" disabled={signingIn || capid.length < 6 || pin.length !== 4}>
-            {signingIn ? 'Unlocking…' : 'Start scanning'}
-          </button>
-        </form>
-        {signInError && <p className="k-frontdesk-error" role="alert">{signInError}</p>}
-        <p className="k-frontdesk-note">
-          Your PIN is held in memory for this browser session only and is never saved.
-          Members and guests can still use the buttons above.
-        </p>
-      </section>
-    );
-  }
 
   return (
     <section className={`k-frontdesk live ${busy ? 'busy' : ''}`} aria-labelledby="frontdesk-title">
@@ -332,10 +243,6 @@ export default function KioskFrontDesk({ attendance }) {
         Scans only. Anyone without a badge or license uses <strong>Check in / Check out</strong>,
         which verifies their own PIN.
       </p>
-
-      <button type="button" className="k-frontdesk-end" onClick={endShift}>
-        Stop scanning and sign out
-      </button>
     </section>
   );
 }
