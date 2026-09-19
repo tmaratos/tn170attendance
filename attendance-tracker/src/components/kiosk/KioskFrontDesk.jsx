@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import useBadgeScanner from '../../hooks/useBadgeScanner';
 import useScannerPresence from '../../hooks/useScannerPresence';
-import { extractCapid } from '../../utils/scanner';
 import { parseAamvaName } from '../../utils/aamva';
 import { routeScan } from '../../services/scanRouting';
 import { getCallableError } from '../../services/errors';
@@ -44,7 +43,6 @@ export default function KioskFrontDesk({ attendance }) {
   const [confirmation, setConfirmation] = useState(null);
   const [choice, setChoice] = useState(null);
   const [busy, setBusy] = useState(false);
-  const [manualCapid, setManualCapid] = useState('');
   const [sawScanBurst, setSawScanBurst] = useState(false);
 
   // The operator PIN authorises every write. Held in a ref for the session
@@ -224,17 +222,6 @@ export default function KioskFrontDesk({ attendance }) {
     clearSeniorSession?.();
   };
 
-  const onManualSubmit = (event) => {
-    event.preventDefault();
-    const parsed = extractCapid(manualCapid);
-    setManualCapid('');
-    if (!parsed) {
-      fail('Not a valid CAP ID', 'Enter a 6–8 digit CAPID.');
-      return;
-    }
-    runDecision({ kind: 'cap-id', capid: parsed });
-  };
-
   if (!supported) return null;
 
   const scannerPresent = scanner.connected || sawScanBurst;
@@ -341,14 +328,10 @@ export default function KioskFrontDesk({ attendance }) {
         </div>
       )}
 
-      <form className="k-frontdesk-manual" onSubmit={onManualSubmit}>
-        <label htmlFor="fd-manual">No badge? Type a CAP ID</label>
-        <div>
-          <input id="fd-manual" inputMode="numeric" autoComplete="off" value={manualCapid}
-            onChange={(e) => setManualCapid(e.target.value.replace(/\D/g, '').slice(0, 8))} placeholder="123456" />
-          <button type="submit" disabled={busy || manualCapid.length < 6}>Go</button>
-        </div>
-      </form>
+      <p className="k-frontdesk-note">
+        Scans only. Anyone without a badge or license uses <strong>Check in / Check out</strong>,
+        which verifies their own PIN.
+      </p>
 
       <button type="button" className="k-frontdesk-end" onClick={endShift}>
         Stop scanning and sign out
