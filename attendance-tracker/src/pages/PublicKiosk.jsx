@@ -2,6 +2,7 @@ import { KioskShell } from '../components/kiosk/KioskChrome';
 import KioskActionCard from '../components/kiosk/KioskActionCard';
 import KioskStatusPanel from '../components/kiosk/KioskStatusPanel';
 import CheckoutReminder from '../components/CheckoutReminder';
+import KioskFrontDesk from '../components/kiosk/KioskFrontDesk';
 import { useEasternClock, easternMeetingStatus } from '../hooks/useEasternClock';
 
 export default function PublicKiosk({ attendance }) {
@@ -49,11 +50,14 @@ export default function PublicKiosk({ attendance }) {
           />
         </div>
 
-        <KioskStatusPanel
-          presentCount={stats.checkedIn}
-          guestCount={stats.guestsPresent}
-          meetingLabel={meeting.label}
-        />
+        <div className="k-side">
+          <KioskStatusPanel
+            presentCount={stats.checkedIn}
+            guestCount={stats.guestsPresent}
+            meetingLabel={meeting.label}
+          />
+          <KioskFrontDesk attendance={attendance} />
+        </div>
       </div>
     </KioskShell>
   );
