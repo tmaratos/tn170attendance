@@ -53,3 +53,16 @@
 .k-frontdesk-error { color: #8a1c1c; font-size: 0.85rem; margin-top: 0.4rem; }
 .k-frontdesk-note { color: var(--k-muted); font-size: 0.8rem; margin-top: 0.7rem; line-height: 1.4; }
 .k-frontdesk-end { width: 100%; background: transparent !important; color: var(--k-muted) !important; border: 1.5px solid var(--k-line) !important; }
+
+.k-frontdesk-device {
+  display: flex; align-items: center; gap: 0.45rem; margin-top: 0.8rem;
+  font-size: 0.85rem; color: var(--k-muted);
+}
+.k-frontdesk-device-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--k-muted); flex-shrink: 0; }
+.k-frontdesk-device.on { color: #0b5c2e; }
+.k-frontdesk-device.on .k-frontdesk-device-dot { background: #0b5c2e; }
+.k-frontdesk-device button.link {
+  margin: 0; padding: 0; background: none; border: none;
+  color: var(--k-blue); font-size: 0.85rem; font-weight: 700; text-decoration: underline; cursor: pointer;
+}
+.k-frontdesk-state.ready { color: #0b5c2e; background: #d6f3e2; }

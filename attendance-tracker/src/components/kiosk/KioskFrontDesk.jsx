@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import useBadgeScanner from '../../hooks/useBadgeScanner';
+import useScannerPresence from '../../hooks/useScannerPresence';
 import { extractCapid } from '../../utils/scanner';
 import { getCallableError } from '../../services/errors';
 import '../../styles/kiosk-frontdesk.css';
@@ -29,6 +30,8 @@ export default function KioskFrontDesk({ attendance }) {
   const [busy, setBusy] = useState(false);
   const [walkIn, setWalkIn] = useState(null);
   const [manualCapid, setManualCapid] = useState('');
+  const [sawScanBurst, setSawScanBurst] = useState(false);
+  const scanner = useScannerPresence();
 
   // The operator PIN authorises every force action, so it is held for the
   // session in a ref only — never in state that renders, never persisted.
@@ -121,9 +124,21 @@ export default function KioskFrontDesk({ attendance }) {
   }, [toggleMember, createMember]);
 
   const onScan = useCallback(({ capid: scanned, raw }) => {
+    setSawScanBurst(true);
     if (busyRef.current) return;
     handleCapid(scanned, raw);
   }, [handleCapid]);
+
+  // WebHID is the reliable signal; a completed scan burst is the fallback for
+  // scanners Chrome hides because they present as a plain keyboard.
+  const scannerPresent = scanner.connected || sawScanBurst;
+  const scannerLabel = !scanner.checked
+    ? 'Checking for scanner…'
+    : scannerPresent
+      ? `Scanner connected${scanner.scannerName ? ` — ${scanner.scannerName}` : ''}`
+      : scanner.supported
+        ? 'No scanner detected'
+        : 'Scanner detection unavailable in this browser';
 
   useBadgeScanner({ enabled: active && !busy, onScan });
 
@@ -175,11 +190,23 @@ export default function KioskFrontDesk({ attendance }) {
         <div className="k-frontdesk-head">
           <div>
             <span className="k-eyebrow">Front desk</span>
-            <h2 id="frontdesk-title">Turn on badge scanning</h2>
-            <p>Sign in once and the kiosk will scan members in and out for the rest of the meeting.</p>
+            <h2 id="frontdesk-title">Badge scanning</h2>
+            <p>Unlock once and every scan checks that member in or out for the rest of the meeting.</p>
           </div>
-          <span className="k-frontdesk-state">Off</span>
+          <span className={`k-frontdesk-state ${scannerPresent ? 'ready' : ''}`}>
+            {scannerPresent ? 'Scanner ready' : 'Locked'}
+          </span>
         </div>
+        <div className={`k-frontdesk-device ${scannerPresent ? 'on' : ''}`}>
+          <span className="k-frontdesk-device-dot" />
+          <span>{scannerLabel}</span>
+          {scanner.supported && !scannerPresent && scanner.checked && (
+            <button type="button" className="link" onClick={scanner.grantAccess}>
+              Detect scanner
+            </button>
+          )}
+        </div>
+
         <form className="k-frontdesk-signin" onSubmit={signIn}>
           <label htmlFor="fd-capid">Your CAPID</label>
           <input
@@ -202,7 +229,7 @@ export default function KioskFrontDesk({ attendance }) {
             placeholder="••••"
           />
           <button type="submit" disabled={signingIn || capid.length < 6 || pin.length !== 4}>
-            {signingIn ? 'Signing in…' : 'Start scanning'}
+            {signingIn ? 'Unlocking…' : 'Unlock scanning'}
           </button>
         </form>
         {signInError && <p className="k-frontdesk-error" role="alert">{signInError}</p>}
@@ -220,7 +247,7 @@ export default function KioskFrontDesk({ attendance }) {
         <div>
           <span className="k-eyebrow">Front desk • {operatorName}</span>
           <h2 id="frontdesk-title">Badge scanning is on</h2>
-          <p>Scan any member badge. Nothing needs to be selected or tapped first.</p>
+          <p>{scannerPresent ? scannerLabel : 'Scan any member badge.'} Nothing needs to be selected or tapped first.</p>
         </div>
         <span className="k-frontdesk-state live"><span className="k-frontdesk-dot" />Listening</span>
       </div>
