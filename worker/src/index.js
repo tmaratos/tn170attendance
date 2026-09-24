@@ -505,6 +505,74 @@ async function handleGuestSignOut(env, request, body) {
   return json(env, request, { success: true });
 }
 
+// Badge / licence scan for the front desk kiosk.
+//
+// This exists because the kiosk's source of truth is publicPresence/current,
+// which only this Worker can write (refreshPresence). A browser writing
+// straight to Firestore records attendance that the rest of the app never
+// sees, so every scan has to come through here.
+//
+// The scan is the only credential: there is no PIN. That is a squadron
+// decision, so it is off unless BADGE_SCAN_ENABLED is set, is rate limited per
+// badge and overall, and every scan is logged with method "badge" so a lost or
+// copied badge can be audited afterwards.
+async function handleBadgeScan(env, request, body) {
+  if (String(env.BADGE_SCAN_ENABLED || '') !== 'true') {
+    return json(env, request, { error: 'Badge scanning is not enabled for this squadron.' }, 403);
+  }
+  const capid = String(body.capid || '').trim();
+  if (!/^\d{6,8}$/.test(capid)) {
+    return json(env, request, { error: 'Badge must contain a 6-8 digit CAPID.' }, 400);
+  }
+
+  const perBadge = await rateLimit(env, `badge:${capid}`, Number(env.BADGE_MAX_SCANS || 10), Number(env.BADGE_WINDOW_SECONDS || 60));
+  if (!perBadge.ok) return json(env, request, { error: 'Too many scans for this badge. Wait a moment and try again.' }, 429);
+  const overall = await rateLimit(env, 'badge:all', Number(env.BADGE_MAX_SCANS_TOTAL || 240), Number(env.BADGE_WINDOW_SECONDS || 60));
+  if (!overall.ok) return json(env, request, { error: 'Scanner is busy. Try again in a moment.' }, 429);
+
+  const member = await fsGet(env, `members/${capid}`);
+  if (!member || member.active === false) {
+    return json(env, request, { error: 'That badge is not on the active roster.' }, 404);
+  }
+
+  const meeting = await ensureMeeting(env);
+  const records = await fsQuery(env, 'attendanceRecords', { meetingId: meeting.id });
+  const open = records.find((r) => String(r.memberId) === capid && r.status === 'checked_in');
+  const now = new Date();
+  const memberName = member.displayName || member.fullName || capid;
+
+  if (open) {
+    const durationMinutes = open.checkInTime
+      ? Math.max(0, Math.round((now - new Date(open.checkInTime)) / 60000))
+      : null;
+    await fsUpdate(env, `attendanceRecords/${open.id}`, {
+      status: 'checked_out', checkOutTime: now, durationMinutes,
+      checkedOutBy: capid, checkInMethod: 'badge', updatedAt: now,
+    });
+    await logActivity(env, meeting.id, {
+      type: 'member_checked_out', targetCapid: capid, targetName: memberName,
+      details: { method: 'badge' },
+    });
+    await refreshPresence(env, meeting.id, meeting.meetingDate);
+    return json(env, request, { success: true, action: 'check_out', memberName, timestamp: now.toISOString() });
+  }
+
+  await fsCreate(env, 'attendanceRecords', {
+    meetingId: meeting.id, memberId: capid, capid,
+    memberName, grade: member.grade, role: member.role,
+    isProspective: !!member.isProspective,
+    status: 'checked_in', checkInTime: now, checkOutTime: null, durationMinutes: null,
+    checkedInBy: capid, checkInMethod: 'badge', forceAction: false, notes: null,
+    createdAt: now, updatedAt: now,
+  });
+  await logActivity(env, meeting.id, {
+    type: 'member_checked_in', targetCapid: capid, targetName: memberName,
+    details: { method: 'badge' },
+  });
+  await refreshPresence(env, meeting.id, meeting.meetingDate);
+  return json(env, request, { success: true, action: 'check_in', memberName, timestamp: now.toISOString() });
+}
+
 const ROUTES = {
   'POST /admin/login': handleAdminLogin,
   'POST /admin/member/create': handleAdminCreateMember,
@@ -516,6 +584,7 @@ const ROUTES = {
   'POST /member/create-pin': handleCreatePin,
   'POST /member/check-in': handleCheckIn,
   'POST /member/check-out': handleCheckOut,
+  'POST /member/badge-scan': handleBadgeScan,
   'POST /guest/sign-in': handleGuestSignIn,
   'POST /guest/sign-out': handleGuestSignOut,
 };
