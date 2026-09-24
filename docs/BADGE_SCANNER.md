@@ -17,9 +17,10 @@ sign-in, no operator PIN, no button. A scan is the credential.
 This is a deliberate squadron decision, taken so the front desk runs unattended.
 Two things follow from it, and both are worth knowing:
 
-- Scans write through the no-Auth kiosk path that `firestore.rules` already
-  documents for `attendanceRecords`, not the Worker's `/member/check-in`, which
-  verifies the member's own PIN. That rule predates this feature.
+- Scans go through the Worker's `POST /member/badge-scan`, which is gated by
+  the `BADGE_SCAN_ENABLED` environment variable, rate limited per badge and
+  overall, and logs every scan with `method: "badge"` for audit. It does not
+  verify a PIN, unlike `/member/check-in`.
 - Holding someone's badge or licence is enough to check them in or out. There
   is no second factor.
 
@@ -27,6 +28,25 @@ What limits the exposure is that **the panel acts only on what is physically
 scanned**. Manual CAPID entry was deliberately removed from it, so attendance
 cannot be recorded from a keyboard alone. Anyone without a badge or licence
 uses *Check in / Check out*, which still verifies their own PIN.
+
+### Why scans must go through the Worker
+
+The kiosk and the rest of the app read one document, `publicPresence/current`,
+and **only the Worker can write it** — `refreshPresence` runs at the end of each
+Worker endpoint, and `firestore.rules` has no rule for `publicPresence`, so
+clients are denied by default.
+
+A browser writing attendance straight to Firestore therefore produces a record
+that nothing else in the app ever sees: the scan reports success, the record
+exists, and "Currently present" still shows nobody. Every scan has to come
+through the Worker for this reason, not merely by convention.
+
+### Deployment requirement
+
+`POST /member/badge-scan` returns **403** until `BADGE_SCAN_ENABLED=true` is set
+on the Worker. This is deliberate — deploying the code does not silently enable
+PIN-free attendance. Optional tuning: `BADGE_MAX_SCANS` (default 10 per badge),
+`BADGE_MAX_SCANS_TOTAL` (default 240), `BADGE_WINDOW_SECONDS` (default 60).
 
 ## Scanner hardware assumptions
 

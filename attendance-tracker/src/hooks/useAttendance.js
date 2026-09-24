@@ -70,6 +70,7 @@ import {
 import { subscribePublicPresence } from '../services/attendanceService';
 import {
   isApiConfigured,
+  apiBadgeScan,
   apiCheckIn,
   apiCheckOut,
   apiCreatePin,
@@ -734,6 +735,19 @@ function useSparkKioskAttendance() {
   const badgeScanMember = useCallback(
     async (capid) => {
       const id = String(capid);
+
+      // Worker mode: the scan MUST go through the Worker. It is the only writer
+      // of publicPresence/current, which the kiosk and the rest of the app read;
+      // a direct Firestore write records attendance that nothing else ever sees.
+      if (useWorker) {
+        const result = await apiBadgeScan(id);
+        markSyncAvailable();
+        return {
+          action: result.action === 'check_out' ? 'check-out' : 'check-in',
+          name: result.memberName || id,
+        };
+      }
+
       const member = rawMembers.find((m) => memberStorageKey(m) === id);
       if (!member) throw new Error('That badge is not on the active roster.');
       if (member.active === false) throw new Error('That member is not active.');
@@ -749,7 +763,7 @@ function useSparkKioskAttendance() {
       await checkInMemberFirestore(id, member, meeting?.id);
       return { action: 'check-in', name, member };
     },
-    [rawMembers, attendanceRecords, meeting?.id]
+    [useWorker, rawMembers, attendanceRecords, meeting?.id, markSyncAvailable]
   );
 
   const authenticateKioskAdmin = useCallback(

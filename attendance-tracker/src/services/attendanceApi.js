@@ -48,6 +48,15 @@ export function apiCheckOut(capid) {
   return post('/member/check-out', { capid });
 }
 
+/**
+ * Badge / licence scan. The Worker resolves the name, decides check-in vs
+ * check-out from current state, and — critically — refreshes publicPresence,
+ * which the rest of the app reads. Returns { action, memberName }.
+ */
+export function apiBadgeScan(capid) {
+  return post('/member/badge-scan', { capid });
+}
+
 export function apiCreatePin(capid, pin, confirmPin) {
   return post('/member/create-pin', { capid, pin, confirmPin });
 }
