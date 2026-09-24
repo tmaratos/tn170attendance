@@ -151,6 +151,7 @@ async function refreshPresence(env, meetingId, meetingDate) {
     checkInTime: g.checkInTime || null,
     checkOutTime: g.checkOutTime || null,
     isOpenHouse: !!g.isOpenHouse,
+    signInMode: g.signInMode || null,
   }));
   const present = members.filter((m) => m.status === 'checked_in').length;
   const guestsPresent = guestList.filter((g) => g.status === 'checked_in').length;
@@ -460,11 +461,14 @@ async function handleCheckOut(env, request, body) {
 async function handleGuestSignIn(env, request, body) {
   const name = String(body.name || '').trim();
   if (!name) return json(env, request, { error: 'Guest name is required.' }, 400);
-  const openHouse = !!body.openHouse;
+  // A badge/licence scan has no host and is not an open house; it gets its own
+  // mode so reports do not mislabel a scanned visitor as an open-house guest.
+  const badge = !!body.badge;
+  const openHouse = !badge && !!body.openHouse;
   const meeting = await ensureMeeting(env);
 
   let hostName = null;
-  if (!openHouse) {
+  if (!badge && !openHouse) {
     const hostCapid = String(body.hostCapid || '').trim();
     const v = await verifyMemberPin(env, hostCapid, String(body.hostPin || ''));
     if (!v.ok) return json(env, request, { error: `Host PIN: ${v.error}` }, v.status);
@@ -478,7 +482,7 @@ async function handleGuestSignIn(env, request, body) {
     status: 'checked_in',
     checkInTime: new Date(),
     checkOutTime: null,
-    signInMode: openHouse ? 'open_house' : 'hosted',
+    signInMode: badge ? 'badge' : openHouse ? 'open_house' : 'hosted',
     isOpenHouse: openHouse,
     hostName,
     email: body.email ? String(body.email) : null,   // stored, never returned publicly

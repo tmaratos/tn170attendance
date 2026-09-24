@@ -101,3 +101,45 @@ test('CSV cells escape embedded quotes', () => {
   const csv = buildCsv([{ memberName: 'A "B" C', capid: '111111', role: 'Cadet', status: 'checked_in', checkInTime: null, checkOutTime: null }], []);
   assert.match(csv, /"A ""B"" C"/);
 });
+
+// "Hosted By" is column 5 in CSV_HEADERS.
+const HOSTED_BY = CSV_HEADERS.indexOf('Hosted By');
+
+function guestRow(record) {
+  const csv = buildCsv(
+    [],
+    [{ status: 'checked_in', checkInTime: '2026-09-24T22:42:00Z', ...record }],
+    'America/New_York'
+  );
+  // Cells are CSV-escaped; unwrap them so assertions read naturally.
+  return csv
+    .split('\n')[1]
+    .split(',')
+    .map((cell) => cell.replace(/^"(.*)"$/s, '$1').replace(/""/g, '"'));
+}
+
+// A scanned visitor has no host and is not an open-house attendee. Borrowing
+// the open-house label misreported why they were there, so that column is
+// blank for a badge sign-in.
+test('a badge sign-in leaves the Hosted By column blank', () => {
+  const row = guestRow({ guestName: 'Bob Williams', signInMode: 'badge', isOpenHouse: false });
+  assert.equal(row[HOSTED_BY], '');
+  assert.equal(row[1], 'Bob Williams');
+});
+
+test('open house and hosted guests keep their labels', () => {
+  assert.equal(
+    guestRow({ guestName: 'Ann Lee', isOpenHouse: true })[HOSTED_BY],
+    'Open House'
+  );
+  assert.equal(
+    guestRow({ guestName: 'Cal Ray', isOpenHouse: false, hostName: 'Maj Adrian' })[HOSTED_BY],
+    'Maj Adrian'
+  );
+});
+
+test('a badge sign-in carries no contact details into the report', () => {
+  const row = guestRow({ guestName: 'Bob Williams', signInMode: 'badge' });
+  assert.equal(row[CSV_HEADERS.indexOf('Email')], '');
+  assert.equal(row[CSV_HEADERS.indexOf('Phone')], '');
+});

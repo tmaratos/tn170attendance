@@ -68,6 +68,9 @@ export function buildMemberExportRow(member) {
 }
 
 function guestHostedBy(guest) {
+  // A scanned visitor has no host and is not an open-house attendee; the column
+  // is left blank rather than borrowing a label that misreports why they came.
+  if (guest.signInMode === 'badge') return '';
   if (guest.isOpenHouse) return 'Open House';
   return guest.hostName || guest.host || '';
 }

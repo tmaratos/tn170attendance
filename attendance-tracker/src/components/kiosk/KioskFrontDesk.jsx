@@ -28,7 +28,7 @@ export default function KioskFrontDesk({ attendance }) {
     guests,
     badgeScanMember,
     badgeScanName,
-    checkInOpenHouseGuest,
+    checkInBadgeGuest,
     checkOutGuest,
   } = attendance;
 
@@ -77,9 +77,9 @@ export default function KioskFrontDesk({ attendance }) {
   const checkGuestIn = useCallback(async (firstName, lastName) => {
     const name = `${firstName} ${lastName}`.trim();
     // Only the guest's name leaves the browser — no licence data of any kind.
-    await checkInOpenHouseGuest({ name });
+    await checkInBadgeGuest({ name });
     confirm('in', name, 'Guest');
-  }, [checkInOpenHouseGuest, confirm]);
+  }, [checkInBadgeGuest, confirm]);
 
   const checkGuestOut = useCallback(async (visit) => {
     await checkOutGuest(visit.id);
