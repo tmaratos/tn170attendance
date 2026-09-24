@@ -126,3 +126,37 @@ test('18/20/24. the parser yields only firstName and lastName — no other licen
     assert.equal(serialized.includes(secret), false, `leaked ${secret}`);
   }
 });
+
+// Regression: a real Tennessee licence packed several elements onto one line
+// while the payload still contained newlines elsewhere. Taking the value up to
+// the next newline swallowed the following elements — middle name, document
+// discriminator and more — and returned 40 characters of licence data as the
+// person's name.
+const PACKED = [
+  '@\n\u001e\rANSI 636053090102DL00410285ZT03260031DL',
+  'DAQ123456789',
+  'DCSMARATOSDDEUDACTRISTANDDFUDADGABRIELDDGUDCADDCB01DCDNONE',
+  'DBB01151990',
+  'DAG123 MAIN ST',
+  '',
+].join('\n');
+
+test('packed elements on a line ending later do not run names together', () => {
+  assert.deepEqual(parseAamvaName(PACKED), { firstName: 'Tristan', lastName: 'Maratos' });
+});
+
+test('no licence field survives into a packed-payload name', () => {
+  const parsed = parseAamvaName(PACKED);
+  const serialized = JSON.stringify(parsed);
+  for (const leak of ['123456789', '01151990', 'MAIN ST', 'GABRIEL', 'Gabriel', 'DCB', 'NONE']) {
+    assert.equal(serialized.includes(leak), false, `leaked ${leak}`);
+  }
+});
+
+test('a digit or separator ends a name value', () => {
+  // DCB01 immediately after a name must not be absorbed into it.
+  assert.deepEqual(
+    parseAamvaName('@ANSI 636000DLDCSSMITHDACJOHNDCB01DCDNONE'),
+    { firstName: 'John', lastName: 'Smith' }
+  );
+});

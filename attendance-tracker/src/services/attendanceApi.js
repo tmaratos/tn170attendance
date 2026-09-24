@@ -57,6 +57,16 @@ export function apiBadgeScan(capid) {
   return post('/member/badge-scan', { capid });
 }
 
+/**
+ * Licence scan. Only the parsed name is sent — never licence data. The Worker
+ * owns the roster (the public kiosk deliberately has none), so it decides
+ * whether this name is a member, and returns match: 'none' when it is not, so
+ * the caller can sign them in as a guest instead.
+ */
+export function apiBadgeScanByName(firstName, lastName) {
+  return post('/member/badge-scan', { firstName, lastName });
+}
+
 export function apiCreatePin(capid, pin, confirmPin) {
   return post('/member/create-pin', { capid, pin, confirmPin });
 }
