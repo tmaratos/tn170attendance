@@ -63,6 +63,9 @@ export function formatGuestPhoneForCsv(phone) {
 }
 
 function guestHostedBy(record) {
+  // A scanned visitor has no host and is not an open-house attendee; the column
+  // is left blank rather than borrowing a label that misreports why they came.
+  if (record.signInMode === 'badge') return '';
   if (record.isOpenHouse === true || record.signInMode === 'open_house') return 'Open House';
   return record.hostName || record.host || '';
 }

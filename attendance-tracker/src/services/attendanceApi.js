@@ -80,6 +80,7 @@ export function apiGuestSignIn(data) {
     phone: data.phone || null,
     visitReason: data.visitReason || null,
     openHouse: !!(data.openHouse || data.isOpenHouse || data.signInMode === 'open_house'),
+    badge: !!(data.badge || data.signInMode === 'badge'),
   });
 }
 

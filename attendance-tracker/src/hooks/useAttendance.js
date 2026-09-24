@@ -461,6 +461,7 @@ function useSparkKioskAttendance() {
         checkInTime: g.checkInTime || null,
         checkOutTime: g.checkOutTime || null,
         isOpenHouse: !!g.isOpenHouse,
+        signInMode: g.signInMode || null,
         forceAction: false,
         forceNote: null,
       })),
@@ -606,6 +607,24 @@ function useSparkKioskAttendance() {
       }
     },
     [rawMembers, meeting?.id, markSyncAvailable, markSyncUnavailable]
+  );
+
+  // A visitor signed in by scanning. No host and not an open house, so reports
+  // show neither; only their name and times are recorded.
+  const checkInBadgeGuest = useCallback(
+    async (guestData) => {
+      if (useWorker) {
+        await apiGuestSignIn({ name: guestData.name, badge: true });
+        markSyncAvailable();
+        return;
+      }
+      await guestOpenHouseCheckInFirestore({
+        guestName: guestData.name,
+        signInMode: 'badge',
+        meetingId: meeting?.id,
+      });
+    },
+    [useWorker, markSyncAvailable, meeting?.id]
   );
 
   const checkInOpenHouseGuest = useCallback(
@@ -1040,6 +1059,7 @@ function useSparkKioskAttendance() {
     checkOutMember,
     checkInGuest,
     checkInOpenHouseGuest,
+    checkInBadgeGuest,
     checkOutGuest,
     updateSettings,
     resetData,
