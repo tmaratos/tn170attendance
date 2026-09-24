@@ -516,19 +516,68 @@ async function handleGuestSignOut(env, request, body) {
 // decision, so it is off unless BADGE_SCAN_ENABLED is set, is rate limited per
 // badge and overall, and every scan is logged with method "badge" so a lost or
 // copied badge can be audited afterwards.
+// Name matching for licence scans. The public kiosk has no roster by design, so
+// resolving a scanned name to a member has to happen here.
+function nameKeyOf(first, last) {
+  const clean = (v) => String(v || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  return `${clean(first)} ${clean(last)}`.trim();
+}
+
+function memberNameKey(m) {
+  if (m.firstName || m.lastName) return nameKeyOf(m.firstName, m.lastName);
+  const tokens = String(m.displayName || m.fullName || '').trim().split(/\s+/);
+  if (!tokens[0]) return '';
+  return nameKeyOf(tokens[0], tokens.length > 1 ? tokens[tokens.length - 1] : tokens[0]);
+}
+
+async function findMembersByName(env, firstName, lastName) {
+  const key = nameKeyOf(firstName, lastName);
+  if (!key.trim()) return [];
+  const all = await fsQuery(env, 'members', {}, 500);
+  return all.filter((m) => m.active !== false && memberNameKey(m) === key);
+}
+
+
 async function handleBadgeScan(env, request, body) {
   if (String(env.BADGE_SCAN_ENABLED || '') !== 'true') {
     return json(env, request, { error: 'Badge scanning is not enabled for this squadron.' }, 403);
   }
-  const capid = String(body.capid || '').trim();
+  // Rate limit before any Firestore read: a licence scan resolves names against
+  // the whole roster, and nothing here is authenticated.
+  const scanKey = String(body.capid || '').trim() || nameKeyOf(body.firstName, body.lastName) || 'anon';
+  const perBadge = await rateLimit(env, `badge:${scanKey}`, Number(env.BADGE_MAX_SCANS || 10), Number(env.BADGE_WINDOW_SECONDS || 60));
+  if (!perBadge.ok) return json(env, request, { error: 'Too many scans for this badge. Wait a moment and try again.' }, 429);
+  const overall = await rateLimit(env, 'badge:all', Number(env.BADGE_MAX_SCANS_TOTAL || 240), Number(env.BADGE_WINDOW_SECONDS || 60));
+  if (!overall.ok) return json(env, request, { error: 'Scanner is busy. Try again in a moment.' }, 429);
+
+  const byName = !body.capid && (body.firstName || body.lastName);
+  let capid = String(body.capid || '').trim();
+
+  if (byName) {
+    // Licence scan: resolve the name against the roster here, never in the browser.
+    const matches = await findMembersByName(env, body.firstName, body.lastName);
+    if (matches.length === 0) {
+      // Not a member. A normal outcome — the caller signs them in as a guest.
+      return json(env, request, { success: true, match: 'none' });
+    }
+    if (matches.length > 1) {
+      return json(env, request, {
+        success: true,
+        match: 'ambiguous',
+        candidates: matches.map((m) => ({
+          memberId: String(m.capid || m.memberId || m.id),
+          displayName: m.displayName || m.fullName || '',
+          grade: m.grade || '',
+        })),
+      });
+    }
+    capid = String(matches[0].capid || matches[0].memberId || matches[0].id);
+  }
+
   if (!/^\d{6,8}$/.test(capid)) {
     return json(env, request, { error: 'Badge must contain a 6-8 digit CAPID.' }, 400);
   }
 
-  const perBadge = await rateLimit(env, `badge:${capid}`, Number(env.BADGE_MAX_SCANS || 10), Number(env.BADGE_WINDOW_SECONDS || 60));
-  if (!perBadge.ok) return json(env, request, { error: 'Too many scans for this badge. Wait a moment and try again.' }, 429);
-  const overall = await rateLimit(env, 'badge:all', Number(env.BADGE_MAX_SCANS_TOTAL || 240), Number(env.BADGE_WINDOW_SECONDS || 60));
-  if (!overall.ok) return json(env, request, { error: 'Scanner is busy. Try again in a moment.' }, 429);
 
   const member = await fsGet(env, `members/${capid}`);
   if (!member || member.active === false) {

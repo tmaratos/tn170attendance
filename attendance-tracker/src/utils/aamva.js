@@ -51,17 +51,26 @@ function readElement(payload, code) {
   if (start === -1) return '';
   const after = payload.slice(start + code.length);
 
-  // Standard form: the value runs to the end of its line.
-  const lineEnd = after.search(/[\r\n]/);
-  if (lineEnd !== -1) return after.slice(0, lineEnd).slice(0, MAX_NAME_LENGTH);
-
-  // Adjacent form: the value runs to the next recognised element code.
+  // A value ends at whichever comes first: the end of its line, or the start of
+  // the next element. Real payloads mix both — fields packed together on a line
+  // that ends much later — so taking only the line end runs a name straight
+  // into the elements that follow it.
   let cut = after.length;
+
+  const lineEnd = after.search(/[\r\n]/);
+  if (lineEnd !== -1 && lineEnd < cut) cut = lineEnd;
+
   for (const next of FOLLOWING_CODES) {
     const at = after.indexOf(next, 1);
     if (at !== -1 && at < cut) cut = at;
   }
-  return after.slice(0, cut).slice(0, MAX_NAME_LENGTH);
+
+  // Last line of defence: a name holds letters, spaces, hyphens, apostrophes
+  // and periods. Anything else marks the start of some other field, so stop
+  // there rather than carrying licence data into the name.
+  const value = after.slice(0, cut);
+  const invalid = value.search(/[^A-Za-z '\-.]/);
+  return (invalid === -1 ? value : value.slice(0, invalid)).slice(0, MAX_NAME_LENGTH);
 }
 
 /**

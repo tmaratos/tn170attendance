@@ -2,11 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import useBadgeScanner from '../../hooks/useBadgeScanner';
 import useScannerPresence from '../../hooks/useScannerPresence';
 import { parseAamvaName } from '../../utils/aamva';
-import { routeScan } from '../../services/scanRouting';
+import { routeScan, routeLicenceName } from '../../services/scanRouting';
 import { getCallableError } from '../../services/errors';
 import '../../styles/kiosk-frontdesk.css';
 
-const READY = { tone: 'idle', title: 'Ready to scan', detail: "Scan a CAP ID or driver's license." };
+const READY = { tone: 'idle', title: 'Ready to scan', detail: 'Scan your CAP ID to check in or out.' };
 const CONFIRM_MS = 3200;
 
 const timeLabel = (value) =>
@@ -27,6 +27,7 @@ export default function KioskFrontDesk({ attendance }) {
     members,
     guests,
     badgeScanMember,
+    badgeScanName,
     checkInOpenHouseGuest,
     checkOutGuest,
   } = attendance;
@@ -92,43 +93,56 @@ export default function KioskFrontDesk({ attendance }) {
         confirm(action === 'check-in' ? 'in' : 'out', name, 'Member');
         return;
       }
-      case 'member':
-        await toggleMember(decision.member);
-        return;
-      case 'member-ambiguous':
-        setChoice({
-          kind: 'member',
-          title: `More than one ${decision.firstName} ${decision.lastName} on the roster`,
-          options: decision.matches.map((member) => ({
-            id: member.id,
-            label: member.name,
-            hint: `${roleLabel(member)} • ${member.status === 'checked-in' ? 'Checked in' : 'Not checked in'}`,
-            member,
-          })),
+      case 'licence': {
+        const { firstName, lastName } = decision;
+        // The roster lives on the Worker, so ask it before assuming a guest.
+        const result = await badgeScanName(firstName, lastName);
+
+        if (result.match === 'member') {
+          confirm(result.action === 'check-in' ? 'in' : 'out', result.name, 'Member');
+          return;
+        }
+        if (result.match === 'ambiguous') {
+          setChoice({
+            kind: 'member',
+            title: `More than one ${firstName} ${lastName} on the roster`,
+            options: result.candidates.map((c) => ({
+              id: c.memberId,
+              label: c.displayName || `${firstName} ${lastName}`,
+              hint: c.grade || 'Member',
+              capid: c.memberId,
+            })),
+          });
+          return;
+        }
+
+        // Not a member: guest check-in, or check-out if a visit is open.
+        const guestDecision = routeLicenceName({ firstName, lastName }, {
+          members: [],
+          guests: stateRef.current.guests,
         });
+        if (guestDecision.kind === 'guest-check-out') {
+          await checkGuestOut(guestDecision.visit);
+        } else if (guestDecision.kind === 'guest-ambiguous') {
+          setChoice({
+            kind: 'guest',
+            title: `More than one ${firstName} ${lastName} is signed in`,
+            options: guestDecision.visits.map((visit) => ({
+              id: visit.id,
+              label: visit.name || visit.guestName || 'Guest',
+              hint: `Checked in ${timeLabel(visit.checkInTime)}`,
+              visit,
+            })),
+          });
+        } else {
+          await checkGuestIn(firstName, lastName);
+        }
         return;
-      case 'guest-check-in':
-        await checkGuestIn(decision.firstName, decision.lastName);
-        return;
-      case 'guest-check-out':
-        await checkGuestOut(decision.visit);
-        return;
-      case 'guest-ambiguous':
-        setChoice({
-          kind: 'guest',
-          title: `More than one ${decision.firstName} ${decision.lastName} is signed in`,
-          options: decision.visits.map((visit) => ({
-            id: visit.id,
-            label: visit.name || visit.guestName || 'Guest',
-            hint: `Checked in ${timeLabel(visit.checkInTime)}`,
-            visit,
-          })),
-        });
-        return;
+      }
       default:
-        fail('Barcode not recognized', "Please scan a CAP ID or driver's license.");
+        fail('Barcode not recognized', 'Please scan again, or see the front desk.');
     }
-  }, [toggleMember, checkGuestIn, checkGuestOut, fail]);
+  }, [badgeScanMember, badgeScanName, checkGuestIn, checkGuestOut, confirm, fail]);
 
   const runDecision = useCallback(async (decision) => {
     setBusy(true);
@@ -150,14 +164,14 @@ export default function KioskFrontDesk({ attendance }) {
     setConfirmation(null);
 
     if (scan.type === 'drivers-license') {
-      setStatus({ tone: 'idle', title: 'Reading license…', detail: 'One moment.' });
+      setStatus({ tone: 'idle', title: 'Reading…', detail: 'One moment.' });
       // Reduce the payload to two fields here and keep no reference to it.
       const name = parseAamvaName(scan.raw);
       if (!name) {
-        fail('License could not be read', "Please scan again or enter the guest's name manually.");
+        fail('Could not read that scan', 'Please scan again, or see the front desk.');
         return;
       }
-      runDecision(routeScan({ type: 'drivers-license', name }, stateRef.current));
+      runDecision({ kind: 'licence', ...name });
       return;
     }
     runDecision(routeScan(scan, stateRef.current));
@@ -191,8 +205,8 @@ export default function KioskFrontDesk({ attendance }) {
       <div className="k-frontdesk-head">
         <div>
           <span className="k-eyebrow">Scanner active</span>
-          <h2 id="frontdesk-title">Scan CAP ID or driver’s license</h2>
-          <p>Members and cadets: CAP ID or driver’s license. Guests: driver’s license.</p>
+          <h2 id="frontdesk-title">Scan to check in or out</h2>
+          <p>Hold your CAP ID up to the scanner. Nothing needs to be tapped first.</p>
         </div>
         <span className="k-frontdesk-state live"><span className="k-frontdesk-dot" />Listening</span>
       </div>
@@ -209,7 +223,7 @@ export default function KioskFrontDesk({ attendance }) {
                 <button type="button" onClick={() => {
                   setChoice(null);
                   runDecision(choice.kind === 'member'
-                    ? { kind: 'member', member: option.member }
+                    ? { kind: 'cap-id', capid: option.capid }
                     : { kind: 'guest-check-out', visit: option.visit });
                 }}>
                   <strong>{option.label}</strong><span>{option.hint}</span>
@@ -240,7 +254,7 @@ export default function KioskFrontDesk({ attendance }) {
       )}
 
       <p className="k-frontdesk-note">
-        Scans only. Anyone without a badge or license uses <strong>Check in / Check out</strong>,
+        Scans only. Anyone without a badge uses <strong>Check in / Check out</strong>,
         which verifies their own PIN.
       </p>
     </section>

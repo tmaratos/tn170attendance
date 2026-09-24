@@ -71,6 +71,7 @@ import { subscribePublicPresence } from '../services/attendanceService';
 import {
   isApiConfigured,
   apiBadgeScan,
+  apiBadgeScanByName,
   apiCheckIn,
   apiCheckOut,
   apiCreatePin,
@@ -766,6 +767,26 @@ function useSparkKioskAttendance() {
     [useWorker, rawMembers, attendanceRecords, meeting?.id, markSyncAvailable]
   );
 
+  // Licence scan: ask the Worker whether this name belongs to a member.
+  // Returns { match: 'member' | 'none' | 'ambiguous', ... }.
+  const badgeScanName = useCallback(
+    async (firstName, lastName) => {
+      if (!useWorker) return { match: 'none' };
+      const result = await apiBadgeScanByName(firstName, lastName);
+      markSyncAvailable();
+      if (result.match === 'none') return { match: 'none' };
+      if (result.match === 'ambiguous') {
+        return { match: 'ambiguous', candidates: result.candidates || [] };
+      }
+      return {
+        match: 'member',
+        action: result.action === 'check_out' ? 'check-out' : 'check-in',
+        name: result.memberName || `${firstName} ${lastName}`.trim(),
+      };
+    },
+    [useWorker, markSyncAvailable]
+  );
+
   const authenticateKioskAdmin = useCallback(
     async (adminId, pin) => {
       // Worker mode: verify CAPID+PIN server-side, then sign in with the custom
@@ -1028,6 +1049,7 @@ function useSparkKioskAttendance() {
     verifyAdminPin,
     authenticateKioskAdmin,
     badgeScanMember,
+    badgeScanName,
     memberHasPin,
     needsPinSetup,
     createMemberPin,
